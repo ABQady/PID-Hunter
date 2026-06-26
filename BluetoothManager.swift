@@ -41,6 +41,7 @@ final class BluetoothManager: NSObject, ObservableObject {
     
     // MARK: Scan
         func startScan() {
+            RequestResponseMatcher.shared.clear()
             txCount = 0
             rxCount = 0
             status = .scanningBLE
@@ -149,6 +150,13 @@ final class BluetoothManager: NSObject, ObservableObject {
         }.joined(separator: " ")
 
         Logger.shared.info("TX HEX = \(hex)")
+        
+        if !command.uppercased().hasPrefix("AT") {
+            RequestResponseMatcher.shared.enqueue(
+                command: command,
+                header: detectedService
+            )
+        }
         
         status = .waitingResponse
         peripheral.writeValue(
@@ -312,6 +320,7 @@ extension BluetoothManager:
             self.discoveredDevices.removeAll()
             
             self.stopScan()
+            RequestResponseMatcher.shared.clear()
             
             print("Disconnected")
             if let error {
@@ -391,15 +400,6 @@ extension BluetoothManager:
                     detectedTX = c.uuid.uuidString
                 }
             }
-            Task { @MainActor in
-                if !elmInitialized,
-                   writeCharacteristic != nil,
-                   notifyCharacteristic != nil {
-                    
-                    elmInitialized = true
-                }
-            }
-            
         }
     }
     
@@ -482,8 +482,6 @@ extension BluetoothManager:
                 self.lastResponse = text
             }
             rxCount += 1
-
-            ELM327.shared.received(text)
 
             if RequestResponseMatcher.shared.hasPending {
                 _ = RequestResponseMatcher.shared.dequeue()

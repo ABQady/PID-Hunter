@@ -1,15 +1,15 @@
 //
 //  RequestResponseMatcher.swift
-//
+//  PID Hunter By Ahmed AlQady
 
 import Foundation
 import SwiftUI
 
 struct PendingRequest {
     let timestamp: Date
-    let header: String
     let command: String
 }
+
 
 @MainActor
 final class RequestResponseMatcher: ObservableObject {
@@ -17,8 +17,10 @@ final class RequestResponseMatcher: ObservableObject {
     static let shared = RequestResponseMatcher()
     
     @Published private(set) var pending: [PendingRequest] = []
+    var hasPending: Bool {
+        !pending.isEmpty
+    }
     
-    /// الطلبات الأقدم من 5 ثواني تعتبر منتهية
     private let timeout: TimeInterval = 5.0
     
     private func purgeExpired() {
@@ -45,14 +47,12 @@ final class RequestResponseMatcher: ObservableObject {
     }
     
     func dequeue() -> PendingRequest? {
-        
         purgeExpired()
-        
+
         guard !pending.isEmpty else {
-            Logger.shared.info("⚠️ RX received with no pending request")
             return nil
         }
-        
+
         return pending.removeFirst()
     }
     
