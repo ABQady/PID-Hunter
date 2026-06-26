@@ -3,7 +3,9 @@
 //  PIDHunter by Ahmed AlQady
 //
 import Foundation
-struct ScanResult: Codable {
+struct ScanResult: Codable, Identifiable {
+
+    let id = UUID()
     let header: String
     let mode: String
     let pid: String

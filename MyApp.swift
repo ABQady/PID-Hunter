@@ -3,7 +3,8 @@ import SwiftUI
 struct PIDHunterApp: App {
     var body: some Scene {
         WindowGroup {
-            MyContentView()
+            //MyContentView()
+            PIDHunterTabView()
         }
     }
 }
