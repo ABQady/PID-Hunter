@@ -40,7 +40,6 @@ final class RequestResponseMatcher: ObservableObject {
         pending.append(
             PendingRequest(
                 timestamp: Date(),
-                header: header,
                 command: command
             )
         )

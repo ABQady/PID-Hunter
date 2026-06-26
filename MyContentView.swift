@@ -1,5 +1,4 @@
 import SwiftUI
-
 struct MyContentView: View {
     struct ExportedFile: Identifiable {
         let id = UUID()
@@ -157,6 +156,7 @@ struct MyContentView: View {
                             }
                             Logger.shared.clear()
                             RequestResponseMatcher.shared.clear()
+                            
                             let cleanHeader = header
                                 .trimmingCharacters(in: .whitespacesAndNewlines)
                                 .uppercased()
@@ -175,7 +175,7 @@ struct MyContentView: View {
                                     let ok = await Preflight.shared.run(
                                         header: cleanHeader
                                     )
-
+                                    
                                     guard ok else {
                                         Logger.shared.info("❌ Preflight Failed")
                                         return
@@ -189,6 +189,7 @@ struct MyContentView: View {
                                     let ok = await Preflight.shared.run(
                                         header: cleanHeader
                                     )
+                                    
 
                                     guard ok else {
                                         Logger.shared.info("❌ Preflight Failed")
@@ -299,17 +300,15 @@ struct MyContentView: View {
                                     
                                     Button("▼ Live") {
                                         shouldAutoScroll = true
-                                        
+
                                         if let last = logger.lines.indices.last {
-                                            withAnimation {
-                                                proxy.scrollTo(last, anchor: .bottom)
-                                            }
+                                            proxy.scrollTo(last, anchor: .bottom)
                                         }
                                     }
                                 }
                                 .padding(.horizontal)
                                 ScrollView {
-                                    LazyVStack(alignment: .leading, spacing: 4) {
+                                    VStack(alignment: .leading, spacing: 4) {
                                         ForEach(logger.lines.indices, id: \.self) { i in
                                             Text(logger.lines[i])
                                                 .font(.system(size: 11, design: .monospaced))
@@ -318,33 +317,27 @@ struct MyContentView: View {
                                         }
                                     }
                                 }
-                                .simultaneousGesture(
-                                    DragGesture()
-                                        .onChanged { value in
-                                            if value.translation.height > 10 {
-                                                // المستخدم سحب لتحت (راح لفوق في اللوج)
-                                                shouldAutoScroll = false
-                                            }
+                                .highPriorityGesture(
+                                    DragGesture(minimumDistance: 0)
+                                        .onChanged { _ in
+                                            shouldAutoScroll = false
                                         }
                                 )
-                                .onScrollGeometryChange(for: Bool.self) { geometry in
-                                    geometry.contentOffset.y >=
-                                    geometry.contentSize.height
-                                    - geometry.containerSize.height
-                                    - 20
-                                } action: { _, isAtBottom in
-                                    shouldAutoScroll = isAtBottom
+                                .onScrollPhaseChange { _, newPhase in
+                                    if newPhase.isScrolling {
+                                        shouldAutoScroll = false
+                                    }
                                 }
                                 .frame(height: 320)
+                                .onChange(of: shouldAutoScroll) { _, newValue in
+                                    print("AutoScroll =", newValue)
+                                }
                                 .onChange(of: logger.lines.count) { _, _ in
                                     guard shouldAutoScroll,
                                           let last = logger.lines.indices.last else {
                                         return
                                     }
-                                    
-                                    withAnimation(.linear(duration: 0.1)) {
                                         proxy.scrollTo(last, anchor: .bottom)
-                                    }
                                 }
                                 .padding()
                                 .background(.black.opacity(0.15))

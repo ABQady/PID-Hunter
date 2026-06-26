@@ -8,6 +8,7 @@ final class ECUTester {
     private let bt = BluetoothManager.shared
 
     func run(header: String) async {
+        RequestResponseMatcher.shared.clear()
 
         Logger.shared.info("===== ECU TEST START =====")
 
@@ -32,11 +33,24 @@ final class ECUTester {
         bt.send("ATDP")
         try? await Task.sleep(for: .milliseconds(500))
 
+        Logger.shared.info("Testing header \(header)")
         bt.send("ATSH\(header)")
-        try? await Task.sleep(for: .milliseconds(300))
+        try? await Task.sleep(for: .milliseconds(800))
 
         bt.send("0100")
+        
+        let start = Date()
 
+        while !RequestResponseMatcher.shared.pending.isEmpty {
+
+            if Date().timeIntervalSince(start) > 2.0 {
+                RequestResponseMatcher.shared.clear()
+                break
+            }
+
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        
         Logger.shared.info("===== ECU TEST END =====")
     }
 }

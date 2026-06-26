@@ -1,6 +1,6 @@
 //
 //  DynamicScanner.swift
-//  PIDHunter
+//  PIDHunter by Ahmed AlQady
 //
 
 import Foundation
@@ -27,16 +27,17 @@ final class DynamicScanner: ObservableObject {
     @Published var running = false
     
     @Published var pids: [DynamicPID] = []
-    
-    var delay: UInt64 = 200_000_000
-    
+        
     private var stopFlag = false
     
     private let maxSamplesPerPID = 100
     
+    private let requestTimeout: TimeInterval = 2.0
+    
     func stop() {
         stopFlag = true
         running = false
+        RequestResponseMatcher.shared.clear()
     }
     
     func monitor(requests: [String]) {
@@ -74,20 +75,20 @@ final class DynamicScanner: ObservableObject {
                     }
                     
                     let req = pids[index].request
-                    
-                    // غيّر الهيدر لو مشروعك بيستخدم Header مختلف
-                    RequestResponseMatcher.shared.enqueue(
-                        command: req,
-                        header: "81F111"
-                    )
-                    
-                    Logger.shared.tx(req)
-                    
+                                    
                     ELM327.shared.send(req)
-                    
-                    try? await Task.sleep(
-                        nanoseconds: delay
-                    )
+
+                    let startWait = Date()
+
+                    while !RequestResponseMatcher.shared.pending.isEmpty {
+
+                        if Date().timeIntervalSince(startWait) > requestTimeout {
+                            RequestResponseMatcher.shared.clear()
+                            break
+                        }
+
+                        try? await Task.sleep(for: .milliseconds(10))
+                    }
                 }
             }
         }
@@ -111,7 +112,19 @@ final class DynamicScanner: ObservableObject {
                 in: .whitespacesAndNewlines
             )
         
-        guard !cleaned.isEmpty else {
+        let upper = cleaned.uppercased()
+
+        guard
+            upper != ">",
+            !upper.contains("NO DATA"),
+            !upper.contains("OK"),
+            !upper.contains("ERROR"),
+            !upper.contains("SEARCHING"),
+            !upper.contains("BUS ERROR"),
+            !upper.contains("BUFFER FULL"),
+            !upper.contains("STOPPED"),
+            !upper.contains("?")
+        else {
             return
         }
         
