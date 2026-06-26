@@ -39,6 +39,19 @@ final class BluetoothManager: NSObject, ObservableObject {
         )
     }
     
+    @MainActor
+    func reconnect() async {
+        disconnect()
+
+        try? await Task.sleep(for: .milliseconds(500))
+
+        startScan()
+
+        while !isConnected {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+    }
+    
     // MARK: Scan
         func startScan() {
             RequestResponseMatcher.shared.clear()

@@ -222,8 +222,28 @@ struct PIDHunterTabView: View {
                     cornerRadius: 18
                 )
             )
+            if brute.hasResumePoint {
+
+                Text("Resume available")
+
+                    .font(.caption)
+
+                    .foregroundStyle(.orange)
+
+            }
+            
             // MARK: Actions
             HStack(alignment:.center, spacing: 10) {
+                Button(role: .destructive) {
+                    brute.startFresh()
+                    Logger.shared.info("🗑️ Starting fresh scan")
+                } label: {
+                    Label("New Scan", systemImage: "trash")
+                }
+                .buttonStyle(.bordered)
+                
+                Spacer()
+                
                 Button {
                     guard bt.isConnected else {
                         
@@ -318,7 +338,7 @@ struct PIDHunterTabView: View {
                     }
                 } label: {
                     Label(
-                        "Start Scan",
+                        "Resume Scan",
                         systemImage:
                             "play.fill"
                     )
