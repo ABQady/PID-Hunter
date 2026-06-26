@@ -1,6 +1,6 @@
 //
 //  BruteForceScanner.swift
-//  PIDHunter
+//  PIDHunter by Ahmed AlQady
 //
 import Foundation
 struct ScanResult: Codable {
@@ -22,8 +22,8 @@ final class BruteForceScanner: ObservableObject {
     
     private var shouldStop = false
     private var seen = Set<String>()
+    private let requestTimeout: TimeInterval = 2.0
     
-    // عدلهم براحتك
     var headers = [
         "81F111",
         "80F111",
@@ -34,6 +34,7 @@ final class BruteForceScanner: ObservableObject {
         shouldStop = true
         currentRequest = ""
         RequestResponseMatcher.shared.clear()
+        isScanning = false
     }
     func scanMode01() {
         RequestResponseMatcher.shared.clear()
@@ -44,6 +45,7 @@ final class BruteForceScanner: ObservableObject {
             results.removeAll()
             seen.removeAll()
             progress = 0
+            successCount = 0
             
             shouldStop = false
             isScanning = true
@@ -68,18 +70,13 @@ final class BruteForceScanner: ObservableObject {
                         pid
                     )
                     currentRequest = req
-                    RequestResponseMatcher.shared.enqueue(
-                        command: req,
-                        header: header
-                    )
                     
-                    Logger.shared.tx(req)
                     ELM327.shared.send(req)
                     let startWait = Date()
 
                     while !RequestResponseMatcher.shared.pending.isEmpty {
 
-                        if Date().timeIntervalSince(startWait) > 2.0 {
+                        if Date().timeIntervalSince(startWait) > requestTimeout {
                             Logger.shared.info("⏰ Request timeout")
                             RequestResponseMatcher.shared.clear()
                             break
@@ -97,6 +94,7 @@ final class BruteForceScanner: ObservableObject {
                     //)
                 }
             }
+            progress = 1.0
             isScanning = false
             currentRequest = ""
         }
@@ -109,6 +107,7 @@ final class BruteForceScanner: ObservableObject {
             results.removeAll()
             seen.removeAll()
             progress = 0
+            successCount = 0
             
             shouldStop = false
             isScanning = true
@@ -132,15 +131,20 @@ final class BruteForceScanner: ObservableObject {
                         format: "21%02X",
                         pid
                     )
-                    RequestResponseMatcher.shared.enqueue(
-                        command: req,
-                        header: header
-                    )
+                    
                     currentRequest = req
-                    Logger.shared.tx(req)
                     ELM327.shared.send(req)
 
+                    let startWait = Date()
+
                     while !RequestResponseMatcher.shared.pending.isEmpty {
+
+                        if Date().timeIntervalSince(startWait) > requestTimeout {
+                            Logger.shared.info("⏰ Request timeout")
+                            RequestResponseMatcher.shared.clear()
+                            break
+                        }
+
                         try? await Task.sleep(for: .milliseconds(10))
                     }
                     done += 1
@@ -148,11 +152,9 @@ final class BruteForceScanner: ObservableObject {
                     Double(done)
                     /
                     Double(total)
-//                    try? await Task.sleep(
-//                        nanoseconds: delay
-//                    )
                 }
             }
+            progress = 1.0
             isScanning = false
             currentRequest = ""
         }
@@ -169,13 +171,11 @@ final class BruteForceScanner: ObservableObject {
             results.removeAll()
             seen.removeAll()
             progress = 0
+            successCount = 0
             
             shouldStop = false
             isScanning = true
-//            let total =
-//            headers.count
-//            *
-//            Int(end - start + 1)
+
             let count = Int(end) - Int(start) + 1
             let total = headers.count * count
             var done = 0
@@ -197,15 +197,19 @@ final class BruteForceScanner: ObservableObject {
                         format: "22%04X",
                         pid
                     )
-                    RequestResponseMatcher.shared.enqueue(
-                        command: req,
-                        header: header
-                    )
                     currentRequest = req
-                    Logger.shared.tx(req)
                     ELM327.shared.send(req)
 
+                    let startWait = Date()
+
                     while !RequestResponseMatcher.shared.pending.isEmpty {
+
+                        if Date().timeIntervalSince(startWait) > requestTimeout {
+                            Logger.shared.info("⏰ Request timeout")
+                            RequestResponseMatcher.shared.clear()
+                            break
+                        }
+
                         try? await Task.sleep(for: .milliseconds(10))
                     }
                     done += 1
@@ -215,6 +219,7 @@ final class BruteForceScanner: ObservableObject {
                     Double(total)
                 }
             }
+            progress = 1.0
             isScanning = false
             currentRequest = ""
         }
@@ -241,33 +246,29 @@ final class BruteForceScanner: ObservableObject {
         {
             return
         }
-//        if results.contains(where: {
-//            $0.header == header &&
-//            $0.request == request &&
-//            $0.response == response
-//        }) {
-//            return
-//        }
-//        results.append(
-//            ScanResult(
-//                header: header,
-//                mode: mode,
-//                pid: pid,
-//                request: request,
-//                response: response
-//            )
-//        )
+
         let key = "\(header)|\(request)|\(response)"
 
         guard !seen.contains(key) else {
             return
         }
-
+        
         seen.insert(key)
+        results.append(
+            ScanResult(
+                header: header,
+                mode: mode,
+                pid: pid,
+                request: request,
+                response: response
+            )
+        )
+
         Logger.shared.rx(response)
         
         successCount += 1
     }
+    
     func exportJSON() throws -> URL {
         let encoder = JSONEncoder()
         encoder.outputFormatting = .prettyPrinted
