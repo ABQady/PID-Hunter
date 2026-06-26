@@ -27,6 +27,8 @@ final class BluetoothManager: NSObject, ObservableObject {
     private(set) var writeCharacteristic: CBCharacteristic?
     private(set) var notifyCharacteristic: CBCharacteristic?
     private var elmInitialized = false
+    private var retriedProtocol = false
+    private var lastSendTime = Date()
     //=====================================================
     override init() {
         super.init()
@@ -37,6 +39,8 @@ final class BluetoothManager: NSObject, ObservableObject {
     }
     // MARK: Scan
         func startScan() {
+            txCount = 0
+            rxCount = 0
             status = .scanningBLE
             
             guard central.state == .poweredOn else { return }
@@ -98,16 +102,12 @@ final class BluetoothManager: NSObject, ObservableObject {
         central.cancelPeripheralConnection(
             peripheral
         )
-
+        status = .disconnected
     }
     // MARK: TX
     func send(
         _ command: String
     ) {
-        guard elmInitialized else {
-            Logger.shared.info("ELM not initialized yet")
-            return
-        }
         guard isConnected else {
             print("Not connected")
             Logger.shared.info("Not connected")
@@ -136,15 +136,22 @@ final class BluetoothManager: NSObject, ObservableObject {
         Logger.shared.tx(command)
         Logger.shared.info("TX UUID = \(tx.uuid.uuidString)")
         Logger.shared.info("TX Props = \(tx.properties)")
-        let _: CBCharacteristicWriteType =
+        lastSendTime = Date()
+        let type: CBCharacteristicWriteType =
             tx.properties.contains(.write)
             ? .withResponse
             : .withoutResponse
         
+        let hex = data.map {
+            String(format: "%02X", $0)
+        }.joined(separator: " ")
+
+        Logger.shared.info("TX HEX = \(hex)")
+        
         peripheral.writeValue(
             data,
             for: tx,
-            type: .withoutResponse
+            type: type
         )
         txCount += 1
     }
@@ -154,33 +161,43 @@ final class BluetoothManager: NSObject, ObservableObject {
         
         send("ATZ")
         try? await Task.sleep(for: .milliseconds(1500))
-
+        guard isConnected else { return }
+        
         send("ATE0")
         try? await Task.sleep(for: .milliseconds(500))
-
+        guard isConnected else { return }
+        
         send("ATL0")
         try? await Task.sleep(for: .milliseconds(500))
-
+        guard isConnected else { return }
+        
         send("ATS0")
         try? await Task.sleep(for: .milliseconds(500))
-
+        guard isConnected else { return }
+        
         send("ATH1")
         try? await Task.sleep(for: .milliseconds(500))
+        guard isConnected else { return }
         
         status = .settingProtocol
         send("ATSP5")
         try? await Task.sleep(for: .milliseconds(2000))
+        guard isConnected else { return }
         
         status = .checkingProtocol
         send("ATDP")
         try? await Task.sleep(for: .milliseconds(1500))
-
+        guard isConnected else { return }
+        
         send("ATI")
         try? await Task.sleep(for: .milliseconds(1000))
+        guard isConnected else { return }
         
         status = .testingECU
         send("0100")
         try? await Task.sleep(for: .milliseconds(1000))
+        Logger.shared.info("ELM initialization finished")
+        guard isConnected else { return }
     }
 }
 // ======================================================
@@ -336,6 +353,10 @@ extension BluetoothManager:
             guard service.uuid.uuidString.uppercased() == "FFF0" else {
                 return
             }
+            guard writeCharacteristic == nil &&
+                  notifyCharacteristic == nil else {
+                return
+            }
             for c in chars {
                 print("SERVICE :", service.uuid.uuidString)
                 print("CHAR    :", c.uuid.uuidString)
@@ -370,7 +391,7 @@ extension BluetoothManager:
                     elmInitialized = true
                     
                     //await self.initializeELM()
-                    isConnected = true
+                    //isConnected = true
                 }
             }
             
@@ -382,16 +403,19 @@ extension BluetoothManager:
         let text = response.uppercased()
 
         if text.contains("41 ") {
+            retriedProtocol = false
             status = .mode01OK
             Logger.shared.info("🎉 Mode 01 Supported")
         }
 
         if text.contains("61 ") {
+            retriedProtocol = false
             status = .mode21OK
             Logger.shared.info("🎉 Mode 21 Supported")
         }
 
         if text.contains("62 ") {
+            retriedProtocol = false
             status = .mode22OK
             Logger.shared.info("🎉 Mode 22 Supported")
         }
@@ -404,9 +428,22 @@ extension BluetoothManager:
         if text.contains("BUS ERROR") {
             status = .busError
             Logger.shared.info("🔥 BUS ERROR")
-            
-            Logger.shared.info("Retrying...")
-            ELM327.shared.send("ATSP5")
+            Task {
+                guard self.isConnected else { return }
+
+                Logger.shared.info("Retrying...")
+
+                if !retriedProtocol {
+                    retriedProtocol = true
+
+                    ELM327.shared.send("ATZ")
+                    try? await Task.sleep(for: .milliseconds(1500))
+
+                    guard self.isConnected else { return }
+
+                    ELM327.shared.send("ATSP5")
+                }
+            }
         }
 
         if text.contains("UNABLE TO CONNECT") {
@@ -428,12 +465,17 @@ extension BluetoothManager:
                   let value = characteristic.value
             else { return }
             
+            let ms = Date().timeIntervalSince(lastSendTime) * 1000
+            Logger.shared.info("Response Time: \(Int(ms)) ms")
+            
             let text = String(data: value, encoding: .utf8) ?? "<non-utf8>"
             let hex = value.map {
                 String(format: "%02X", $0)
             }.joined(separator: " ")
             
-            self.lastResponse = text
+            if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                self.lastResponse = text
+            }
             rxCount += 1
             ELM327.shared.received(text)
             _ = RequestResponseMatcher.shared.dequeue()
@@ -463,9 +505,20 @@ extension BluetoothManager:
                 "Notify \(characteristic.uuid.uuidString): \(characteristic.isNotifying)"
             )
             
+            guard characteristic.uuid.uuidString.uppercased() == "FFF1" else {
+                return
+            }
+            
             if characteristic.isNotifying == true
             {
+                isConnected = true
+                elmInitialized = false
+                
                 await self.initializeELM()
+
+                if isConnected {
+                    elmInitialized = true
+                }
             }
         }
     }

@@ -17,25 +17,32 @@ final class BruteForceScanner: ObservableObject {
     @Published var progress: Double = 0.0
     @Published var currentRequest = ""
     @Published private(set) var results: [ScanResult] = []
+    @Published var delayMs: Double = 100
+    @Published var successCount = 0
+    
     private var shouldStop = false
+    private var seen = Set<String>()
+    
     // عدلهم براحتك
     var headers = [
         "81F111",
         "80F111",
         "82F111"
     ]
-    var delay: UInt64 = 1000_000_000   // 500ms
+
     func stop() {
         shouldStop = true
         currentRequest = ""
+        RequestResponseMatcher.shared.clear()
     }
     func scanMode01() {
         RequestResponseMatcher.shared.clear()
         Task {
-            ELM327.shared.send("ATPC")
-            try? await Task.sleep(for: .milliseconds(200))
+//            ELM327.shared.send("ATPC")
+//            try? await Task.sleep(for: .milliseconds(200))
             
             results.removeAll()
+            seen.removeAll()
             progress = 0
             
             shouldStop = false
@@ -46,7 +53,7 @@ final class BruteForceScanner: ObservableObject {
             for header in headers {
                 ELM327.shared.setHeader(header)
                 try? await Task.sleep(
-                    nanoseconds: 200_000_000
+                    for: .milliseconds(Int(delayMs))
                 )
                 for pid in 0...255 {
                     if shouldStop {
@@ -68,7 +75,16 @@ final class BruteForceScanner: ObservableObject {
                     
                     Logger.shared.tx(req)
                     ELM327.shared.send(req)
+                    let startWait = Date()
+
                     while !RequestResponseMatcher.shared.pending.isEmpty {
+
+                        if Date().timeIntervalSince(startWait) > 2.0 {
+                            Logger.shared.info("⏰ Request timeout")
+                            RequestResponseMatcher.shared.clear()
+                            break
+                        }
+
                         try? await Task.sleep(for: .milliseconds(10))
                     }
                     done += 1
@@ -88,10 +104,10 @@ final class BruteForceScanner: ObservableObject {
     func scanMode21() {
         RequestResponseMatcher.shared.clear()
         Task {
-            ELM327.shared.send("ATPC")
-            try? await Task.sleep(for: .milliseconds(200))
-            
+//            ELM327.shared.send("ATPC")
+//            try? await Task.sleep(for: .milliseconds(200))
             results.removeAll()
+            seen.removeAll()
             progress = 0
             
             shouldStop = false
@@ -102,7 +118,7 @@ final class BruteForceScanner: ObservableObject {
             for header in headers {
                 ELM327.shared.setHeader(header)
                 try? await Task.sleep(
-                    nanoseconds: 200_000_000
+                    for: .milliseconds(Int(delayMs))
                 )
                 for pid in 0...255 {
                     if shouldStop {
@@ -147,23 +163,27 @@ final class BruteForceScanner: ObservableObject {
     ) {
         RequestResponseMatcher.shared.clear()
         Task {
-            ELM327.shared.send("ATPC")
-            try? await Task.sleep(for: .milliseconds(200))
+//            ELM327.shared.send("ATPC")
+//            try? await Task.sleep(for: .milliseconds(200))
             
             results.removeAll()
+            seen.removeAll()
             progress = 0
             
             shouldStop = false
             isScanning = true
-            let total =
-            headers.count
-            *
-            Int(end - start + 1)
+//            let total =
+//            headers.count
+//            *
+//            Int(end - start + 1)
+            let count = Int(end) - Int(start) + 1
+            let total = headers.count * count
             var done = 0
             for header in headers {
                 ELM327.shared.setHeader(header)
+                Logger.shared.info("Header -> \(header)")
                 try? await Task.sleep(
-                    nanoseconds: 200_000_000
+                    for: .milliseconds(Int(delayMs))
                 )
                 for pid in start...end {
                     if shouldStop {
@@ -193,9 +213,6 @@ final class BruteForceScanner: ObservableObject {
                     Double(done)
                     /
                     Double(total)
-//                    try? await Task.sleep(
-//                        nanoseconds: delay
-//                    )
                 }
             }
             isScanning = false
@@ -224,23 +241,32 @@ final class BruteForceScanner: ObservableObject {
         {
             return
         }
-        if results.contains(where: {
-            $0.header == header &&
-            $0.request == request &&
-            $0.response == response
-        }) {
+//        if results.contains(where: {
+//            $0.header == header &&
+//            $0.request == request &&
+//            $0.response == response
+//        }) {
+//            return
+//        }
+//        results.append(
+//            ScanResult(
+//                header: header,
+//                mode: mode,
+//                pid: pid,
+//                request: request,
+//                response: response
+//            )
+//        )
+        let key = "\(header)|\(request)|\(response)"
+
+        guard !seen.contains(key) else {
             return
         }
-        results.append(
-            ScanResult(
-                header: header,
-                mode: mode,
-                pid: pid,
-                request: request,
-                response: response
-            )
-        )
+
+        seen.insert(key)
         Logger.shared.rx(response)
+        
+        successCount += 1
     }
     func exportJSON() throws -> URL {
         let encoder = JSONEncoder()

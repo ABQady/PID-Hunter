@@ -13,7 +13,7 @@ struct MyContentView: View {
     @ObservedObject private var logger = Logger.shared
     @State private var scrollPosition: Int?
     @State private var shouldAutoScroll = true
-    @State private var selectedMode = 01
+    @State private var selectedMode = 1
     @State private var header = "81F111"
     @State private var startPID = "0000"
     @State private var endPID = "FFFF"
@@ -104,6 +104,15 @@ struct MyContentView: View {
                                     .autocorrectionDisabled()
                             }
                         }
+                        Text("Request Delay: \(Int(brute.delayMs)) ms")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+
+                        Slider(
+                            value: $brute.delayMs,
+                            in: 50...1000,
+                            step: 10
+                        )
                     }
                     .textFieldStyle(.roundedBorder)
                     .padding()
@@ -121,8 +130,7 @@ struct MyContentView: View {
                             value: brute.progress
                         )
                         Text(
-                            brute.currentRequest
-                        )
+                            "\(Int(brute.progress * 100))% • \(brute.currentRequest)"                        )
                         .font(
                             .system(
                                 .caption,
@@ -162,9 +170,33 @@ struct MyContentView: View {
                             
                             switch selectedMode {
                             case 1:
-                                brute.scanMode01()
+                                Task {
+
+                                    let ok = await Preflight.shared.run(
+                                        header: cleanHeader
+                                    )
+
+                                    guard ok else {
+                                        Logger.shared.info("❌ Preflight Failed")
+                                        return
+                                    }
+
+                                    brute.scanMode01()
+                                }
                             case 21:
-                                brute.scanMode21()
+                                Task {
+
+                                    let ok = await Preflight.shared.run(
+                                        header: cleanHeader
+                                    )
+
+                                    guard ok else {
+                                        Logger.shared.info("❌ Preflight Failed")
+                                        return
+                                    }
+
+                                    brute.scanMode21()
+                                }
                             default:
                                 let startText = startPID
                                     .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -178,7 +210,22 @@ struct MyContentView: View {
                                    let end = UInt16(endText, radix: 16) {
                                     
                                     if start <= end {
-                                        brute.scanMode22(start: start, end: end)
+                                        Task {
+
+                                            let ok = await Preflight.shared.run(
+                                                header: cleanHeader
+                                            )
+
+                                            guard ok else {
+                                                Logger.shared.info("❌ Preflight Failed")
+                                                return
+                                            }
+
+                                            brute.scanMode22(
+                                                start: start,
+                                                end: end
+                                            )
+                                        }
                                     } else {
                                         Logger.shared.info("Start PID must be <= End PID")
                                     }
@@ -236,6 +283,18 @@ struct MyContentView: View {
                                     
                                     Text(bt.status.title)
                                         .font(.headline)
+                                    
+                                    Spacer()
+                                    
+                                    Text("Found: \(brute.successCount)")
+                                        .font(.headline)
+                                    
+                                    Spacer()
+                                    
+                                    Text("TX \(bt.txCount) • RX \(bt.rxCount)")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+
                                     Spacer()
                                     
                                     Button("▼ Live") {
