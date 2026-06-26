@@ -1,10 +1,14 @@
 //
 //  CSVExporter.swift
-//
+//  PID Hunter By Ahmed AlQady
 
 import Foundation
 
 final class CSVExporter {
+    
+    private static func escapeCSV(_ value: String) -> String {
+        value.replacingOccurrences(of: "\"", with: "\"\"")
+    }
     
     static func export(
         _ results: [ScanResult]
@@ -16,19 +20,19 @@ final class CSVExporter {
         for row in results {
             
             csv +=
-            "\"\(row.header)\","
+            "\"\(escapeCSV(row.header))\","
             
             csv +=
-            "\"\(row.mode)\","
+            "\"\(escapeCSV(row.mode))\","
             
             csv +=
-            "\"\(row.pid)\","
+            "\"\(escapeCSV(row.pid))\","
             
             csv +=
-            "\"\(row.request)\","
+            "\"\(escapeCSV(row.request))\","
             
             csv +=
-            "\"\(row.response)\"\n"
+            "\"\(escapeCSV(row.response))\"\n"
         }
         
         let url =
@@ -55,15 +59,9 @@ final class CSVExporter {
         "Request,Changed,UniqueValues\n"
         
         for row in rows {
-            
-            csv +=
-            "\"\(row.request)\","
-            
-            csv +=
-            "\"\(row.hasChanged)\","
-            
-            csv +=
-            "\"\(row.uniqueValues.joined(separator: " | "))\"\n"
+            csv += "\"\(escapeCSV(row.request))\","
+            csv += "\"\(String(row.hasChanged))\","
+            csv += "\"\(escapeCSV(row.uniqueValues.joined(separator: " | ")))\"\n"
         }
         
         let url =
