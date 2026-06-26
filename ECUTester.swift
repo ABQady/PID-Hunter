@@ -1,0 +1,42 @@
+import Foundation
+
+@MainActor
+final class ECUTester {
+
+    static let shared = ECUTester()
+
+    private let bt = BluetoothManager.shared
+
+    func run(header: String) async {
+
+        Logger.shared.info("===== ECU TEST START =====")
+
+        bt.send("ATZ")
+        try? await Task.sleep(for: .seconds(2))
+
+        bt.send("ATE0")
+        try? await Task.sleep(for: .milliseconds(300))
+
+        bt.send("ATL0")
+        try? await Task.sleep(for: .milliseconds(300))
+
+        bt.send("ATS0")
+        try? await Task.sleep(for: .milliseconds(300))
+
+        bt.send("ATH1")
+        try? await Task.sleep(for: .milliseconds(300))
+
+        bt.send("ATSP5")
+        try? await Task.sleep(for: .seconds(1))
+
+        bt.send("ATDP")
+        try? await Task.sleep(for: .milliseconds(500))
+
+        bt.send("ATSH\(header)")
+        try? await Task.sleep(for: .milliseconds(300))
+
+        bt.send("0100")
+
+        Logger.shared.info("===== ECU TEST END =====")
+    }
+}

@@ -1,0 +1,474 @@
+//
+//  BluetoothManager.swift
+//  PIDHunter
+//
+//
+import Foundation
+import CoreBluetooth
+import SwiftUI
+@MainActor
+final class BluetoothManager: NSObject, ObservableObject {
+    static let shared = BluetoothManager()
+    // MARK: Published
+    @Published var isConnected = false
+    @Published var isScanning = false
+    @Published var lastResponse = ""
+    @Published var discoveredDevices: [CBPeripheral] = []
+    @Published var detectedTX = ""
+    @Published var detectedRX = ""
+    @Published var detectedService = ""
+    @Published var status: ECUStatus = .disconnected
+    @Published var txCount = 0
+    @Published var rxCount = 0
+
+    // MARK: BLE
+    private var central: CBCentralManager!
+    private var elmPeripheral: CBPeripheral?
+    private(set) var writeCharacteristic: CBCharacteristic?
+    private(set) var notifyCharacteristic: CBCharacteristic?
+    private var elmInitialized = false
+    //=====================================================
+    override init() {
+        super.init()
+        central = CBCentralManager(
+            delegate: self,
+            queue: nil
+        )
+    }
+    // MARK: Scan
+        func startScan() {
+            status = .scanningBLE
+            
+            guard central.state == .poweredOn else { return }
+            
+            isConnected = false
+            lastResponse = ""
+            detectedTX = ""
+            detectedRX = ""
+            detectedService = ""
+            
+            elmPeripheral = nil
+            writeCharacteristic = nil
+            notifyCharacteristic = nil
+            elmInitialized = false
+            
+            discoveredDevices.removeAll()
+            isScanning = true
+            
+            central.scanForPeripherals(
+                withServices: nil,
+                options: [
+                    CBCentralManagerScanOptionAllowDuplicatesKey: false
+                ]
+            )
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
+                guard let self else { return }
+                
+                if self.isScanning {
+                    self.status = .timeout
+                    self.stopScan()
+                    Logger.shared.info("Scan timed out")
+                }
+            }
+        print("Scanning...")
+        Logger.shared.info("Scanning...")
+    }
+    func stopScan() {
+        guard isScanning else { return }
+        central.stopScan()
+        isScanning = false
+    }
+    // MARK: Connection
+    func connect(
+        to peripheral: CBPeripheral
+    ) {
+        elmPeripheral = peripheral
+        peripheral.delegate = self
+        central.connect(
+            peripheral,
+            options: nil
+        )
+    }
+    func disconnect() {
+        stopScan()
+        guard let peripheral = elmPeripheral else {
+            return
+        }
+        central.cancelPeripheralConnection(
+            peripheral
+        )
+
+    }
+    // MARK: TX
+    func send(
+        _ command: String
+    ) {
+        guard elmInitialized else {
+            Logger.shared.info("ELM not initialized yet")
+            return
+        }
+        guard isConnected else {
+            print("Not connected")
+            Logger.shared.info("Not connected")
+            return
+        }
+        guard
+            let peripheral = elmPeripheral,
+            let tx = writeCharacteristic
+        else {
+            print("TX characteristic unavailable")
+            Logger.shared.info("TX characteristic unavailable")
+            return
+        }
+        let payload = command + "\r"
+        guard
+            let data =
+                payload.data(
+                    using: .utf8
+                )
+        else {
+            return
+        }
+        print("TX UUID =", tx.uuid.uuidString)
+        print("TX Props =", tx.properties)
+        print(">> \(command)")
+        Logger.shared.tx(command)
+        Logger.shared.info("TX UUID = \(tx.uuid.uuidString)")
+        Logger.shared.info("TX Props = \(tx.properties)")
+        let _: CBCharacteristicWriteType =
+            tx.properties.contains(.write)
+            ? .withResponse
+            : .withoutResponse
+        
+        peripheral.writeValue(
+            data,
+            for: tx,
+            type: .withoutResponse
+        )
+        txCount += 1
+    }
+    @MainActor
+    private func initializeELM() async {
+        status = .initializingELM
+        
+        send("ATZ")
+        try? await Task.sleep(for: .milliseconds(1500))
+
+        send("ATE0")
+        try? await Task.sleep(for: .milliseconds(500))
+
+        send("ATL0")
+        try? await Task.sleep(for: .milliseconds(500))
+
+        send("ATS0")
+        try? await Task.sleep(for: .milliseconds(500))
+
+        send("ATH1")
+        try? await Task.sleep(for: .milliseconds(500))
+        
+        status = .settingProtocol
+        send("ATSP5")
+        try? await Task.sleep(for: .milliseconds(2000))
+        
+        status = .checkingProtocol
+        send("ATDP")
+        try? await Task.sleep(for: .milliseconds(1500))
+
+        send("ATI")
+        try? await Task.sleep(for: .milliseconds(1000))
+        
+        status = .testingECU
+        send("0100")
+        try? await Task.sleep(for: .milliseconds(1000))
+    }
+}
+// ======================================================
+// MARK: CBCentralManagerDelegate
+// ======================================================
+extension BluetoothManager:
+    CBCentralManagerDelegate {
+    nonisolated func centralManagerDidUpdateState(
+        _ central: CBCentralManager
+    ) {
+        Task { @MainActor in
+            switch central.state {
+            case .poweredOn:
+                print("Bluetooth Ready")
+                Logger.shared.info("Bluetooth Ready")
+            case .poweredOff:
+                print("Bluetooth Off")
+                Logger.shared.info("Bluetooth Off")
+            case .resetting:
+                print("Bluetooth Resetting")
+                Logger.shared.info("Bluetooth Restarting")
+            case .unsupported:
+                print("Bluetooth Unsupported")
+                Logger.shared.info("Bluetooth Unsupported")
+            case .unauthorized:
+                print("Bluetooth Unauthorized")
+                Logger.shared.info("Bluetooth Unauthorized")
+            default:
+                print("Bluetooth Unknown")
+                Logger.shared.info("Bluetooth Unknown")
+            }
+        }
+    }
+    nonisolated func centralManager(
+        _ central: CBCentralManager,
+        didDiscover peripheral: CBPeripheral,
+        advertisementData: [String : Any],
+        rssi RSSI: NSNumber
+    ) {
+        Task { @MainActor in
+            if !discoveredDevices.contains(
+                where: {
+                    $0.identifier ==
+                    peripheral.identifier
+                }
+            ) {
+                discoveredDevices.append(
+                    peripheral
+                )
+                if let name = peripheral.name, !name.isEmpty {
+                    print("Found:", name)
+                }
+                if let name = peripheral.name?.lowercased() {
+                    Logger.shared.info("Found: \(name)")
+                    
+                    if elmPeripheral == nil &&
+                        (name.contains("elm") || name.contains("obd")) {
+                        
+                        print("🚀 Auto connecting to \(name)")
+                        stopScan()
+                        status = .connecting
+                        connect(to: peripheral)
+                    }
+                }
+            }
+            
+        }
+    }
+    nonisolated func centralManager(
+        _ central: CBCentralManager,
+        didConnect peripheral: CBPeripheral
+    ) {
+        Task { @MainActor in
+            status = .connected
+            print("Connected to \(peripheral.name ?? "Unknown")")
+            Logger.shared.info("Connected to \(peripheral.name ?? "Unknown")")
+            //isConnected = true
+            stopScan()
+            peripheral.discoverServices(nil)
+        }
+    }
+    nonisolated func centralManager(
+        _ central: CBCentralManager,
+        didDisconnectPeripheral peripheral: CBPeripheral,
+        error: Error?
+    )
+    {
+        Task { @MainActor in
+            status = .disconnected
+            self.isConnected = false
+            self.writeCharacteristic = nil
+            self.notifyCharacteristic = nil
+            
+            self.elmInitialized = false
+            self.elmPeripheral = nil
+            self.lastResponse = ""
+            self.detectedTX = ""
+            self.detectedRX = ""
+            self.detectedService = ""
+            
+            self.discoveredDevices.removeAll()
+            
+            self.stopScan()
+            
+            print("Disconnected")
+            if let error {
+                Logger.shared.info("Disconnected: \(error.localizedDescription)")
+            } else {
+                Logger.shared.info("Disconnected")
+            }
+        }
+    }
+}
+// ======================================================
+// MARK: CBPeripheralDelegate
+// ======================================================
+extension BluetoothManager:
+    CBPeripheralDelegate {
+    nonisolated func peripheral(
+        _ peripheral: CBPeripheral,
+        didDiscoverServices error: Error?
+    ) {
+        Task { @MainActor in
+            guard
+                error == nil,
+                let services = peripheral.services
+            else {
+                return
+            }
+            for service in services {
+                print("===== SERVICE =====")
+                print(service.uuid.uuidString)
+                Logger.shared.info("===== SERVICE =====")
+                Logger.shared.info(service.uuid.uuidString)
+                peripheral.discoverCharacteristics(nil, for: service)
+            }
+        }
+    }
+    
+    nonisolated func peripheral(
+        _ peripheral: CBPeripheral,
+        didDiscoverCharacteristicsFor service: CBService,
+        error: Error?
+    ) {
+        Task{@MainActor in
+            guard
+                error == nil,
+                let chars =
+                    service.characteristics
+            else {
+                return
+            }
+            guard service.uuid.uuidString.uppercased() == "FFF0" else {
+                return
+            }
+            for c in chars {
+                print("SERVICE :", service.uuid.uuidString)
+                print("CHAR    :", c.uuid.uuidString)
+                print("PROPS   :", c.properties)
+                
+                Logger.shared.info("SERVICE: \(service.uuid.uuidString)")
+                Logger.shared.info("CHAR: \(c.uuid.uuidString)")
+                Logger.shared.info("PROPS: \(c.properties)")
+                
+//                if c.properties.contains(.read) {
+//                    peripheral.readValue(for: c)
+//                }
+                // RX
+                if c.uuid.uuidString.uppercased() == "FFF1" {
+                    notifyCharacteristic = c
+                    detectedRX = c.uuid.uuidString
+                    peripheral.setNotifyValue(true, for: c)
+                }
+                
+                // TX
+                if c.uuid.uuidString.uppercased() == "FFF2" {
+                    writeCharacteristic = c
+                    detectedService = service.uuid.uuidString
+                    detectedTX = c.uuid.uuidString
+                }
+            }
+            Task { @MainActor in
+                if !elmInitialized,
+                   writeCharacteristic != nil,
+                   notifyCharacteristic != nil {
+                    
+                    elmInitialized = true
+                    
+                    //await self.initializeELM()
+                    isConnected = true
+                }
+            }
+            
+        }
+    }
+    
+    private func analyzeResponse(_ response: String) {
+
+        let text = response.uppercased()
+
+        if text.contains("41 ") {
+            status = .mode01OK
+            Logger.shared.info("🎉 Mode 01 Supported")
+        }
+
+        if text.contains("61 ") {
+            status = .mode21OK
+            Logger.shared.info("🎉 Mode 21 Supported")
+        }
+
+        if text.contains("62 ") {
+            status = .mode22OK
+            Logger.shared.info("🎉 Mode 22 Supported")
+        }
+
+        if text.contains("NO DATA") {
+            status = .noData
+            Logger.shared.info("❌ NO DATA")
+        }
+
+        if text.contains("BUS ERROR") {
+            status = .busError
+            Logger.shared.info("🔥 BUS ERROR")
+            
+            Logger.shared.info("Retrying...")
+            ELM327.shared.send("ATSP5")
+        }
+
+        if text.contains("UNABLE TO CONNECT") {
+            status = .unableToConnect
+            Logger.shared.info("💀 UNABLE TO CONNECT")
+        }
+        if text.contains("SEARCHING") {
+            status = .searching
+        }
+    }
+    
+    nonisolated func peripheral(
+        _ peripheral: CBPeripheral,
+        didUpdateValueFor characteristic: CBCharacteristic,
+        error: Error?
+    ) {
+        Task { @MainActor in
+            guard error == nil,
+                  let value = characteristic.value
+            else { return }
+            
+            let text = String(data: value, encoding: .utf8) ?? "<non-utf8>"
+            let hex = value.map {
+                String(format: "%02X", $0)
+            }.joined(separator: " ")
+            
+            self.lastResponse = text
+            rxCount += 1
+            ELM327.shared.received(text)
+            _ = RequestResponseMatcher.shared.dequeue()
+            print("<< TEXT:", text)
+            print("<< HEX :", hex)
+            Logger.shared.rx(text)
+            analyzeResponse(text)
+        }
+    }
+    
+    nonisolated func peripheral(
+        _ peripheral: CBPeripheral,
+        didUpdateNotificationStateFor characteristic: CBCharacteristic,
+        error: Error?
+    ) {
+        Task { @MainActor in
+            if let error {
+                Logger.shared.info("Notify Error: \(error.localizedDescription)")
+                return
+            }
+
+            Logger.shared.info(
+                "Notify \(characteristic.uuid.uuidString): \(characteristic.isNotifying)"
+            )
+
+            print(
+                "Notify \(characteristic.uuid.uuidString): \(characteristic.isNotifying)"
+            )
+            
+            if characteristic.isNotifying == true
+            {
+                await self.initializeELM()
+            }
+        }
+    }
+}
+
+
