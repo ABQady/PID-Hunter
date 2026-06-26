@@ -43,6 +43,13 @@ enum ECUStatus: String {
     case connecting
     
     case checkingProtocol
+    
+    case waitingResponse
+    
+    case receivingResponse
+    
+    case idleScanning
+
 }
 
 extension ECUStatus {
@@ -69,6 +76,15 @@ extension ECUStatus {
 
         case .settingProtocol:
             return "📡 Setting Protocol..."
+        
+        case .waitingResponse:
+            return "🕖 Waiting for response..."
+            
+        case .receivingResponse:
+            return "⬆️ Recieving response..."
+            
+        case .idleScanning:
+            return "🔎 Scanning..."
 
         case .settingHeader:
             return "📨 Setting Header..."

@@ -1,6 +1,6 @@
 //
 //  BluetoothManager.swift
-//  PIDHunter
+//  PIDHunter by Ahmed AlQady
 //
 //
 import Foundation
@@ -30,6 +30,7 @@ final class BluetoothManager: NSObject, ObservableObject {
     private var retriedProtocol = false
     private var lastSendTime = Date()
     //=====================================================
+    
     override init() {
         super.init()
         central = CBCentralManager(
@@ -37,6 +38,7 @@ final class BluetoothManager: NSObject, ObservableObject {
             queue: nil
         )
     }
+    
     // MARK: Scan
         func startScan() {
             txCount = 0
@@ -148,6 +150,7 @@ final class BluetoothManager: NSObject, ObservableObject {
 
         Logger.shared.info("TX HEX = \(hex)")
         
+        status = .waitingResponse
         peripheral.writeValue(
             data,
             for: tx,
@@ -161,43 +164,53 @@ final class BluetoothManager: NSObject, ObservableObject {
         
         send("ATZ")
         try? await Task.sleep(for: .milliseconds(1500))
-        guard isConnected else { return }
+        guard isConnected else {  status = .disconnected
+            return }
         
         send("ATE0")
         try? await Task.sleep(for: .milliseconds(500))
-        guard isConnected else { return }
+        guard isConnected else { status = .disconnected
+            return }
         
         send("ATL0")
         try? await Task.sleep(for: .milliseconds(500))
-        guard isConnected else { return }
+        guard isConnected else { status = .disconnected
+            return }
         
         send("ATS0")
         try? await Task.sleep(for: .milliseconds(500))
-        guard isConnected else { return }
+        guard isConnected else { status = .disconnected
+            return }
         
         send("ATH1")
         try? await Task.sleep(for: .milliseconds(500))
-        guard isConnected else { return }
+        guard isConnected else { status = .disconnected
+            return }
         
         status = .settingProtocol
         send("ATSP5")
         try? await Task.sleep(for: .milliseconds(2000))
-        guard isConnected else { return }
+        guard isConnected else { status = .disconnected
+            return }
         
         status = .checkingProtocol
         send("ATDP")
         try? await Task.sleep(for: .milliseconds(1500))
-        guard isConnected else { return }
+        guard isConnected else { status = .disconnected
+            return }
         
         send("ATI")
         try? await Task.sleep(for: .milliseconds(1000))
-        guard isConnected else { return }
+        guard isConnected else { status = .disconnected
+            return }
         
         status = .testingECU
         send("0100")
         try? await Task.sleep(for: .milliseconds(1000))
         Logger.shared.info("ELM initialization finished")
-        guard isConnected else { return }
+        guard isConnected else { status = .disconnected
+            return }
+        status = .connected
     }
 }
 // ======================================================
@@ -271,10 +284,8 @@ extension BluetoothManager:
         didConnect peripheral: CBPeripheral
     ) {
         Task { @MainActor in
-            status = .connected
             print("Connected to \(peripheral.name ?? "Unknown")")
             Logger.shared.info("Connected to \(peripheral.name ?? "Unknown")")
-            //isConnected = true
             stopScan()
             peripheral.discoverServices(nil)
         }
@@ -366,9 +377,6 @@ extension BluetoothManager:
                 Logger.shared.info("CHAR: \(c.uuid.uuidString)")
                 Logger.shared.info("PROPS: \(c.properties)")
                 
-//                if c.properties.contains(.read) {
-//                    peripheral.readValue(for: c)
-//                }
                 // RX
                 if c.uuid.uuidString.uppercased() == "FFF1" {
                     notifyCharacteristic = c
@@ -389,9 +397,6 @@ extension BluetoothManager:
                    notifyCharacteristic != nil {
                     
                     elmInitialized = true
-                    
-                    //await self.initializeELM()
-                    //isConnected = true
                 }
             }
             
@@ -421,12 +426,12 @@ extension BluetoothManager:
         }
 
         if text.contains("NO DATA") {
-            status = .noData
+            //status = .noData
             Logger.shared.info("❌ NO DATA")
         }
 
         if text.contains("BUS ERROR") {
-            status = .busError
+            //status = .busError
             Logger.shared.info("🔥 BUS ERROR")
             Task {
                 guard self.isConnected else { return }
@@ -477,8 +482,13 @@ extension BluetoothManager:
                 self.lastResponse = text
             }
             rxCount += 1
+
             ELM327.shared.received(text)
-            _ = RequestResponseMatcher.shared.dequeue()
+
+            if RequestResponseMatcher.shared.hasPending {
+                _ = RequestResponseMatcher.shared.dequeue()
+            }
+            
             print("<< TEXT:", text)
             print("<< HEX :", hex)
             Logger.shared.rx(text)
@@ -508,18 +518,19 @@ extension BluetoothManager:
             guard characteristic.uuid.uuidString.uppercased() == "FFF1" else {
                 return
             }
-            
-            if characteristic.isNotifying == true
-            {
-                isConnected = true
-                elmInitialized = false
-                
-                await self.initializeELM()
 
-                if isConnected {
-                    elmInitialized = true
-                }
+            guard characteristic.isNotifying else {
+                return
             }
+
+            guard !elmInitialized else {
+                return
+            }
+
+            elmInitialized = true
+            isConnected = true
+
+            await initializeELM()
         }
     }
 }
