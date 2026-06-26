@@ -24,6 +24,7 @@ struct PIDHunterTabView: View {
     @State private var header = "81F111"
     @State private var startPID = "0000"
     @State private var endPID = "FFFF"
+    @State private var manualCommand = ""
     
     @AppStorage("selectedTab")
     private var selectedTab = 0
@@ -36,6 +37,22 @@ struct PIDHunterTabView: View {
             $0.header.localizedCaseInsensitiveContains(search) ||
             $0.pid.localizedCaseInsensitiveContains(search)
         }
+    }
+    
+    private func sendManualCommand() {
+
+        let command = manualCommand
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+
+        guard !command.isEmpty else {
+            return
+        }
+
+        Logger.shared.tx(command)
+        ELM327.shared.send(command)
+
+        manualCommand = ""
     }
     
     private var settingsTab: some View {
@@ -420,6 +437,23 @@ struct PIDHunterTabView: View {
                         }
                     }
                     
+                    HStack(spacing: 8) {
+                        TextField("Manual command", text: $manualCommand)
+                            .textFieldStyle(.roundedBorder)
+                            .textInputAutocapitalization(.characters)
+                            .autocorrectionDisabled()
+                            .onSubmit(sendManualCommand)
+
+                        Button("Send") {
+                            sendManualCommand()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(
+                            manualCommand
+                                .trimmingCharacters(in: .whitespacesAndNewlines)
+                                .isEmpty
+                        )
+                    }
                     .padding()
                 }
             }
