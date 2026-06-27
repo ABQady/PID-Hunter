@@ -126,10 +126,10 @@ struct MyContentView: View {
                         Text("Progress")
                             .font(.headline)
                         ProgressView(
-                            value: brute.progress
+                            value: brute.scanStatus.progress
                         )
                         Text(
-                            "\(Int(brute.progress * 100))% • \(brute.currentRequest)"                        )
+                            "\(Int(brute.scanStatus.progress * 100))% • \(brute.scanStatus.currentRequest)"                        )
                         .font(
                             .system(
                                 .caption,
@@ -244,7 +244,7 @@ struct MyContentView: View {
                             )
                         }
                         .buttonStyle(.borderedProminent)
-                        .disabled(brute.isScanning)
+                        .disabled(brute.scanStatus.isScanning)
                         Button {
                             Task {
                                 let cleanHeader = header
@@ -269,7 +269,7 @@ struct MyContentView: View {
                                     "stop.fill"
                             )
                         }
-                        .disabled(!brute.isScanning)
+                        .disabled(!brute.scanStatus.isScanning)
                     }
                     
 
@@ -287,7 +287,7 @@ struct MyContentView: View {
                                     
                                     Spacer()
                                     
-                                    Text("Found: \(brute.successCount)")
+                                    Text("Found: \(brute.scanStatus.successCount)")
                                         .font(.headline)
                                     
                                     Spacer()

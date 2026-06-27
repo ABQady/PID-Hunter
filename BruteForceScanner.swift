@@ -14,15 +14,20 @@ struct ScanResult: Codable, Identifiable {
     let request: String
     let response: String
 }
+
+struct ScanStatus {
+    var progress = 0.0
+    var currentRequest = ""
+    var successCount = 0
+    var isScanning = false
+}
+
 @MainActor
 final class BruteForceScanner: ObservableObject {
     static let shared = BruteForceScanner()
-    @Published var isScanning = false
-    @Published var progress: Double = 0.0
-    @Published var currentRequest = ""
     @Published private(set) var results: [ScanResult] = []
     @Published var delayMs: Double = 100
-    @Published var successCount = 0
+    @Published private(set) var scanStatus = ScanStatus()
     
     private var shouldStop = false
     private var seen = Set<String>()
@@ -34,6 +39,30 @@ final class BruteForceScanner: ObservableObject {
     private func saveResumePoint() {
         UserDefaults.standard.set(currentHeaderIndex, forKey: "resumeHeader")
         UserDefaults.standard.set(currentPID, forKey: "resumePID")
+    }
+    
+    private func beginScan() {
+        shouldStop = false
+        scanStatus.isScanning = true
+        scanStatus.progress = 0
+        scanStatus.currentRequest = ""
+        RequestResponseMatcher.shared.clear()
+    }
+    
+    private func finishScan(completed: Bool) {
+        scanStatus.isScanning = false
+        scanStatus.currentRequest = ""
+
+        if completed {
+            scanStatus.progress = 1.0
+            clearResumePoint()
+        } else {
+            saveResumePoint()
+            saveResults()
+        }
+
+        RequestResponseMatcher.shared.clear()
+        shouldStop = false
     }
 
     private func loadResumePoint() {
@@ -57,17 +86,21 @@ final class BruteForceScanner: ObservableObject {
 
         results = saved
         seen = Set(saved.map { "\($0.header)|\($0.request)|\($0.response)" })
-        successCount = saved.count
+        scanStatus.successCount = saved.count
     }
     func startFresh() {
-        shouldStop = false
 
+        shouldStop = false
+        scanStatus.progress = 0
+        scanStatus.currentRequest = ""
+        scanStatus.isScanning = false
+        
         currentHeaderIndex = 0
         currentPID = 0
 
         results.removeAll()
         seen.removeAll()
-        successCount = 0
+        scanStatus.successCount = 0
 
         UserDefaults.standard.removeObject(forKey: "savedResults")
 
@@ -90,7 +123,7 @@ final class BruteForceScanner: ObservableObject {
     private func clearResults() {
         results.removeAll()
         seen.removeAll()
-        successCount = 0
+        scanStatus.successCount = 0
 
         UserDefaults.standard.removeObject(forKey: "savedResults")
     }
@@ -108,6 +141,7 @@ final class BruteForceScanner: ObservableObject {
         let ok = await Preflight.shared.run(header: header)
 
         guard ok else {
+            Logger.shared.info("❌ Reconnect failed")
             return false
         }
 
@@ -125,14 +159,8 @@ final class BruteForceScanner: ObservableObject {
 
     func stop() {
         shouldStop = true
-        currentRequest = ""
-        RequestResponseMatcher.shared.clear()
-        isScanning = false
-        saveResumePoint()
-        saveResults()
     }
     func scanMode01() {
-        RequestResponseMatcher.shared.clear()
         Task {
             loadResumePoint()
             if currentHeaderIndex >= headers.count {
@@ -148,8 +176,7 @@ final class BruteForceScanner: ObservableObject {
                 loadResults()
             }
             
-            shouldStop = false
-            isScanning = true
+            beginScan()
             let total =
             headers.count * 256
             var done =
@@ -165,16 +192,12 @@ final class BruteForceScanner: ObservableObject {
 
                 while currentPID <= 0x00FF {
                     if shouldStop {
-                        saveResumePoint()
-                        saveResults()
-
-                        isScanning = false
-                        currentRequest = ""
+                        finishScan(completed: false)
                         return
                     }
 
                     let req = String(format: "01%02X", UInt8(currentPID))
-                    currentRequest = req
+                    scanStatus.currentRequest = req
                     if !BluetoothManager.shared.isConnected {
                         RequestResponseMatcher.shared.clear()
 
@@ -210,7 +233,7 @@ final class BruteForceScanner: ObservableObject {
                     done += 1
                     currentPID += 1
                     saveResumePoint()
-                    progress =
+                    scanStatus.progress =
                     Double(done)
                     /
                     Double(total)
@@ -222,21 +245,16 @@ final class BruteForceScanner: ObservableObject {
                 currentPID = 0
                 saveResumePoint()
             }
-            progress = 1.0
-            isScanning = false
-            currentRequest = ""
-            clearResumePoint()
+             finishScan(completed: true)
         }
     }
     func scanMode21() {
-        RequestResponseMatcher.shared.clear()
         Task {
             loadResumePoint()
             if currentHeaderIndex >= headers.count {
                 currentHeaderIndex = 0
                 currentPID = 0
             }
-            
 //            ELM327.shared.send("ATPC")
 //            try? await Task.sleep(for: .milliseconds(200))
             if currentHeaderIndex == 0 && currentPID == 0 {
@@ -245,8 +263,7 @@ final class BruteForceScanner: ObservableObject {
                 loadResults()
             }
             
-            shouldStop = false
-            isScanning = true
+            beginScan()
             let total =
             headers.count * 256
             var done =
@@ -263,17 +280,13 @@ final class BruteForceScanner: ObservableObject {
                 while currentPID <= 0x00FF {
 
                     if shouldStop {
-                        saveResumePoint()
-                        saveResults()
-
-                        isScanning = false
-                        currentRequest = ""
+                        finishScan(completed: false)
                         return
                     }
 
                     let req = String(format: "21%02X", UInt8(currentPID))
                     
-                    currentRequest = req
+                    scanStatus.currentRequest = req
                     if !BluetoothManager.shared.isConnected {
                         RequestResponseMatcher.shared.clear()
 
@@ -311,7 +324,7 @@ final class BruteForceScanner: ObservableObject {
                     done += 1
                     currentPID += 1
                     saveResumePoint()
-                    progress =
+                    scanStatus.progress =
                     Double(done)
                     /
                     Double(total)
@@ -320,17 +333,13 @@ final class BruteForceScanner: ObservableObject {
                 currentPID = 0
                 saveResumePoint()
             }
-            progress = 1.0
-            isScanning = false
-            currentRequest = ""
-            clearResumePoint()
+            finishScan(completed: true)
         }
     }
     func scanMode22(
         start: UInt16 = 0x0000,
         end: UInt16 = 0xFFFF
     ) {
-        RequestResponseMatcher.shared.clear()
         Task {
             loadResumePoint()
             
@@ -351,8 +360,7 @@ final class BruteForceScanner: ObservableObject {
                 loadResults()
             }
             
-            shouldStop = false
-            isScanning = true
+            beginScan()
 
             let count = Int(end) - Int(start) + 1
             let total = headers.count * count
@@ -365,16 +373,12 @@ final class BruteForceScanner: ObservableObject {
                 try? await Task.sleep(for: .milliseconds(Int(delayMs)))
                 while currentPID <= Int(end) {
                     if shouldStop {
-                        saveResumePoint()
-                        saveResults()
-
-                        isScanning = false
-                        currentRequest = ""
+                        finishScan(completed: false)
                         return
                     }
 
                     let req = String(format: "22%04X", UInt16(currentPID))
-                    currentRequest = req
+                    scanStatus.currentRequest = req
                     if !BluetoothManager.shared.isConnected {
                         RequestResponseMatcher.shared.clear()
 
@@ -409,7 +413,7 @@ final class BruteForceScanner: ObservableObject {
                     done += 1
                     currentPID += 1
                     saveResumePoint()
-                    progress =
+                    scanStatus.progress =
                     Double(done)
                     /
                     Double(total)
@@ -418,10 +422,7 @@ final class BruteForceScanner: ObservableObject {
                 currentPID = Int(start)
                 saveResumePoint()
             }
-            progress = 1.0
-            isScanning = false
-            currentRequest = ""
-            clearResumePoint()
+            finishScan(completed: true)
         }
     }
     func appendResponse(
@@ -466,7 +467,7 @@ final class BruteForceScanner: ObservableObject {
 
         Logger.shared.rx(response)
         
-        successCount += 1
+        scanStatus.successCount += 1
             saveResults()
     }
     

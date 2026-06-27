@@ -204,10 +204,10 @@ struct PIDHunterTabView: View {
                 Text("Progress")
                     .font(.headline)
                 ProgressView(
-                    value: brute.progress
+                    value: brute.scanStatus.progress
                 )
                 Text(
-                    "\(Int(brute.progress * 100))% • \(brute.currentRequest)"                        )
+                    "\(Int(brute.scanStatus.progress * 100))% • \(brute.scanStatus.currentRequest)"                        )
                 .font(
                     .system(
                         .caption,
@@ -344,7 +344,7 @@ struct PIDHunterTabView: View {
                     )
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(brute.isScanning)
+                .disabled(brute.scanStatus.isScanning)
                 Button {
                     Task {
                         let cleanHeader = header
@@ -369,7 +369,7 @@ struct PIDHunterTabView: View {
                             "stop.fill"
                     )
                 }
-                .disabled(!brute.isScanning)
+                .disabled(!brute.scanStatus.isScanning)
             }
             // MARK: Live Log
             VStack(alignment: .leading) {
@@ -384,7 +384,7 @@ struct PIDHunterTabView: View {
                         
                         Spacer()
                         
-                        Text("Found: \(brute.successCount)")
+                        Text("Found: \(brute.scanStatus.successCount)")
                             .font(.headline)
                         
                         Spacer()
@@ -572,6 +572,9 @@ struct PIDHunterTabView: View {
                     }
             }
             .navigationTitle("PID Hunter")
+        }
+        .sheet(item: $exportedFile) { item in
+            ShareSheet(activityItems: [item.url])
         }
     }
 }
