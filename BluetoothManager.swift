@@ -167,7 +167,7 @@ final class BluetoothManager: NSObject, ObservableObject {
         if !command.uppercased().hasPrefix("AT") {
             RequestResponseMatcher.shared.enqueue(
                 command: command,
-                header: detectedService
+                header: ELM327.shared.currentHeader
             )
         }
         
@@ -495,15 +495,47 @@ extension BluetoothManager:
                 self.lastResponse = text
             }
             rxCount += 1
-
-            if RequestResponseMatcher.shared.hasPending {
-                _ = RequestResponseMatcher.shared.dequeue()
-            }
-            
             print("<< TEXT:", text)
             print("<< HEX :", hex)
-            Logger.shared.rx(text)
+            //Logger.shared.rx(text)
+            
+            guard let pending = RequestResponseMatcher.shared.first else {
+                return
+            }
+            let upper = text
+                .uppercased()
+                .replacingOccurrences(of: "\r", with: " ")
+                .replacingOccurrences(of: "\n", with: " ")
+                .trimmingCharacters( in: .whitespacesAndNewlines)
+            
+            guard upper.contains("41 ")
+                    || upper.contains("61 ")
+                    || upper.contains("62 ")
+                    || upper.contains("7F ")
+                    || upper.contains("NO DATA")
+                    || upper.contains("STOPPED")
+                    || upper.contains("ERROR")
+                    || upper.contains("BUS ERROR")
+                    || upper.contains("CAN ERROR")
+                    || upper.contains("INIT: ERROR")
+                    || upper.contains("BUFFER FULL")
+                    
+            else {
+                return
+            }
+                        
+            _ = RequestResponseMatcher.shared.dequeue()
+            
+            BruteForceScanner.shared.appendResponse(
+                header: pending.header,
+                mode: String(pending.command.prefix(2)),
+                pid: String(pending.command.dropFirst(2)),
+                request: pending.command,
+                response: text
+            )
+            
             analyzeResponse(text)
+
         }
     }
     

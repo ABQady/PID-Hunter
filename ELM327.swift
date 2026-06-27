@@ -6,6 +6,7 @@ import Foundation
 @MainActor
 final class ELM327: ObservableObject {
     static let shared = ELM327()
+    private(set) var currentHeader = ""
     private init() {}
 
     // MARK: - Send
@@ -14,12 +15,12 @@ final class ELM327: ObservableObject {
     }
 
     // MARK: - Header
-    func setHeader(
-        _ header: String
-    ) {
-        guard !header.isEmpty else {
+    func setHeader(_ header: String) {
+        guard !header.isEmpty else { return }
+        guard currentHeader != header else {
             return
         }
+        currentHeader = header
         send("ATSH\(header)")
     }
     // MARK: - PID Requests
