@@ -94,6 +94,7 @@ struct PIDHunterTabView: View {
                         Logger.shared.info("❌ Preflight Failed")
                         return
                     }
+                    ScanStatistics.shared.start()
                     brute.scanMode01()
                 }
             case 21:
@@ -107,6 +108,7 @@ struct PIDHunterTabView: View {
                         Logger.shared.info("❌ Preflight Failed")
                         return
                     }
+                    ScanStatistics.shared.start()
                     brute.scanMode21()
                 }
             default:
@@ -132,6 +134,7 @@ struct PIDHunterTabView: View {
                                 Logger.shared.info("❌ Preflight Failed")
                                 return
                             }
+                            ScanStatistics.shared.start()
                             brute.scanMode22(
                                 start: start,
                                 end: end
@@ -299,8 +302,44 @@ struct PIDHunterTabView: View {
                 ProgressView(
                     value: brute.scanStatus.progress
                 )
-                Text(
-                    "\(Int(brute.scanStatus.progress * 100))% • \(brute.scanStatus.currentRequest)"                        )
+                HStack(alignment: .center, spacing: 4) {
+                    Spacer()
+                    Text(
+                        "\(Int(brute.scanStatus.progress * 100))% • \(brute.scanStatus.currentRequest)"
+                    )
+                    Spacer()
+                    HStack {
+                        Text("\(stats.requestsSent)")
+                            .bold()
+                        Text("/")
+                        Text("\(stats.totalRequests) Requests")
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    TimelineView(.periodic(from: .now, by: 1)) { _ in
+                        HStack(alignment: .center, spacing: 2) {
+                            Spacer()
+                            Text("Elapsed: \(formatETA(stats.elapsed))")
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            if !brute.scanStatus.isScanning {
+                                Text("ETA: --:--")
+                                    .foregroundStyle(.secondary)
+                            } else if stats.finishedAt != nil {
+                                Text("Completed in \(formatETA(stats.elapsed)) ✅")
+                                    .foregroundStyle(.green)
+                            } else if stats.requestsSent < 10 {
+                                Text("ETA: Calculating...")
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Text("ETA: \(formatETA(stats.eta))")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    Spacer()
+                }
+                .font(.system(.caption, design: .monospaced))
                 .font(
                     .system(
                         .caption,
@@ -318,16 +357,17 @@ struct PIDHunterTabView: View {
             if brute.hasResumePoint {
 
                 Text("Resume available")
-
                     .font(.caption)
-
                     .foregroundStyle(.orange)
-
             }
             
             // MARK: Actions
             HStack(alignment:.center, spacing: 10) {
                 Button(role: .destructive) {
+                    guard bt.isConnected else {
+                            Logger.shared.info("Connect to ELM first")
+                            return
+                        }
                     brute.startFresh()
                     Logger.shared.info("🗑️ Starting fresh scan")
                     startPIDScan()
@@ -717,6 +757,25 @@ struct PIDHunterTabView: View {
 
         }
         .frame(maxWidth: .infinity)
+    }
+    
+    private func formatETA(_ seconds: TimeInterval) -> String {
+
+        guard seconds > 0 else {
+            return "--:--"
+        }
+
+        let total = Int(seconds)
+
+        let hours = total / 3600
+        let minutes = (total % 3600) / 60
+        let secs = total % 60
+
+        if hours > 0 {
+            return String(format: "%02d:%02d:%02d", hours, minutes, secs)
+        }
+
+        return String(format: "%02d:%02d", minutes, secs)
     }
     
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

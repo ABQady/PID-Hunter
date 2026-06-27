@@ -162,6 +162,7 @@ final class BruteForceScanner: ObservableObject {
 
     func stop() {
         shouldStop = true
+        ScanStatistics.shared.finish()
     }
     func scanMode01() {
         Task {
@@ -180,9 +181,14 @@ final class BruteForceScanner: ObservableObject {
                 loadResults()
             }
             
-            beginScan()
             let total =
             headers.count * 256
+            
+            ScanStatistics.shared.reset()
+            ScanStatistics.shared.totalRequests = total
+            
+            beginScan()
+            
             var done =
                 currentHeaderIndex * 256 +
                 currentPID
@@ -267,10 +273,14 @@ final class BruteForceScanner: ObservableObject {
             } else {
                 loadResults()
             }
-            
-            beginScan()
             let total =
             headers.count * 256
+            
+            ScanStatistics.shared.reset()
+            ScanStatistics.shared.totalRequests = total
+            
+            beginScan()
+            
             var done =
                 currentHeaderIndex * 256 +
                 currentPID
@@ -373,6 +383,10 @@ final class BruteForceScanner: ObservableObject {
             var done =
                 currentHeaderIndex * count +
                 Int(currentPID - Int(start))
+            
+            ScanStatistics.shared.reset()
+            ScanStatistics.shared.totalRequests = done
+            
             while currentHeaderIndex < headers.count {
                 let header = headers[currentHeaderIndex]
                 ELM327.shared.setHeader(header)

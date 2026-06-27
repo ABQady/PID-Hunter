@@ -21,6 +21,8 @@ final class ScanStatistics: ObservableObject {
 
     @Published var startedAt: Date?
     @Published var finishedAt: Date?
+    
+    @Published var totalRequests = 0
 
     private init() {}
 
@@ -36,7 +38,12 @@ final class ScanStatistics: ObservableObject {
         busErrors = 0
         timeouts = 0
 
-        startedAt = Date()
+        startedAt = nil
+        finishedAt = nil
+    }
+    
+    func start() {
+        startedAt = .now
         finishedAt = nil
     }
 
@@ -50,6 +57,15 @@ final class ScanStatistics: ObservableObject {
 
         return (finishedAt ?? Date())
             .timeIntervalSince(startedAt)
+    }
+    
+    var eta: TimeInterval {
+        guard requestsSent >= 10,
+              totalRequests > requestsSent else {
+            return 0
+        }
+        let average = elapsed / Double(requestsSent)
+        return average * Double(totalRequests - requestsSent)
     }
     
     var positiveResponseRate: Double {
