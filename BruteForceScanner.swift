@@ -162,6 +162,7 @@ final class BruteForceScanner: ObservableObject {
     }
     func scanMode01() {
         Task {
+            ScanStatistics.shared.reset()
             loadResumePoint()
             if currentHeaderIndex >= headers.count {
                 currentHeaderIndex = 0
@@ -245,7 +246,8 @@ final class BruteForceScanner: ObservableObject {
                 currentPID = 0
                 saveResumePoint()
             }
-             finishScan(completed: true)
+            ScanStatistics.shared.finish()
+            finishScan(completed: true)
         }
     }
     func scanMode21() {
@@ -333,6 +335,7 @@ final class BruteForceScanner: ObservableObject {
                 currentPID = 0
                 saveResumePoint()
             }
+            ScanStatistics.shared.finish()
             finishScan(completed: true)
         }
     }
@@ -422,6 +425,7 @@ final class BruteForceScanner: ObservableObject {
                 currentPID = Int(start)
                 saveResumePoint()
             }
+            ScanStatistics.shared.finish()
             finishScan(completed: true)
         }
     }

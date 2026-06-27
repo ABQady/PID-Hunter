@@ -157,14 +157,14 @@ final class BluetoothManager: NSObject, ObservableObject {
         Logger.shared.info("TX Props = \(tx.properties)")
         lastSendTime = Date()
         let type: CBCharacteristicWriteType =
-            tx.properties.contains(.write)
-            ? .withResponse
-            : .withoutResponse
+        tx.properties.contains(.write)
+        ? .withResponse
+        : .withoutResponse
         
         let hex = data.map {
             String(format: "%02X", $0)
         }.joined(separator: " ")
-
+        
         Logger.shared.info("TX HEX = \(hex)")
         
         if !command.uppercased().hasPrefix("AT") {
@@ -181,6 +181,15 @@ final class BluetoothManager: NSObject, ObservableObject {
             type: type
         )
         txCount += 1
+        if !command.uppercased().hasPrefix("AT") {
+            
+            RequestResponseMatcher.shared.enqueue(
+                command: command,
+                header: ELM327.shared.currentHeader
+            )
+            
+            ScanStatistics.shared.requestsSent += 1
+        }
     }
     @MainActor
     private func initializeELM() async {
@@ -426,7 +435,7 @@ extension BluetoothManager:
     }
     
     private func analyzeResponse(_ response: ELMResponse) {
-
+        ScanStatistics.shared.responses += 1
         switch response.type {
 
         case .mode01:
@@ -434,25 +443,34 @@ extension BluetoothManager:
             status = .mode01OK
             Logger.shared.success("🎉 Mode 01 Supported")
             ECUInfo.shared.addService(response.service)
+            ScanStatistics.shared.positiveResponses += 1
 
         case .mode21:
             retriedProtocol = false
             status = .mode21OK
             Logger.shared.success("🎉 Mode 21 Supported")
             ECUInfo.shared.addService(response.service)
+            ScanStatistics.shared.positiveResponses += 1
 
         case .mode22:
             retriedProtocol = false
             status = .mode22OK
             Logger.shared.success("🎉 Mode 22 Supported")
             ECUInfo.shared.addService(response.service)
+            ScanStatistics.shared.positiveResponses += 1
 
+        case .negative:
+            ScanStatistics.shared.negativeResponses += 1
+            Logger.shared.warning("Negative Response")
+            
         case .noData:
             Logger.shared.error("❌ NO DATA")
+            ScanStatistics.shared.noData += 1
 
         case .busError:
 
             Logger.shared.error("🔥 BUS ERROR")
+            ScanStatistics.shared.busErrors += 1
 
             Task {
 

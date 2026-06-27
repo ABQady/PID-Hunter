@@ -6,5 +6,6 @@ struct PIDHunterApp: App {
             //MyContentView()
             PIDHunterTabView()
         }
+        .defaultSize(width: 650,height: 1000)
     }
 }

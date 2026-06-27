@@ -16,6 +16,7 @@ struct PIDHunterTabView: View {
     @ObservedObject private var brute = BruteForceScanner.shared
     @ObservedObject private var logger = Logger.shared
     @ObservedObject private var ecu = ECUInfo.shared
+    @ObservedObject private var stats = ScanStatistics.shared
     
     @State private var exportedFile: ExportedFile?
     @State private var programmaticScroll = false
@@ -491,10 +492,10 @@ struct PIDHunterTabView: View {
         VStack(spacing: 16) {
             ///Mark ECU INFO
             VStack(alignment: .leading, spacing: 10) {
-
+                
                 Text("ECU Information")
                     .font(.headline)
-
+                
                 Divider()
                 
                 LabeledContent("Connection Status") {
@@ -505,19 +506,19 @@ struct PIDHunterTabView: View {
                             : .secondary
                         )
                 }
-
+                
                 LabeledContent("ECU Name") {
                     Text(ecu.ecuName)
                 }
-
+                
                 LabeledContent("ELM Version") {
                     Text(ecu.elmVersion)
                 }
-
+                
                 LabeledContent("Protocol Used") {
                     Text(ecu.protocolName)
                 }
-
+                
                 LabeledContent("Current Header") {
                     Text(ecu.header)
                 }
@@ -530,7 +531,7 @@ struct PIDHunterTabView: View {
                         ))
                     }
                 }
-
+                
                 Divider()
                 
                 LabeledContent("Supported Services") {
@@ -568,71 +569,151 @@ struct PIDHunterTabView: View {
             .clipShape(RoundedRectangle(cornerRadius: 18))
             
             
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            Divider()
+            
+            VStack(alignment: .leading, spacing: 12) {
+                
+                Text("Scan Statistics")
+                    .font(.headline)
+                
+                Divider()
+                
+                HStack {
+                    
+                    statistic(
+                        title: "Requests",
+                        value: "\(stats.requestsSent)"
+                    )
+                    
+                    Spacer()
+                    
+                    statistic(
+                        title: "Responses",
+                        value: "\(stats.responses)"
+                    )
+                    
+                    Spacer()
+                    
+                    statistic(
+                        title: "Hits",
+                        value: "\(stats.positiveResponses)"
+                    )
+                }
+                
+                HStack {
+                    
+                    statistic(
+                        title: "NO DATA",
+                        value: "\(stats.noData)"
+                    )
+                    
+                    Spacer()
+                    
+                    statistic(
+                        title: "Bus Errors",
+                        value: "\(stats.busErrors)"
+                    )
+                    
+                    Spacer()
+                    
+                    statistic(
+                        title: "Hit Rate",
+                        value: String(format: "%.1f%%",
+                                      stats.positiveResponseRate)
+                    )
+                }
+                
+            }
+            .padding()
+            .background(.thinMaterial)
+            .clipShape(
+                RoundedRectangle(cornerRadius: 18)
+            )
             
             Divider()
-
+            
             HStack {
-                Text("Found PIDs")
-                    .font(.title.bold())
+                Text("PID Results")
+                    .font(.headline)
 
                 Spacer()
 
-                Text("\(filteredResults.count) / \(brute.results.count)")
-                    .foregroundStyle(.secondary)
-            }
+                    Text("\(filteredResults.count)")
+                        .foregroundStyle(.secondary)
+                
+                Spacer()
+                
             Button("Copy All") {
-
-                let text = brute.results.map {
-                    "\($0.request) -> \($0.response)"
-                }
-                .joined(separator: "\n")
-
-            #if os(macOS)
+                let text = brute.results
+                    .map { "\($0.request) -> \($0.response)" }
+                    .joined(separator: "\n")
+                
+#if os(macOS)
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(text, forType: .string)
-            #endif
+#endif
             }
+        }
             .buttonStyle(.borderedProminent)
-        
             
-            List(filteredResults.reversed()) { result in
+            TextField("Search PID...", text: $search)
+                .textFieldStyle(.roundedBorder)
 
-                VStack(alignment: .leading, spacing: 6) {
+            if filteredResults.isEmpty {
 
-                    HStack {
-                        Text(result.request)
-                            .font(.system(.headline, design: .monospaced))
-                        Spacer()
-
-                        Text(result.header)
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
+                ContentUnavailableView {
+                    Label(
+                        "No PID Results",
+                        systemImage: "memorychip"
+                    )
+                } description: {
+                    if bt.isConnected {
+                        Text("Start a scan to discover supported PIDs.")
+                    } else {
+                        Text("Connect an ELM327 adapter to begin.")
                     }
-
-                    Text(result.response)
-                        .font(.system(.body, design: .monospaced))
-                        .textSelection(.enabled)
-                        .lineLimit(nil)
-
-                    HStack {
-
-                        Text("Mode: \(result.mode)")
-
-                        Spacer()
-
-                        Text("PID: \(result.pid)")
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
                 }
-                .padding(.vertical, 4)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 12) {
+                        ForEach(filteredResults.reversed()) { result in
+                            PIDResultCard(result: result)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .searchable(text: $search)
+        
         }
         .padding()
     }
     
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    @ViewBuilder
+    private func statistic(
+        title: String,
+        value: String
+    ) -> some View {
+
+        VStack {
+
+            Text(value)
+                .font(.title2.bold())
+                .monospacedDigit()
+
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+        }
+        .frame(maxWidth: .infinity)
+    }
     
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     var body: some View {
         NavigationStack {
             TabView(selection: $selectedTab) {
