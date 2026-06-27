@@ -9,45 +9,25 @@ import Foundation
 enum ECUStatus: String {
 
     case disconnected
-
     case scanningBLE
-
     case connected
-
     case initializingELM
-
     case settingProtocol
-
     case settingHeader
-
     case testingECU
-
     case mode01OK
-
     case mode21OK
-
     case mode22OK
-
     case noData
-
     case searching
-
     case busError
-
     case unableToConnect
-
     case timeout
-
     case unknown
-    
     case connecting
-    
     case checkingProtocol
-    
     case waitingResponse
-    
     case receivingResponse
-    
     case idleScanning
 
 }

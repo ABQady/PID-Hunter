@@ -10,6 +10,8 @@ struct PendingRequest {
     let timestamp: Date
     let command: String
     let header: String
+    let mode: String
+    let pid: String
 }
 
 @MainActor
@@ -66,7 +68,9 @@ final class RequestResponseMatcher: ObservableObject {
         let request = PendingRequest(
             timestamp: Date(),
             command: command,
-            header: header
+            header: header,
+            mode: String(command.prefix(2)),
+            pid: String(command.dropFirst(2))
         )
 
         pending.append(request)

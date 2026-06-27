@@ -419,61 +419,68 @@ extension BluetoothManager:
         }
     }
     
-    private func analyzeResponse(_ response: String) {
+    private func analyzeResponse(_ response: ELMResponse) {
 
-        let text = response.uppercased()
+        switch response.type {
 
-        if text.contains("41 ") {
+        case .mode01:
             retriedProtocol = false
             status = .mode01OK
             Logger.shared.info("🎉 Mode 01 Supported")
-        }
 
-        if text.contains("61 ") {
+        case .mode21:
             retriedProtocol = false
             status = .mode21OK
             Logger.shared.info("🎉 Mode 21 Supported")
-        }
 
-        if text.contains("62 ") {
+        case .mode22:
             retriedProtocol = false
             status = .mode22OK
             Logger.shared.info("🎉 Mode 22 Supported")
-        }
 
-        if text.contains("NO DATA") {
-            //status = .noData
+        case .noData:
             Logger.shared.info("❌ NO DATA")
-        }
 
-        if text.contains("BUS ERROR") {
-            //status = .busError
+        case .busError:
+
             Logger.shared.info("🔥 BUS ERROR")
+
             Task {
-                guard self.isConnected else { return }
+
+                guard self.isConnected else {
+                    return
+                }
 
                 Logger.shared.info("Retrying...")
 
                 if !retriedProtocol {
+
                     retriedProtocol = true
 
                     ELM327.shared.send("ATZ")
+
                     try? await Task.sleep(for: .milliseconds(1500))
 
-                    guard self.isConnected else { return }
+                    guard self.isConnected else {
+                        return
+                    }
 
                     ELM327.shared.send("ATSP5")
                 }
             }
-        }
 
-        if text.contains("UNABLE TO CONNECT") {
+        case .unableToConnect:
             status = .unableToConnect
             Logger.shared.info("💀 UNABLE TO CONNECT")
-        }
-        if text.contains("SEARCHING") {
+
+        case .searching:
             status = .searching
+
+        default:
+            break
         }
+
+        
     }
     
     nonisolated func peripheral(
@@ -498,60 +505,42 @@ extension BluetoothManager:
                 Logger.shared.info("RX Chunk (\(value.count) bytes)")
                 return
             }
-            for text in responses{
+            for response in responses {
+                let raw = response.raw
+
                 Logger.shared.info("RX Complete (\(responses.count) response(s))")
-                Logger.shared.rx(text)
-                
-                let hex = text
-                    .utf8
-                    .map {
-                        String(format: "%02X", $0)
-                    }
-                    .joined(separator: " ")
-                
-                if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    self.lastResponse = text
-                }
+                Logger.shared.rx(raw)
+
                 rxCount += 1
-                print("<< TEXT:", text)
+                if !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    lastResponse = raw
+                }
+
+                let hex = Array(raw.utf8)
+                    .map { String(format: "%02X", $0) }
+                    .joined(separator: " ")
+
+                print("<< TEXT:", raw)
                 print("<< HEX :", hex)
                 Logger.shared.info("RX HEX = \(hex)")
-                //Logger.shared.rx(text)
-                
+                                
                 guard let pending = RequestResponseMatcher.shared.first else {
                     continue
                 }
-                let upper = text
-                    .uppercased()
-                    .replacingOccurrences(of: "\r", with: " ")
-                    .replacingOccurrences(of: "\n", with: " ")
-                    .trimmingCharacters( in: .whitespacesAndNewlines)
                 
-                guard upper.contains("41 ")
-                        || upper.contains("61 ")
-                        || upper.contains("62 ")
-                        || upper.contains("7F ")
-                        || upper.contains("NO DATA")
-                        || upper.contains("STOPPED")
-                        || upper.contains("ERROR")
-                        || upper.contains("BUS ERROR")
-                        || upper.contains("CAN ERROR")
-                        || upper.contains("INIT: ERROR")
-                        || upper.contains("BUFFER FULL")
-                        
-                else {
+                guard response.type != .unknown else {
                     continue
                 }
                 _ = RequestResponseMatcher.shared.dequeue()
                 
                 BruteForceScanner.shared.appendResponse(
                     header: pending.header,
-                    mode: String(pending.command.prefix(2)),
-                    pid: String(pending.command.dropFirst(2)),
+                    mode: pending.mode,
+                    pid: pending.pid,
                     request: pending.command,
-                    response: text
+                    response: raw
                 )
-                analyzeResponse(text)
+                analyzeResponse(response)
             }
         }
     }

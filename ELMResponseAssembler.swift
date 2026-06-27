@@ -13,42 +13,55 @@ final class ELMResponseAssembler {
     private init() {}
     private var buffer = ""
     private var lastChunkTime = Date()
-    private let timeout: TimeInterval = 1.0
+    private let timeout: TimeInterval = 2.0
+    private let maxBufferSize = 8192
 
     func clear() {
         buffer.removeAll()
         lastChunkTime = Date()
     }
 
-    func append(_ chunk: String) -> [String] {
+    func append(_ chunk: String) -> [ELMResponse] {
         let now = Date()
         if !buffer.isEmpty &&
             now.timeIntervalSince(lastChunkTime) > timeout {
 
             Logger.shared.info("Assembler Timeout")
-            Logger.shared.info("Discarded: \(buffer)")
-
+            Logger.shared.info("Discarded (\(buffer.count) bytes)")
             buffer.removeAll()
         }
 
         lastChunkTime = now
         buffer += chunk
-
-        if isComplete(buffer) {
-            let response = buffer
+        
+        guard buffer.count <= maxBufferSize else {
+            Logger.shared.info("Assembler Overflow")
+            Logger.shared.info("Discarded (\(buffer.count) bytes)")
             buffer.removeAll()
-            return [response]
+            return []
         }
 
-        return []
-    }
+        // Extract every complete ELM response ending with '>'
+        var responses: [ELMResponse] = []
+        while let range = buffer.range(of: ">") {
 
-    private func isComplete(_ text: String) -> Bool {
+            let response = String(buffer[..<range.upperBound])
 
-        let normalized = text
-            .replacingOccurrences(of: "\r", with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+            buffer.removeSubrange(..<range.upperBound)
 
-        return normalized.hasSuffix(">")
+            let trimmed = response
+                .replacingOccurrences(of: ">", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+
+            if !trimmed.isEmpty {
+                responses.append(ELMResponseParser.parse(trimmed))
+            }
+       }
+        if !responses.isEmpty {
+            Logger.shared.info(
+                "Assembler completed \(responses.count) response(s)"
+            )
+        }
+        return responses
     }
 }
