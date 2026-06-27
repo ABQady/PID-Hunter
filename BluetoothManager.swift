@@ -31,8 +31,13 @@ final class BluetoothManager: NSObject, ObservableObject {
     private var lastSendTime = Date()
     //=====================================================
     // MARK: Send and Wait
-    private var pendingContinuation: CheckedContinuation<ELMResponse, Error>?
-    
+    private struct PendingRequest {
+        let id: UUID
+        let continuation: CheckedContinuation<ELMResponse, Error>
+        var timeoutTask: Task<Void, Never>?
+    }
+
+    private var pendingRequest: PendingRequest?
     
     enum BluetoothError: Error {
         case busy
@@ -189,131 +194,138 @@ final class BluetoothManager: NSObject, ObservableObject {
         _ command: String,
         timeout: Duration = .seconds(1)
     ) async throws -> ELMResponse {
-        
-        guard pendingContinuation == nil else {
+        guard pendingRequest == nil else {
             throw BluetoothError.busy
         }
-    
-            return try await withCheckedThrowingContinuation { continuation in
-                pendingContinuation = continuation
-                Task { [weak self] in
-                    try? await Task.sleep(for: timeout)
-                    guard let self else {
-                        return
-                    }
-                    guard let continuation = self.pendingContinuation else {
-                        return
-                    }
-                    self.pendingContinuation = nil
-                    continuation.resume(
-                        throwing: BluetoothError.timeout
-                    )
-                }
-                if !command.uppercased().hasPrefix("AT") {
-                    RequestResponseMatcher.shared.enqueue(
-                        command: command,
-                        header: ELM327.shared.currentHeader
-                    )
-                }
-                do {
-                    try send(command)
-                } catch {
-                    if !command.uppercased().hasPrefix("AT") {
-                        _ = RequestResponseMatcher.shared.dequeue()
-                    }
-                    pendingContinuation = nil
-                    continuation.resume(throwing: error)
+
+        return try await withCheckedThrowingContinuation { continuation in
+            Logger.shared.warning("📌 Registering continuation")
+            let requestID = UUID()
+            if !command.uppercased().hasPrefix("AT") {
+                RequestResponseMatcher.shared.enqueue(
+                    command: command,
+                    header: ELM327.shared.currentHeader
+                )
+            }
+            // Assign pendingRequest BEFORE sending command, with timeoutTask nil
+            pendingRequest = PendingRequest(
+                id: requestID,
+                continuation: continuation,
+                timeoutTask: nil
+            )
+            // Now create the real timeout task
+            let timeoutTask = Task { [weak self] in
+                try? await Task.sleep(for: timeout)
+                guard let self else { return }
+                guard let pending = self.pendingRequest,
+                      pending.id == requestID else {
                     return
                 }
+                self.pendingRequest = nil
+                pending.continuation.resume(throwing: BluetoothError.timeout)
             }
+            // Update the timeoutTask in the pending request
+            pendingRequest?.timeoutTask = timeoutTask
+            do {
+                try send(command)
+                Logger.shared.warning("📤 Command sent successfully")
+            } catch {
+                if !command.uppercased().hasPrefix("AT") {
+                    _ = RequestResponseMatcher.shared.dequeue()
+                }
+                timeoutTask.cancel()
+                pendingRequest = nil
+                continuation.resume(throwing: error)
+                return
+            }
+        }
     }
     @MainActor
     private func initializeELM() async {
         status = .initializingELM
-        
+
         try? send("ATZ")
         try? await Task.sleep(for: .milliseconds(1500))
         guard isConnected else {  status = .disconnected
             return }
-        
+
         do {
-            try send("ATE0")
+            _ = try await sendAndWait("ATE0", timeout: .seconds(2))
         } catch {
             return
         }
-        try? await Task.sleep(for: .milliseconds(500))
         guard isConnected else { status = .disconnected
             return }
-        
+
         do {
-            try send("ATL0")
+            _ = try await sendAndWait("ATL0", timeout: .seconds(2))
         } catch {
             return
         }
-        try? await Task.sleep(for: .milliseconds(500))
         guard isConnected else { status = .disconnected
             return }
-        
+
         do {
-            try send("ATS0")
+            _ = try await sendAndWait("ATS0", timeout: .seconds(2))
         } catch {
             return
         }
-        try? await Task.sleep(for: .milliseconds(500))
         guard isConnected else { status = .disconnected
             return }
-        
+
         do {
-            try send("ATH1")
+            _ = try await sendAndWait("ATH1", timeout: .seconds(2))
         } catch {
             return
         }
-        try? await Task.sleep(for: .milliseconds(500))
         guard isConnected else { status = .disconnected
             return }
         ECUInfo.shared.header = ELM327.shared.currentHeader
-        
+
         status = .settingProtocol
         do {
-            try send("ATSP5")
+            _ = try await sendAndWait("ATSP5", timeout: .seconds(2))
         } catch {
             return
         }
-        try? await Task.sleep(for: .milliseconds(2000))
         guard isConnected else { status = .disconnected
             return }
-        
+
         status = .checkingProtocol
         do {
-            try send("ATDP")
+            _ = try await sendAndWait("ATDP", timeout: .seconds(2))
         } catch {
             return
         }
-        try? await Task.sleep(for: .milliseconds(1500))
         guard isConnected else { status = .disconnected
             return }
-        
+
         do {
-            try send("ATI")
+            _ = try await sendAndWait("ATI", timeout: .seconds(2))
         } catch {
             return
         }
-        try? await Task.sleep(for: .milliseconds(1000))
         guard isConnected else { status = .disconnected
             return }
-        
+
         status = .testingECU
         do {
-            try send("0100")
+            let response = try await sendAndWait(
+                "0100",
+                timeout: .seconds(2)
+            )
+            Logger.shared.success("ECU Test Response: \(response.raw)")
         } catch {
+            Logger.shared.error("ECU test failed: \(error)")
             return
         }
-        try? await Task.sleep(for: .milliseconds(1000))
+
         Logger.shared.success("ELM initialization finished")
+
         guard isConnected else { status = .disconnected
             return }
         status = .connected
-        
+
         ECUInfo.shared.status = "Connected"
         ECUInfo.shared.lastConnected = Date()
     }
@@ -427,11 +439,11 @@ extension BluetoothManager:
                 Logger.shared.error("Disconnected")
             }
             
-            pendingContinuation?.resume(
-                throwing: BluetoothError.disconnected
-            )
-
-            pendingContinuation = nil
+            if let pending = pendingRequest {
+                pending.timeoutTask?.cancel()
+                pending.continuation.resume(throwing: BluetoothError.disconnected)
+                pendingRequest = nil
+            }
         }
     }
 }
@@ -608,6 +620,8 @@ extension BluetoothManager:
                 return
             }
             for response in responses {
+                Logger.shared.warning("🔵 ENTER didUpdateValueFor loop")
+                Logger.shared.warning("🔵 Parsed type = \(response.type)")
                 let raw = response.raw
                 
                 let upper = raw.uppercased()
@@ -639,29 +653,34 @@ extension BluetoothManager:
                 print("<< HEX :", hex)
                 Logger.shared.success("RX HEX = \(hex)")
                                 
-                guard response.type != .unknown else {
-                    continue
-                }
+                // removed guard response.type != .unknown block
 
                 analyzeResponse(response)
-                switch response.type {
-                case .mode01,
-                     .mode21,
-                     .mode22,
-                     .negative,
-                     .noData:
-                    break
-                default:
+                
+                guard response.type.canResumeContinuation else {
+                    if response.type == .unknown {
+                        Logger.shared.error("⚠️ UNKNOWN RESPONSE: \(response.raw)")
+                    } else {
+                        Logger.shared.warning("Ignoring response type: \(response.type)")
+                    }
                     continue
                 }
-                guard let continuation = pendingContinuation else {
+                
+                Logger.shared.warning("🔵 Response Type = \(response.type)")
+                Logger.shared.warning(
+                    "🔵 Continuation = \(pendingRequest == nil ? "nil" : "exists")"
+                )
+
+                guard let pending = pendingRequest else {
                     continue
                 }
-                if !response.raw.uppercased().hasPrefix("AT") {
+                if response.type != .atResponse {
                     _ = RequestResponseMatcher.shared.dequeue()
                 }
-                pendingContinuation = nil
-                continuation.resume(returning: response)
+                pending.timeoutTask?.cancel()
+                pendingRequest = nil
+                pending.continuation.resume(returning: response)
+                Logger.shared.success("🟢 Continuation RESUMED")
             }
         }
     }
@@ -705,4 +724,21 @@ extension BluetoothManager:
     }
 }
 
+extension ELMResponseType {
+
+    var canResumeContinuation: Bool {
+        switch self {
+        case .mode01,
+             .mode21,
+             .mode22,
+             .negative,
+             .noData,
+             .atResponse:
+            return true
+
+        default:
+            return false
+        }
+    }
+}
 

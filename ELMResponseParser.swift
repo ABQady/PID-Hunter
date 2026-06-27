@@ -26,6 +26,7 @@ enum ELMResponseType {
     case busError
     case unableToConnect
     case searching
+    case atResponse
     case unknown
 }
 
@@ -38,9 +39,15 @@ enum ELMResponseParser {
         var service: UInt8?
         var pid: UInt16?
 
-        var tokens = upper
+        let normalized = upper
             .replacingOccurrences(of: "\r", with: " ")
             .replacingOccurrences(of: "\n", with: " ")
+
+        let spaced = normalized.contains(" ")
+            ? normalized
+            : normalized.chunked(into: 2).joined(separator: " ")
+
+        var tokens = spaced
             .split(separator: " ")
             .map(String.init)
 
@@ -98,7 +105,16 @@ enum ELMResponseParser {
         }
         
         if type == .unknown {
-            if upper.contains("NO DATA") {
+            if upper == "OK"
+                || upper.hasPrefix("ELM")
+                || upper.contains("ISO")
+                || upper.contains("KWP")
+                || upper.contains("CAN")
+                || upper.contains("J1850") {
+
+                type = .atResponse
+
+            } else if upper.contains("NO DATA") {
                 type = .noData
             } else if upper.contains("STOPPED") {
                 type = .stopped
@@ -119,5 +135,18 @@ enum ELMResponseParser {
             pid: pid,
             payload: payload
         )
+    }
+}
+extension String {
+
+    func chunked(into size: Int) -> [String] {
+
+        stride(from: 0, to: count, by: size).map {
+
+            let start = index(startIndex, offsetBy: $0)
+            let end = index(start, offsetBy: size, limitedBy: endIndex) ?? endIndex
+
+            return String(self[start..<end])
+        }
     }
 }

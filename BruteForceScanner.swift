@@ -201,8 +201,6 @@ final class BruteForceScanner: ObservableObject {
 
                 ELM327.shared.setHeader(header)
 
-                try? await Task.sleep(for: .milliseconds(Int(delayMs)))
-
                 while currentPID <= 0x00FF {
                     if shouldStop {
                         finishScan(completed: false)
@@ -230,8 +228,14 @@ final class BruteForceScanner: ObservableObject {
                             request: req,
                             response: response.raw
                         )
+                        if delayMs > 0 {
+                            try? await Task.sleep(for: .milliseconds(Int(delayMs)))
+                        }
                     } catch BluetoothManager.BluetoothError.timeout {
                         Logger.shared.warning("⏰ Request timeout")
+                        if delayMs > 0 {
+                            try? await Task.sleep(for: .milliseconds(Int(delayMs)))
+                        }
                     } catch {
                         if !BluetoothManager.shared.isConnected {
                             Logger.shared.error("Connection lost")
@@ -294,8 +298,6 @@ final class BruteForceScanner: ObservableObject {
 
                 ELM327.shared.setHeader(header)
 
-                try? await Task.sleep(for: .milliseconds(Int(delayMs)))
-
                 while currentPID <= 0x00FF {
 
                     if shouldStop {
@@ -324,8 +326,14 @@ final class BruteForceScanner: ObservableObject {
                             request: req,
                             response: response.raw
                         )
+                        if delayMs > 0 {
+                            try? await Task.sleep(for: .milliseconds(Int(delayMs)))
+                        }
                     } catch BluetoothManager.BluetoothError.timeout {
                         Logger.shared.warning("⏰ Request timeout")
+                        if delayMs > 0 {
+                            try? await Task.sleep(for: .milliseconds(Int(delayMs)))
+                        }
                     } catch {
                         if !BluetoothManager.shared.isConnected {
                             Logger.shared.error("Connection lost")
@@ -392,7 +400,6 @@ final class BruteForceScanner: ObservableObject {
             while currentHeaderIndex < headers.count {
                 let header = headers[currentHeaderIndex]
                 ELM327.shared.setHeader(header)
-                try? await Task.sleep(for: .milliseconds(Int(delayMs)))
                 while currentPID <= Int(end) {
                     if shouldStop {
                         finishScan(completed: false)
@@ -419,8 +426,14 @@ final class BruteForceScanner: ObservableObject {
                             request: req,
                             response: response.raw
                         )
+                        if delayMs > 0 {
+                            try? await Task.sleep(for: .milliseconds(Int(delayMs)))
+                        }
                     } catch BluetoothManager.BluetoothError.timeout {
                         Logger.shared.warning("⏰ Request timeout")
+                        if delayMs > 0 {
+                            try? await Task.sleep(for: .milliseconds(Int(delayMs)))
+                        }
                     } catch {
                         if !BluetoothManager.shared.isConnected {
                             Logger.shared.error("Connection lost")
