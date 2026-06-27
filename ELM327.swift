@@ -7,11 +7,26 @@ import Foundation
 final class ELM327: ObservableObject {
     static let shared = ELM327()
     private(set) var currentHeader = ""
+    private var pendingContinuation: CheckedContinuation<String, Error>?
+
+    enum ELMError: Error {
+        case timeout
+        case busy
+    }
+    
     private init() {}
 
+    
     // MARK: - Send
     func send(_ command: String) {
-        BluetoothManager.shared.send(command)
+        do { try BluetoothManager.shared.send(command)} catch {
+            return
+        }
+    }
+    
+    func completePending(with response: String) {
+        pendingContinuation?.resume(returning: response)
+        pendingContinuation = nil
     }
 
     // MARK: - Header

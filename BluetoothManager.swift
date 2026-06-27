@@ -30,6 +30,15 @@ final class BluetoothManager: NSObject, ObservableObject {
     private var retriedProtocol = false
     private var lastSendTime = Date()
     //=====================================================
+    // MARK: Send and Wait
+    private var pendingContinuation: CheckedContinuation<ELMResponse, Error>?
+    
+    
+    enum BluetoothError: Error {
+        case busy
+        case timeout
+        case disconnected
+    }
     
     override init() {
         super.init()
@@ -123,31 +132,26 @@ final class BluetoothManager: NSObject, ObservableObject {
         ELMResponseAssembler.shared.clear()
         ECUInfo.shared.clear()
     }
-    // MARK: TX
+    // MARK: TX - SEND
     func send(
         _ command: String
-    ) {
+    ) throws {
         guard isConnected else {
-            print("Not connected")
             Logger.shared.error("Not connected")
-            return
+            throw BluetoothError.disconnected
         }
         guard
             let peripheral = elmPeripheral,
             let tx = writeCharacteristic
         else {
-            print("TX characteristic unavailable")
             Logger.shared.error("TX characteristic unavailable")
-            return
+            throw BluetoothError.disconnected
         }
         let payload = command + "\r"
         guard
-            let data =
-                payload.data(
-                    using: .utf8
-                )
+            let data = payload.data(using: .utf8)
         else {
-            return
+            throw BluetoothError.disconnected
         }
         print("TX UUID =", tx.uuid.uuidString)
         print("TX Props =", tx.properties)
@@ -167,13 +171,6 @@ final class BluetoothManager: NSObject, ObservableObject {
         
         Logger.shared.info("TX HEX = \(hex)")
         
-        if !command.uppercased().hasPrefix("AT") {
-            RequestResponseMatcher.shared.enqueue(
-                command: command,
-                header: ELM327.shared.currentHeader
-            )
-        }
-        
         status = .waitingResponse
         peripheral.writeValue(
             data,
@@ -182,64 +179,135 @@ final class BluetoothManager: NSObject, ObservableObject {
         )
         txCount += 1
         if !command.uppercased().hasPrefix("AT") {
-            
-            RequestResponseMatcher.shared.enqueue(
-                command: command,
-                header: ELM327.shared.currentHeader
-            )
-            
             ScanStatistics.shared.requestsSent += 1
         }
+    }
+    
+    // MARK: Send & Wait
+    
+    func sendAndWait(
+        _ command: String,
+        timeout: Duration = .seconds(1)
+    ) async throws -> ELMResponse {
+        
+        guard pendingContinuation == nil else {
+            throw BluetoothError.busy
+        }
+    
+            return try await withCheckedThrowingContinuation { continuation in
+                pendingContinuation = continuation
+                Task { [weak self] in
+                    try? await Task.sleep(for: timeout)
+                    guard let self else {
+                        return
+                    }
+                    guard let continuation = self.pendingContinuation else {
+                        return
+                    }
+                    self.pendingContinuation = nil
+                    continuation.resume(
+                        throwing: BluetoothError.timeout
+                    )
+                }
+                if !command.uppercased().hasPrefix("AT") {
+                    RequestResponseMatcher.shared.enqueue(
+                        command: command,
+                        header: ELM327.shared.currentHeader
+                    )
+                }
+                do {
+                    try send(command)
+                } catch {
+                    if !command.uppercased().hasPrefix("AT") {
+                        _ = RequestResponseMatcher.shared.dequeue()
+                    }
+                    pendingContinuation = nil
+                    continuation.resume(throwing: error)
+                    return
+                }
+            }
     }
     @MainActor
     private func initializeELM() async {
         status = .initializingELM
         
-        send("ATZ")
+        try? send("ATZ")
         try? await Task.sleep(for: .milliseconds(1500))
         guard isConnected else {  status = .disconnected
             return }
         
-        send("ATE0")
+        do {
+            try send("ATE0")
+        } catch {
+            return
+        }
         try? await Task.sleep(for: .milliseconds(500))
         guard isConnected else { status = .disconnected
             return }
         
-        send("ATL0")
+        do {
+            try send("ATL0")
+        } catch {
+            return
+        }
         try? await Task.sleep(for: .milliseconds(500))
         guard isConnected else { status = .disconnected
             return }
         
-        send("ATS0")
+        do {
+            try send("ATS0")
+        } catch {
+            return
+        }
         try? await Task.sleep(for: .milliseconds(500))
         guard isConnected else { status = .disconnected
             return }
         
-        send("ATH1")
+        do {
+            try send("ATH1")
+        } catch {
+            return
+        }
         try? await Task.sleep(for: .milliseconds(500))
         guard isConnected else { status = .disconnected
             return }
         ECUInfo.shared.header = ELM327.shared.currentHeader
         
         status = .settingProtocol
-        send("ATSP5")
+        do {
+            try send("ATSP5")
+        } catch {
+            return
+        }
         try? await Task.sleep(for: .milliseconds(2000))
         guard isConnected else { status = .disconnected
             return }
         
         status = .checkingProtocol
-        send("ATDP")
+        do {
+            try send("ATDP")
+        } catch {
+            return
+        }
         try? await Task.sleep(for: .milliseconds(1500))
         guard isConnected else { status = .disconnected
             return }
         
-        send("ATI")
+        do {
+            try send("ATI")
+        } catch {
+            return
+        }
         try? await Task.sleep(for: .milliseconds(1000))
         guard isConnected else { status = .disconnected
             return }
         
         status = .testingECU
-        send("0100")
+        do {
+            try send("0100")
+        } catch {
+            return
+        }
         try? await Task.sleep(for: .milliseconds(1000))
         Logger.shared.success("ELM initialization finished")
         guard isConnected else { status = .disconnected
@@ -313,7 +381,6 @@ extension BluetoothManager:
                     }
                 }
             }
-            
         }
     }
     nonisolated func centralManager(
@@ -359,6 +426,12 @@ extension BluetoothManager:
             } else {
                 Logger.shared.error("Disconnected")
             }
+            
+            pendingContinuation?.resume(
+                throwing: BluetoothError.disconnected
+            )
+
+            pendingContinuation = nil
         }
     }
 }
@@ -484,7 +557,7 @@ extension BluetoothManager:
 
                     retriedProtocol = true
 
-                    ELM327.shared.send("ATZ")
+                    try? self.send("ATZ")
 
                     try? await Task.sleep(for: .milliseconds(1500))
 
@@ -492,7 +565,7 @@ extension BluetoothManager:
                         return
                     }
 
-                    ELM327.shared.send("ATSP5")
+                    try? self.send("ATSP5")
                 }
             }
 
@@ -510,6 +583,9 @@ extension BluetoothManager:
         
     }
     
+    
+    // MARK: didUpdateValueFor
+    
     nonisolated func peripheral(
         _ peripheral: CBPeripheral,
         didUpdateValueFor characteristic: CBCharacteristic,
@@ -522,8 +598,7 @@ extension BluetoothManager:
             
             let ms = Date().timeIntervalSince(lastSendTime) * 1000
             Logger.shared.info("Response Time: \(Int(ms)) ms")
-            
-            //let text = String(data: value, encoding: .utf8) ?? "<non-utf8>"
+
             let chunk = String(data: value, encoding: .utf8) ?? "<non-utf8>"
             
             let responses = ELMResponseAssembler.shared.append(chunk)
@@ -564,23 +639,37 @@ extension BluetoothManager:
                 print("<< HEX :", hex)
                 Logger.shared.success("RX HEX = \(hex)")
                                 
-                guard let pending = RequestResponseMatcher.shared.first else {
-                    continue
-                }
-                
                 guard response.type != .unknown else {
                     continue
                 }
-                _ = RequestResponseMatcher.shared.dequeue()
-                
-                BruteForceScanner.shared.appendResponse(
-                    header: pending.header,
-                    mode: pending.mode,
-                    pid: pending.pid,
-                    request: pending.command,
-                    response: raw
-                )
+
                 analyzeResponse(response)
+                switch response.type {
+                case .mode01,
+                     .mode21,
+                     .mode22,
+                     .negative,
+                     .noData:
+                    break
+                default:
+                    continue
+                }
+                guard let continuation = pendingContinuation else {
+                    guard let pending = RequestResponseMatcher.shared.first else {
+                        continue
+                    }
+                    _ = RequestResponseMatcher.shared.dequeue()
+                    BruteForceScanner.shared.appendResponse(
+                        header: pending.header,
+                        mode: pending.mode,
+                        pid: pending.pid,
+                        request: pending.command,
+                        response: raw
+                    )
+                    continue
+                }
+                pendingContinuation = nil
+                continuation.resume(returning: response)
             }
         }
     }
