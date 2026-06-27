@@ -32,7 +32,8 @@ let package = Package(
             ],
             capabilities: [
                 .bluetoothAlways(purposeString: "For communicating with ELM Module")
-            ]
+            ],
+            appCategory: .utilities
         )
     ],
     targets: [

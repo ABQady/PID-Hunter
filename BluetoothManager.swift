@@ -54,6 +54,7 @@ final class BluetoothManager: NSObject, ObservableObject {
     
     // MARK: Scan
         func startScan() {
+            ELMResponseAssembler.shared.clear()
             RequestResponseMatcher.shared.clear()
             txCount = 0
             rxCount = 0
@@ -119,6 +120,7 @@ final class BluetoothManager: NSObject, ObservableObject {
             peripheral
         )
         status = .disconnected
+        ELMResponseAssembler.shared.clear()
     }
     // MARK: TX
     func send(
@@ -318,6 +320,7 @@ extension BluetoothManager:
     )
     {
         Task { @MainActor in
+            ELMResponseAssembler.shared.clear()
             status = .disconnected
             self.isConnected = false
             self.writeCharacteristic = nil
@@ -486,56 +489,70 @@ extension BluetoothManager:
             let ms = Date().timeIntervalSince(lastSendTime) * 1000
             Logger.shared.info("Response Time: \(Int(ms)) ms")
             
-            let text = String(data: value, encoding: .utf8) ?? "<non-utf8>"
-            let hex = value.map {
-                String(format: "%02X", $0)
-            }.joined(separator: " ")
+            //let text = String(data: value, encoding: .utf8) ?? "<non-utf8>"
+            let chunk = String(data: value, encoding: .utf8) ?? "<non-utf8>"
             
-            if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                self.lastResponse = text
-            }
-            rxCount += 1
-            print("<< TEXT:", text)
-            print("<< HEX :", hex)
-            //Logger.shared.rx(text)
-            
-            guard let pending = RequestResponseMatcher.shared.first else {
+            let responses = ELMResponseAssembler.shared.append(chunk)
+            guard !responses.isEmpty else {
+                
+                Logger.shared.info("RX Chunk (\(value.count) bytes)")
                 return
             }
-            let upper = text
-                .uppercased()
-                .replacingOccurrences(of: "\r", with: " ")
-                .replacingOccurrences(of: "\n", with: " ")
-                .trimmingCharacters( in: .whitespacesAndNewlines)
-            
-            guard upper.contains("41 ")
-                    || upper.contains("61 ")
-                    || upper.contains("62 ")
-                    || upper.contains("7F ")
-                    || upper.contains("NO DATA")
-                    || upper.contains("STOPPED")
-                    || upper.contains("ERROR")
-                    || upper.contains("BUS ERROR")
-                    || upper.contains("CAN ERROR")
-                    || upper.contains("INIT: ERROR")
-                    || upper.contains("BUFFER FULL")
-                    
-            else {
-                return
-            }
+            for text in responses{
+                Logger.shared.info("RX Complete (\(responses.count) response(s))")
+                Logger.shared.rx(text)
+                
+                let hex = text
+                    .utf8
+                    .map {
+                        String(format: "%02X", $0)
+                    }
+                    .joined(separator: " ")
+                
+                if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    self.lastResponse = text
+                }
+                rxCount += 1
+                print("<< TEXT:", text)
+                print("<< HEX :", hex)
+                Logger.shared.info("RX HEX = \(hex)")
+                //Logger.shared.rx(text)
+                
+                guard let pending = RequestResponseMatcher.shared.first else {
+                    continue
+                }
+                let upper = text
+                    .uppercased()
+                    .replacingOccurrences(of: "\r", with: " ")
+                    .replacingOccurrences(of: "\n", with: " ")
+                    .trimmingCharacters( in: .whitespacesAndNewlines)
+                
+                guard upper.contains("41 ")
+                        || upper.contains("61 ")
+                        || upper.contains("62 ")
+                        || upper.contains("7F ")
+                        || upper.contains("NO DATA")
+                        || upper.contains("STOPPED")
+                        || upper.contains("ERROR")
+                        || upper.contains("BUS ERROR")
+                        || upper.contains("CAN ERROR")
+                        || upper.contains("INIT: ERROR")
+                        || upper.contains("BUFFER FULL")
                         
-            _ = RequestResponseMatcher.shared.dequeue()
-            
-            BruteForceScanner.shared.appendResponse(
-                header: pending.header,
-                mode: String(pending.command.prefix(2)),
-                pid: String(pending.command.dropFirst(2)),
-                request: pending.command,
-                response: text
-            )
-            
-            analyzeResponse(text)
-
+                else {
+                    continue
+                }
+                _ = RequestResponseMatcher.shared.dequeue()
+                
+                BruteForceScanner.shared.appendResponse(
+                    header: pending.header,
+                    mode: String(pending.command.prefix(2)),
+                    pid: String(pending.command.dropFirst(2)),
+                    request: pending.command,
+                    response: text
+                )
+                analyzeResponse(text)
+            }
         }
     }
     
