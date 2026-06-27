@@ -103,7 +103,10 @@ final class BruteForceScanner: ObservableObject {
         scanStatus.successCount = 0
 
         UserDefaults.standard.removeObject(forKey: "savedResults")
-
+        Logger.shared.clear()
+        RequestResponseMatcher.shared.clear()
+        ScanStatistics.shared.reset()
+        
         saveResumePoint()
     }
     

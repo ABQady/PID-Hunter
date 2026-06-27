@@ -57,6 +57,97 @@ struct PIDHunterTabView: View {
         manualCommand = ""
     }
     
+    private func startPIDScan()
+    {
+            guard bt.isConnected else {
+                
+                Logger.shared.info("Connect to ELM first")
+                
+                return
+                
+            }
+            Logger.shared.clear()
+            RequestResponseMatcher.shared.clear()
+            
+            let cleanHeader = header
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .uppercased()
+            
+            guard cleanHeader.count == 6,
+                  cleanHeader.allSatisfy({ $0.isHexDigit }) else {
+                Logger.shared.info("Invalid Header")
+                return
+            }
+            brute.headers = [cleanHeader]
+            shouldAutoScroll = true
+            selectedTab = 1
+            
+            switch selectedMode {
+            case 1:
+                Task {
+                    
+                    let ok = await Preflight.shared.run(
+                        header: cleanHeader
+                    )
+                    
+                    guard ok else {
+                        Logger.shared.info("❌ Preflight Failed")
+                        return
+                    }
+                    brute.scanMode01()
+                }
+            case 21:
+                Task {
+                    
+                    let ok = await Preflight.shared.run(
+                        header: cleanHeader
+                    )
+                    
+                    guard ok else {
+                        Logger.shared.info("❌ Preflight Failed")
+                        return
+                    }
+                    brute.scanMode21()
+                }
+            default:
+                let startText = startPID
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .uppercased()
+                
+                let endText = endPID
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .uppercased()
+                
+                if let start = UInt16(startText, radix: 16),
+                   let end = UInt16(endText, radix: 16) {
+                    
+                    if start <= end {
+                        Task {
+                            
+                            let ok = await Preflight.shared.run(
+                                header: cleanHeader
+                            )
+                            
+                            guard ok else {
+                                Logger.shared.info("❌ Preflight Failed")
+                                return
+                            }
+                            brute.scanMode22(
+                                start: start,
+                                end: end
+                            )
+                        }
+                    } else {
+                        Logger.shared.info("Start PID must be <= End PID")
+                    }
+                    
+                } else {
+                    Logger.shared.info("Invalid PID range")
+                    
+                }
+            }
+    }
+    
     private var settingsTab: some View {
         ScrollView {
             
@@ -239,6 +330,7 @@ struct PIDHunterTabView: View {
                 Button(role: .destructive) {
                     brute.startFresh()
                     Logger.shared.info("🗑️ Starting fresh scan")
+                    startPIDScan()
                 } label: {
                     Label("New Scan", systemImage: "trash")
                 }
@@ -247,95 +339,9 @@ struct PIDHunterTabView: View {
                 Spacer()
                 
                 Button {
-                    guard bt.isConnected else {
-                        
-                        Logger.shared.info("Connect to ELM first")
-                        
-                        return
-                        
-                    }
-                    Logger.shared.clear()
-                    RequestResponseMatcher.shared.clear()
-                    
-                    let cleanHeader = header
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-                        .uppercased()
-                    
-                    guard cleanHeader.count == 6,
-                          cleanHeader.allSatisfy({ $0.isHexDigit }) else {
-                        Logger.shared.info("Invalid Header")
-                        return
-                    }
-                    brute.headers = [cleanHeader]
-                    shouldAutoScroll = true
-                    selectedTab = 1
-                    
-                    switch selectedMode {
-                    case 1:
-                        Task {
-                            
-                            let ok = await Preflight.shared.run(
-                                header: cleanHeader
-                            )
-                            
-                            guard ok else {
-                                Logger.shared.info("❌ Preflight Failed")
-                                return
-                            }
-                            brute.scanMode01()
-                        }
-                    case 21:
-                        Task {
-                            
-                            let ok = await Preflight.shared.run(
-                                header: cleanHeader
-                            )
-                            
-                            
-                            guard ok else {
-                                Logger.shared.info("❌ Preflight Failed")
-                                return
-                            }
-                            brute.scanMode21()
-                        }
-                    default:
-                        let startText = startPID
-                            .trimmingCharacters(in: .whitespacesAndNewlines)
-                            .uppercased()
-                        
-                        let endText = endPID
-                            .trimmingCharacters(in: .whitespacesAndNewlines)
-                            .uppercased()
-                        
-                        if let start = UInt16(startText, radix: 16),
-                           let end = UInt16(endText, radix: 16) {
-                            
-                            if start <= end {
-                                Task {
-                                    
-                                    let ok = await Preflight.shared.run(
-                                        header: cleanHeader
-                                    )
-                                    
-                                    guard ok else {
-                                        Logger.shared.info("❌ Preflight Failed")
-                                        return
-                                    }
-                                    brute.scanMode22(
-                                        start: start,
-                                        end: end
-                                    )
-                                }
-                            } else {
-                                Logger.shared.info("Start PID must be <= End PID")
-                            }
-                            
-                        } else {
-                            Logger.shared.info("Invalid PID range")
-                            
-                        }
-                    }
-                } label: {
+                    startPIDScan()
+                }
+                label: {
                     Label(
                         "Resume Scan",
                         systemImage:
