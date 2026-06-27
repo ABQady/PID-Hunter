@@ -41,7 +41,7 @@ final class RequestResponseMatcher: ObservableObject {
                 break
             }
 
-            Logger.shared.info("Queue Timeout: \(request.command)")
+            Logger.shared.warning("Queue Timeout: \(request.command)")
             head += 1
         }
 

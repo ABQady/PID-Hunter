@@ -2,10 +2,19 @@
 // Logger.swift
 //
 import Foundation
+import SwiftUI
+
+struct LogLine: Identifiable {
+    let id = UUID()
+    let text: String
+    let color: Color
+}
+
 @MainActor
 final class Logger: ObservableObject {
     static let shared = Logger()
-    @Published var lines: [String] = []
+
+    @Published var lines: [LogLine] = []
     private let maxLines = 5000
     private let formatter: DateFormatter = {
         let f = DateFormatter()
@@ -19,10 +28,14 @@ final class Logger: ObservableObject {
         )
     }
     private func append(
-        _ text: String
+        _ text: String,
+        color: Color
     ) {
         print(text)
-        lines.append(text)
+        lines.append(LogLine(
+            text: text,
+            color: color
+        ))
         if lines.count > maxLines {
             lines.removeFirst(
                 lines.count - maxLines
@@ -33,22 +46,30 @@ final class Logger: ObservableObject {
         _ command: String
     ) {
         append(
-            "\(stamp()) >> \(command)"
-        )
+            "\(stamp()) >> \(command)", color: .blue)
     }
     func rx(
         _ response: String
     ) {
         append(
-            "\(stamp()) << \(response)"
-        )
+            "\(stamp()) << \(response)",color: .green)
     }
     func info(
         _ text: String
     ) {
         append(
-            "\(stamp()) [INFO] \(text)"
-        )
+            "\(stamp()) [INFO] \(text)",color: .primary)
+    }
+    func success(_ text: String) {
+        append("\(stamp()) ✅ \(text)", color: .mint)
+    }
+
+    func warning(_ text: String) {
+        append("\(stamp()) ⚠️ \(text)", color: .orange)
+    }
+
+    func error(_ text: String) {
+        append("\(stamp()) ❌ \(text)", color: .red)
     }
     func clear() {
         lines.removeAll()
@@ -60,10 +81,9 @@ final class Logger: ObservableObject {
             .appendingPathComponent(
                 "rawTraffic.log"
             )
-        let text =
-        lines.joined(
-            separator: "\r\n"
-        )
+        let text = lines
+            .map(\.text)
+            .joined(separator: "\r\n")
         try text.write(
             to: url,
             atomically: true,

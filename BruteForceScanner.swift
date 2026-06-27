@@ -133,7 +133,7 @@ final class BruteForceScanner: ObservableObject {
             return true
         }
 
-        Logger.shared.info("🔄 Reconnecting...")
+        Logger.shared.warning("🔄 Reconnecting...")
 
         await BluetoothManager.shared.reconnect()
         try? await Task.sleep(for: .milliseconds(500))
@@ -141,7 +141,7 @@ final class BruteForceScanner: ObservableObject {
         let ok = await Preflight.shared.run(header: header)
 
         guard ok else {
-            Logger.shared.info("❌ Reconnect failed")
+            Logger.shared.error("❌ Reconnect failed")
             return false
         }
 
@@ -213,12 +213,12 @@ final class BruteForceScanner: ObservableObject {
                     while !RequestResponseMatcher.shared.pending.isEmpty {
 
                         if Date().timeIntervalSince(startWait) > requestTimeout {
-                            Logger.shared.info("⏰ Request timeout")
+                            Logger.shared.warning("⏰ Request timeout")
                             RequestResponseMatcher.shared.clear()
 
                             if !BluetoothManager.shared.isConnected {
 
-                                Logger.shared.info("Connection lost")
+                                Logger.shared.error("Connection lost")
 
                                 guard await ensureConnection(header: header) else {
                                     continue
@@ -303,12 +303,12 @@ final class BruteForceScanner: ObservableObject {
                     while !RequestResponseMatcher.shared.pending.isEmpty {
 
                         if Date().timeIntervalSince(startWait) > requestTimeout {
-                            Logger.shared.info("⏰ Request timeout")
+                            Logger.shared.warning("⏰ Request timeout")
                             RequestResponseMatcher.shared.clear()
 
                             if !BluetoothManager.shared.isConnected {
 
-                                Logger.shared.info("Connection lost")
+                                Logger.shared.error("Connection lost")
 
                                 guard await ensureConnection(header: header) else {
                                     continue
@@ -396,7 +396,7 @@ final class BruteForceScanner: ObservableObject {
 
                         if Date().timeIntervalSince(startWait) > requestTimeout {
 
-                            Logger.shared.info("⏰ Request timeout")
+                            Logger.shared.warning("⏰ Request timeout")
                             RequestResponseMatcher.shared.clear()
 
                             if !BluetoothManager.shared.isConnected {

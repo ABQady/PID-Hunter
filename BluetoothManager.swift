@@ -89,7 +89,7 @@ final class BluetoothManager: NSObject, ObservableObject {
                 if self.isScanning {
                     self.status = .timeout
                     self.stopScan()
-                    Logger.shared.info("Scan timed out")
+                    Logger.shared.warning("Scan timed out")
                 }
             }
         print("Scanning...")
@@ -128,7 +128,7 @@ final class BluetoothManager: NSObject, ObservableObject {
     ) {
         guard isConnected else {
             print("Not connected")
-            Logger.shared.info("Not connected")
+            Logger.shared.error("Not connected")
             return
         }
         guard
@@ -136,7 +136,7 @@ final class BluetoothManager: NSObject, ObservableObject {
             let tx = writeCharacteristic
         else {
             print("TX characteristic unavailable")
-            Logger.shared.info("TX characteristic unavailable")
+            Logger.shared.error("TX characteristic unavailable")
             return
         }
         let payload = command + "\r"
@@ -230,7 +230,7 @@ final class BluetoothManager: NSObject, ObservableObject {
         status = .testingECU
         send("0100")
         try? await Task.sleep(for: .milliseconds(1000))
-        Logger.shared.info("ELM initialization finished")
+        Logger.shared.success("ELM initialization finished")
         guard isConnected else { status = .disconnected
             return }
         status = .connected
@@ -248,22 +248,22 @@ extension BluetoothManager:
             switch central.state {
             case .poweredOn:
                 print("Bluetooth Ready")
-                Logger.shared.info("Bluetooth Ready")
+                Logger.shared.success("Bluetooth Ready")
             case .poweredOff:
                 print("Bluetooth Off")
-                Logger.shared.info("Bluetooth Off")
+                Logger.shared.error("Bluetooth Off")
             case .resetting:
                 print("Bluetooth Resetting")
-                Logger.shared.info("Bluetooth Restarting")
+                Logger.shared.warning("Bluetooth Restarting")
             case .unsupported:
                 print("Bluetooth Unsupported")
-                Logger.shared.info("Bluetooth Unsupported")
+                Logger.shared.error("Bluetooth Unsupported")
             case .unauthorized:
                 print("Bluetooth Unauthorized")
-                Logger.shared.info("Bluetooth Unauthorized")
+                Logger.shared.error("Bluetooth Unauthorized")
             default:
                 print("Bluetooth Unknown")
-                Logger.shared.info("Bluetooth Unknown")
+                Logger.shared.warning("Bluetooth Unknown")
             }
         }
     }
@@ -287,7 +287,7 @@ extension BluetoothManager:
                     print("Found:", name)
                 }
                 if let name = peripheral.name?.lowercased() {
-                    Logger.shared.info("Found: \(name)")
+                    Logger.shared.success("Found: \(name)")
                     
                     if elmPeripheral == nil &&
                         (name.contains("elm") || name.contains("obd")) {
@@ -308,7 +308,7 @@ extension BluetoothManager:
     ) {
         Task { @MainActor in
             print("Connected to \(peripheral.name ?? "Unknown")")
-            Logger.shared.info("Connected to \(peripheral.name ?? "Unknown")")
+            Logger.shared.success("Connected to \(peripheral.name ?? "Unknown")")
             stopScan()
             peripheral.discoverServices(nil)
         }
@@ -340,9 +340,9 @@ extension BluetoothManager:
             
             print("Disconnected")
             if let error {
-                Logger.shared.info("Disconnected: \(error.localizedDescription)")
+                Logger.shared.error("Disconnected: \(error.localizedDescription)")
             } else {
-                Logger.shared.info("Disconnected")
+                Logger.shared.error("Disconnected")
             }
         }
     }
@@ -366,8 +366,8 @@ extension BluetoothManager:
             for service in services {
                 print("===== SERVICE =====")
                 print(service.uuid.uuidString)
-                Logger.shared.info("===== SERVICE =====")
-                Logger.shared.info(service.uuid.uuidString)
+                Logger.shared.success("===== SERVICE =====")
+                Logger.shared.success(service.uuid.uuidString)
                 peripheral.discoverCharacteristics(nil, for: service)
             }
         }
@@ -426,24 +426,24 @@ extension BluetoothManager:
         case .mode01:
             retriedProtocol = false
             status = .mode01OK
-            Logger.shared.info("🎉 Mode 01 Supported")
+            Logger.shared.success("🎉 Mode 01 Supported")
 
         case .mode21:
             retriedProtocol = false
             status = .mode21OK
-            Logger.shared.info("🎉 Mode 21 Supported")
+            Logger.shared.success("🎉 Mode 21 Supported")
 
         case .mode22:
             retriedProtocol = false
             status = .mode22OK
-            Logger.shared.info("🎉 Mode 22 Supported")
+            Logger.shared.success("🎉 Mode 22 Supported")
 
         case .noData:
-            Logger.shared.info("❌ NO DATA")
+            Logger.shared.error("❌ NO DATA")
 
         case .busError:
 
-            Logger.shared.info("🔥 BUS ERROR")
+            Logger.shared.error("🔥 BUS ERROR")
 
             Task {
 
@@ -451,7 +451,7 @@ extension BluetoothManager:
                     return
                 }
 
-                Logger.shared.info("Retrying...")
+                Logger.shared.warning("Retrying...")
 
                 if !retriedProtocol {
 
@@ -471,7 +471,7 @@ extension BluetoothManager:
 
         case .unableToConnect:
             status = .unableToConnect
-            Logger.shared.info("💀 UNABLE TO CONNECT")
+            Logger.shared.error("💀 UNABLE TO CONNECT")
 
         case .searching:
             status = .searching
@@ -508,7 +508,7 @@ extension BluetoothManager:
             for response in responses {
                 let raw = response.raw
 
-                Logger.shared.info("RX Complete (\(responses.count) response(s))")
+                Logger.shared.success("RX Complete (\(responses.count) response(s))")
                 Logger.shared.rx(raw)
 
                 rxCount += 1
@@ -522,7 +522,7 @@ extension BluetoothManager:
 
                 print("<< TEXT:", raw)
                 print("<< HEX :", hex)
-                Logger.shared.info("RX HEX = \(hex)")
+                Logger.shared.success("RX HEX = \(hex)")
                                 
                 guard let pending = RequestResponseMatcher.shared.first else {
                     continue
@@ -552,7 +552,7 @@ extension BluetoothManager:
     ) {
         Task { @MainActor in
             if let error {
-                Logger.shared.info("Notify Error: \(error.localizedDescription)")
+                Logger.shared.error("Notify Error: \(error.localizedDescription)")
                 return
             }
 

@@ -16,23 +16,23 @@ final class Preflight {
         Logger.shared.info("========== PREFLIGHT ==========")
 
         guard BluetoothManager.shared.isConnected else {
-            Logger.shared.info("❌ Bluetooth: Not Connected")
+            Logger.shared.error("❌ Bluetooth: Not Connected")
             return false
         }
 
         guard BluetoothManager.shared.writeCharacteristic != nil else {
-            Logger.shared.info("❌ TX Characteristic Missing")
+            Logger.shared.error("❌ TX Characteristic Missing")
             return false
         }
 
         guard BluetoothManager.shared.notifyCharacteristic != nil else {
-            Logger.shared.info("❌ RX Characteristic Missing")
+            Logger.shared.error("❌ RX Characteristic Missing")
             return false
         }
 
-        Logger.shared.info("✅ Bluetooth Connected")
-        Logger.shared.info("✅ TX Found")
-        Logger.shared.info("✅ RX Found")
+        Logger.shared.success("✅ Bluetooth Connected")
+        Logger.shared.success("✅ TX Found")
+        Logger.shared.success("✅ RX Found")
 
         ELM327.shared.send("ATDP")
         try? await Task.sleep(for: .milliseconds(500))
@@ -46,16 +46,16 @@ final class Preflight {
         let rx = BluetoothManager.shared.lastResponse.uppercased()
 
         if rx.contains("41") {
-            Logger.shared.info("✅ ECU Responded")
+            Logger.shared.success("✅ ECU Responded")
             return true
         }
 
         if rx.contains("NO DATA") {
-            Logger.shared.info("⚠️ ECU Reachable but returned NO DATA")
+            Logger.shared.warning("⚠️ ECU Reachable but returned NO DATA")
             return true
         }
 
-        Logger.shared.info("❌ ECU did not respond")
+        Logger.shared.error("❌ ECU did not respond")
         return false
     }
 }

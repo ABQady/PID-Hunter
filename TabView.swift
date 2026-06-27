@@ -414,11 +414,12 @@ struct PIDHunterTabView: View {
                     .padding()
                     ScrollView {
                         VStack(alignment: .leading, spacing: 4) {
-                            ForEach(logger.lines.indices, id: \.self) { i in
-                                Text(logger.lines[i])
+                            ForEach(Array(logger.lines.enumerated()), id: \.element.id) { index, line in
+                                Text(line.text)
                                     .font(.system(size: 11, design: .monospaced))
+                                    .foregroundStyle(line.color)
                                     .frame(maxWidth: .infinity, alignment: .leading)
-                                    .id(i)
+                                    .id(index)
                             }
                         }
                         .padding()
@@ -544,9 +545,9 @@ struct PIDHunterTabView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 }
-                .searchable(text: $search)
                 .padding(.vertical, 4)
             }
+            .searchable(text: $search)
         }
         .padding()
     }
