@@ -121,6 +121,7 @@ final class BluetoothManager: NSObject, ObservableObject {
         )
         status = .disconnected
         ELMResponseAssembler.shared.clear()
+        ECUInfo.shared.clear()
     }
     // MARK: TX
     func send(
@@ -209,6 +210,7 @@ final class BluetoothManager: NSObject, ObservableObject {
         try? await Task.sleep(for: .milliseconds(500))
         guard isConnected else { status = .disconnected
             return }
+        ECUInfo.shared.header = ELM327.shared.currentHeader
         
         status = .settingProtocol
         send("ATSP5")
@@ -234,6 +236,9 @@ final class BluetoothManager: NSObject, ObservableObject {
         guard isConnected else { status = .disconnected
             return }
         status = .connected
+        
+        ECUInfo.shared.status = "Connected"
+        ECUInfo.shared.lastConnected = Date()
     }
 }
 // ======================================================
@@ -337,6 +342,7 @@ extension BluetoothManager:
             
             self.stopScan()
             RequestResponseMatcher.shared.clear()
+            ECUInfo.shared.clear()
             
             print("Disconnected")
             if let error {
@@ -427,16 +433,19 @@ extension BluetoothManager:
             retriedProtocol = false
             status = .mode01OK
             Logger.shared.success("🎉 Mode 01 Supported")
+            ECUInfo.shared.addService(response.service)
 
         case .mode21:
             retriedProtocol = false
             status = .mode21OK
             Logger.shared.success("🎉 Mode 21 Supported")
+            ECUInfo.shared.addService(response.service)
 
         case .mode22:
             retriedProtocol = false
             status = .mode22OK
             Logger.shared.success("🎉 Mode 22 Supported")
+            ECUInfo.shared.addService(response.service)
 
         case .noData:
             Logger.shared.error("❌ NO DATA")
@@ -507,6 +516,19 @@ extension BluetoothManager:
             }
             for response in responses {
                 let raw = response.raw
+                
+                let upper = raw.uppercased()
+
+                if upper.hasPrefix("ELM") {
+                    ECUInfo.shared.elmVersion = raw
+                }
+
+                if upper.contains("ISO") ||
+                   upper.contains("KWP") ||
+                   upper.contains("CAN") ||
+                   upper.contains("J1850") {
+                    ECUInfo.shared.protocolName = raw
+                }
 
                 Logger.shared.success("RX Complete (\(responses.count) response(s))")
                 Logger.shared.rx(raw)

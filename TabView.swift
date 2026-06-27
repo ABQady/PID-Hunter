@@ -15,6 +15,7 @@ struct PIDHunterTabView: View {
     @ObservedObject private var bt = BluetoothManager.shared
     @ObservedObject private var brute = BruteForceScanner.shared
     @ObservedObject private var logger = Logger.shared
+    @ObservedObject private var ecu = ECUInfo.shared
     
     @State private var exportedFile: ExportedFile?
     @State private var programmaticScroll = false
@@ -280,7 +281,6 @@ struct PIDHunterTabView: View {
                                 Logger.shared.info("❌ Preflight Failed")
                                 return
                             }
-                            
                             brute.scanMode01()
                         }
                     case 21:
@@ -295,7 +295,6 @@ struct PIDHunterTabView: View {
                                 Logger.shared.info("❌ Preflight Failed")
                                 return
                             }
-                            
                             brute.scanMode21()
                         }
                     default:
@@ -321,7 +320,6 @@ struct PIDHunterTabView: View {
                                         Logger.shared.info("❌ Preflight Failed")
                                         return
                                     }
-                                    
                                     brute.scanMode22(
                                         start: start,
                                         end: end
@@ -491,10 +489,91 @@ struct PIDHunterTabView: View {
     
     private var resultsTab: some View {
         VStack(spacing: 16) {
+            ///Mark ECU INFO
+            VStack(alignment: .leading, spacing: 10) {
+
+                Text("ECU Information")
+                    .font(.headline)
+
+                Divider()
+                
+                LabeledContent("Connection Status") {
+                    Text(ecu.status)
+                        .foregroundStyle(
+                            ecu.status == "Connected"
+                            ? .green
+                            : .secondary
+                        )
+                }
+
+                LabeledContent("ECU Name") {
+                    Text(ecu.ecuName)
+                }
+
+                LabeledContent("ELM Version") {
+                    Text(ecu.elmVersion)
+                }
+
+                LabeledContent("Protocol Used") {
+                    Text(ecu.protocolName)
+                }
+
+                LabeledContent("Current Header") {
+                    Text(ecu.header)
+                }
+                
+                if let date = ecu.lastConnected {
+                    LabeledContent("Connected") {
+                        Text(date.formatted(
+                            date: .omitted,
+                            time: .standard
+                        ))
+                    }
+                }
+
+                Divider()
+                
+                LabeledContent("Supported Services") {
+                    if ecu.services.services.isEmpty {
+                        Text("-")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        LazyVGrid(
+                            columns: [
+                                GridItem(.adaptive(minimum: 50))
+                            ],
+                            alignment: .leading,
+                            spacing: 8
+                        ) {
+                            ForEach(ecu.services.services, id: \.self) { service in
+                                Text(service)
+                                    .font(.system(.caption, design: .monospaced).bold())
+                                    .foregroundStyle(.green)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 5)
+                                    .background(.green.opacity(0.15))
+                                    .overlay {
+                                        Capsule()
+                                            .stroke(.green.opacity(0.35))
+                                    }
+                                    .clipShape(Capsule())
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+            .padding()
+            .background(.thinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 18))
+            
+            
+            
+            Divider()
 
             HStack {
-                Text("Found Results")
-                    .font(.largeTitle.bold())
+                Text("Found PIDs")
+                    .font(.title.bold())
 
                 Spacer()
 
@@ -514,6 +593,7 @@ struct PIDHunterTabView: View {
             #endif
             }
             .buttonStyle(.borderedProminent)
+        
             
             List(filteredResults.reversed()) { result in
 
