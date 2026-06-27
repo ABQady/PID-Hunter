@@ -655,18 +655,10 @@ extension BluetoothManager:
                     continue
                 }
                 guard let continuation = pendingContinuation else {
-                    guard let pending = RequestResponseMatcher.shared.first else {
-                        continue
-                    }
-                    _ = RequestResponseMatcher.shared.dequeue()
-                    BruteForceScanner.shared.appendResponse(
-                        header: pending.header,
-                        mode: pending.mode,
-                        pid: pending.pid,
-                        request: pending.command,
-                        response: raw
-                    )
                     continue
+                }
+                if !response.raw.uppercased().hasPrefix("AT") {
+                    _ = RequestResponseMatcher.shared.dequeue()
                 }
                 pendingContinuation = nil
                 continuation.resume(returning: response)

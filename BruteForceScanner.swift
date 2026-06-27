@@ -164,6 +164,9 @@ final class BruteForceScanner: ObservableObject {
         shouldStop = true
         ScanStatistics.shared.finish()
     }
+    
+    // MARK: SCAN MODE 01
+    
     func scanMode01() {
         Task {
             ScanStatistics.shared.reset()
@@ -209,36 +212,34 @@ final class BruteForceScanner: ObservableObject {
                     let req = String(format: "01%02X", UInt8(currentPID))
                     scanStatus.currentRequest = req
                     if !BluetoothManager.shared.isConnected {
-                        RequestResponseMatcher.shared.clear()
-
                         guard await ensureConnection(header: header) else {
                             continue
                         }
 
-                        continue   // يعيد نفس الـ PID
+                        continue
                     }
-                    ELM327.shared.send(req)
-                    let startWait = Date()
-
-                    while !RequestResponseMatcher.shared.pending.isEmpty {
-
-                        if Date().timeIntervalSince(startWait) > requestTimeout {
-                            Logger.shared.warning("⏰ Request timeout")
-                            RequestResponseMatcher.shared.clear()
-
-                            if !BluetoothManager.shared.isConnected {
-
-                                Logger.shared.error("Connection lost")
-
-                                guard await ensureConnection(header: header) else {
-                                    continue
-                                }
+                    do {
+                        let response = try await BluetoothManager.shared.sendAndWait(
+                            req,
+                            timeout: .seconds(2)
+                        )
+                        appendResponse(
+                            header: header,
+                            mode: String(req.prefix(2)),
+                            pid: String(req.dropFirst(2)),
+                            request: req,
+                            response: response.raw
+                        )
+                    } catch BluetoothManager.BluetoothError.timeout {
+                        Logger.shared.warning("⏰ Request timeout")
+                    } catch {
+                        if !BluetoothManager.shared.isConnected {
+                            Logger.shared.error("Connection lost")
+                            guard await ensureConnection(header: header) else {
                                 continue
                             }
-                            break
+                            continue
                         }
-
-                        try? await Task.sleep(for: .milliseconds(10))
                     }
                     done += 1
                     currentPID += 1
@@ -259,6 +260,9 @@ final class BruteForceScanner: ObservableObject {
             finishScan(completed: true)
         }
     }
+    
+    // MARK: SCAN MODE 21
+
     func scanMode21() {
         Task {
             loadResumePoint()
@@ -303,38 +307,33 @@ final class BruteForceScanner: ObservableObject {
                     
                     scanStatus.currentRequest = req
                     if !BluetoothManager.shared.isConnected {
-                        RequestResponseMatcher.shared.clear()
-
                         guard await ensureConnection(header: header) else {
                             continue
                         }
-
-                        continue   // يعيد نفس الـ PID
+                        continue
                     }
-                    ELM327.shared.send(req)
-
-                    let startWait = Date()
-
-                    while !RequestResponseMatcher.shared.pending.isEmpty {
-
-                        if Date().timeIntervalSince(startWait) > requestTimeout {
-                            Logger.shared.warning("⏰ Request timeout")
-                            RequestResponseMatcher.shared.clear()
-
-                            if !BluetoothManager.shared.isConnected {
-
-                                Logger.shared.error("Connection lost")
-
-                                guard await ensureConnection(header: header) else {
-                                    continue
-                                }
-                                continue  // هيعيد نفس PID
+                    do {
+                        let response = try await BluetoothManager.shared.sendAndWait(
+                            req,
+                            timeout: .seconds(2)
+                        )
+                        appendResponse(
+                            header: header,
+                            mode: String(req.prefix(2)),
+                            pid: String(req.dropFirst(2)),
+                            request: req,
+                            response: response.raw
+                        )
+                    } catch BluetoothManager.BluetoothError.timeout {
+                        Logger.shared.warning("⏰ Request timeout")
+                    } catch {
+                        if !BluetoothManager.shared.isConnected {
+                            Logger.shared.error("Connection lost")
+                            guard await ensureConnection(header: header) else {
+                                continue
                             }
-
-                            break
+                            continue
                         }
-
-                        try? await Task.sleep(for: .milliseconds(10))
                     }
                     done += 1
                     currentPID += 1
@@ -352,6 +351,9 @@ final class BruteForceScanner: ObservableObject {
             finishScan(completed: true)
         }
     }
+    
+    // MARK: SCAN MODE 22
+
     func scanMode22(
         start: UInt16 = 0x0000,
         end: UInt16 = 0xFFFF
@@ -385,7 +387,7 @@ final class BruteForceScanner: ObservableObject {
                 Int(currentPID - Int(start))
             
             ScanStatistics.shared.reset()
-            ScanStatistics.shared.totalRequests = done
+            ScanStatistics.shared.totalRequests = total
             
             while currentHeaderIndex < headers.count {
                 let header = headers[currentHeaderIndex]
@@ -400,35 +402,33 @@ final class BruteForceScanner: ObservableObject {
                     let req = String(format: "22%04X", UInt16(currentPID))
                     scanStatus.currentRequest = req
                     if !BluetoothManager.shared.isConnected {
-                        RequestResponseMatcher.shared.clear()
-
                         guard await ensureConnection(header: header) else {
                             continue
                         }
-
-                        continue   // يعيد نفس الـ PID
+                        continue
                     }
-                    ELM327.shared.send(req)
-
-                    let startWait = Date()
-
-                    while !RequestResponseMatcher.shared.pending.isEmpty {
-
-                        if Date().timeIntervalSince(startWait) > requestTimeout {
-
-                            Logger.shared.warning("⏰ Request timeout")
-                            RequestResponseMatcher.shared.clear()
-
-                            if !BluetoothManager.shared.isConnected {
-
-                                guard await ensureConnection(header: header) else {
-                                    continue    // يعيد نفس PID
-                                }
+                    do {
+                        let response = try await BluetoothManager.shared.sendAndWait(
+                            req,
+                            timeout: .seconds(2)
+                        )
+                        appendResponse(
+                            header: header,
+                            mode: String(req.prefix(2)),
+                            pid: String(req.dropFirst(2)),
+                            request: req,
+                            response: response.raw
+                        )
+                    } catch BluetoothManager.BluetoothError.timeout {
+                        Logger.shared.warning("⏰ Request timeout")
+                    } catch {
+                        if !BluetoothManager.shared.isConnected {
+                            Logger.shared.error("Connection lost")
+                            guard await ensureConnection(header: header) else {
                                 continue
                             }
-                            break
+                            continue
                         }
-                        try? await Task.sleep(for: .milliseconds(10))
                     }
                     done += 1
                     currentPID += 1
@@ -468,6 +468,9 @@ final class BruteForceScanner: ObservableObject {
         {
             return
         }
+        guard !response.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return
+        }
 
         let key = "\(header)|\(request)|\(response)"
 
@@ -486,10 +489,10 @@ final class BruteForceScanner: ObservableObject {
             )
         )
 
-        Logger.shared.rx(response)
-        
+        Logger.shared.success("✅ Found PID \(request) -> \(response)")
+
         scanStatus.successCount += 1
-            saveResults()
+        saveResults()
     }
     
     func exportJSON() throws -> URL {
