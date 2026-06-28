@@ -9,11 +9,18 @@ import SwiftUI
 struct SplashScreen: View {
     @State private var showApp = false
     var body: some View {
+        let splashImageName = {
+            #if os(iOS)
+            UIDevice.current.userInterfaceIdiom == .phone ? "PIDHunterSplash" : "PIDHunterSplashLandScape"
+            #else
+            "PIDHunterSplashLandScape"
+            #endif
+        }()
         if showApp {
             ContentView()
         } else {
             ZStack {
-                Image("PIDHunterSplash")
+                Image(splashImageName)
                     .resizable()
                     .scaledToFill()
                     .ignoresSafeArea()

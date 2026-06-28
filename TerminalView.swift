@@ -39,7 +39,6 @@ struct TerminalView: View {
     
     private var terminalTab: some View {
         VStack(spacing: 18) {
-            ViewThatFits(in: .horizontal) {
             // MARK: Status
             HStack {
                 Circle()
@@ -66,18 +65,19 @@ struct TerminalView: View {
             .padding()
             .background(.thinMaterial)
             .clipShape(RoundedRectangle(cornerRadius: 18))
+            
             // MARK: Progress
             VStack(alignment: .leading) {
                 Text("Progress")
                     .font(.headline)
                 ProgressView(
-                    value: brute.scanStatus.progress
+                    value: max(0.0, min(brute.scanStatus.progress, 1.0))
                 )
+                .progressViewStyle(.linear)
+                .frame(maxWidth: .infinity)
                 HStack(alignment: .center, spacing: 4) {
                     Spacer()
-                    Text(
-                        "\(Int(brute.scanStatus.progress * 100))% • \(brute.scanStatus.currentRequest)"
-                    )
+                    Text("\(Int(max(0, min(brute.scanStatus.progress, 1)) * 100))%")
                     Spacer()
                     HStack {
                         Text("\(stats.requestsSent)")
@@ -93,12 +93,12 @@ struct TerminalView: View {
                             Text("Elapsed: \(formatETA(stats.elapsed))")
                                 .foregroundStyle(.secondary)
                             Spacer()
-                            if !brute.scanStatus.isScanning {
-                                Text("ETA: --:--")
-                                    .foregroundStyle(.secondary)
-                            } else if stats.finishedAt != nil {
+                            if stats.finishedAt != nil {
                                 Text("Completed in \(formatETA(stats.elapsed)) ✅")
                                     .foregroundStyle(.green)
+                            } else if !brute.scanStatus.isScanning {
+                                Text("ETA: --:--")
+                                    .foregroundStyle(.secondary)
                             } else if stats.requestsSent < 10 {
                                 Text("ETA: Calculating...")
                                     .foregroundStyle(.secondary)
@@ -121,17 +121,12 @@ struct TerminalView: View {
             .padding()
             .background(.thinMaterial)
             .clipShape(RoundedRectangle(cornerRadius: 18))
-            if brute.hasResumePoint {
-
+            if brute.hasResumePoint && !brute.scanStatus.isScanning {
                 Text("Resume available")
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
-            
-/////////////////// MARK: Actions
-            
-            }
-            // MARK: Actions - single horizontal HStack
+        // MARK: Actions - single horizontal HStack
             HStack(alignment: .center, spacing: 10) {
                 Button {
                     Logger.shared.clear()
@@ -164,13 +159,17 @@ struct TerminalView: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(!brute.scanStatus.isScanning)
                 Button {
+                    guard brute.hasResumePoint else {
+                        Logger.shared.info("No resume point available")
+                        return
+                    }
                     startPIDScan()
                 }
                 label: {
                     Label("Resume",systemImage: "arrow.clockwise.circle.fill")
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(brute.scanStatus.isScanning)
+                .disabled(brute.scanStatus.isScanning || !brute.hasResumePoint)
                 Spacer()
                 Button {
                     Task {
@@ -378,8 +377,7 @@ struct TerminalView: View {
             return
         }
         Logger.shared.clear()
-        RequestResponseMatcher.shared.clear()
-
+        
         let cleanHeader = header
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .uppercased()

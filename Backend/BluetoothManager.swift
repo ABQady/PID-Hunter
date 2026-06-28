@@ -69,7 +69,6 @@ final class BluetoothManager: NSObject, ObservableObject {
     // MARK: Scan
         func startScan() {
             ELMResponseAssembler.shared.clear()
-            RequestResponseMatcher.shared.clear()
             txCount = 0
             rxCount = 0
             status = .scanningBLE
@@ -201,12 +200,6 @@ final class BluetoothManager: NSObject, ObservableObject {
         return try await withCheckedThrowingContinuation { continuation in
             Logger.shared.debug("📌 Registering continuation")
             let requestID = UUID()
-            if !command.uppercased().hasPrefix("AT") {
-                RequestResponseMatcher.shared.enqueue(
-                    command: command,
-                    header: ELM327.shared.currentHeader
-                )
-            }
             // Assign pendingRequest BEFORE sending command, with timeoutTask nil
             pendingRequest = PendingRequest(
                 id: requestID,
@@ -221,6 +214,7 @@ final class BluetoothManager: NSObject, ObservableObject {
                       pending.id == requestID else {
                     return
                 }
+                pending.timeoutTask?.cancel()
                 self.pendingRequest = nil
                 pending.continuation.resume(throwing: BluetoothError.timeout)
             }
@@ -230,9 +224,6 @@ final class BluetoothManager: NSObject, ObservableObject {
                 try send(command)
                 Logger.shared.debug("📤 Command sent successfully")
             } catch {
-                if !command.uppercased().hasPrefix("AT") {
-                    _ = RequestResponseMatcher.shared.dequeue()
-                }
                 timeoutTask.cancel()
                 pendingRequest = nil
                 continuation.resume(throwing: error)
@@ -310,10 +301,8 @@ final class BluetoothManager: NSObject, ObservableObject {
 
         status = .testingECU
         do {
-            let response = try await sendAndWait(
-                "0100",
-                timeout: .seconds(2)
-            )
+            let response = try await sendAndWait("0100", timeout: .seconds(2))
+            
             Logger.shared.success("ECU Test Response: \(response.raw)")
         } catch {
             Logger.shared.error("ECU test failed: \(error)")
@@ -429,7 +418,6 @@ extension BluetoothManager:
             self.discoveredDevices.removeAll()
             
             self.stopScan()
-            RequestResponseMatcher.shared.clear()
             ECUInfo.shared.clear()
             
             Logger.shared.console("Disconnected")
@@ -441,6 +429,7 @@ extension BluetoothManager:
             
             if let pending = pendingRequest {
                 pending.timeoutTask?.cancel()
+                //RequestResponseMatcher.shared.clear()
                 pending.continuation.resume(throwing: BluetoothError.disconnected)
                 pendingRequest = nil
             }
@@ -640,31 +629,41 @@ extension BluetoothManager:
                 // removed guard response.type != .unknown block
 
                 analyzeResponse(response)
-                
-                guard response.type.canResumeContinuation else {
-                    if response.type == .unknown {
-                        Logger.shared.error("⚠️ UNKNOWN RESPONSE: \(response.raw)")
-                    } else {
-                        Logger.shared.warning("Ignoring response type: \(response.type)")
+
+                // Do not complete a pending request on informational or unparsed
+                // responses. Some ELM327 adapters prepend BUS INIT / SEARCHING
+                // before the actual ECU frame.
+                if response.type == .unknown {
+                    let upper = response.raw.uppercased()
+                    let compact = upper.replacingOccurrences(of: " ", with: "")
+                    let containsFrame = compact.contains("41") ||
+                                        compact.contains("61") ||
+                                        compact.contains("62") ||
+                                        compact.contains("7F")
+
+                    if !containsFrame {
+                        Logger.shared.debug("Ignoring transient response: \(response.raw)")
+                        continue
                     }
+                }
+
+                guard response.type.canResumeContinuation || response.type == .unknown else {
+                    Logger.shared.warning("Ignoring response type: \(response.type)")
                     continue
                 }
-                
-                Logger.shared.debug("🔵 Response Type = \(response.type)")
-                Logger.shared.debug(
-                    "🔵 Continuation = \(pendingRequest == nil ? "nil" : "exists")"
-                )
 
                 guard let pending = pendingRequest else {
+                    Logger.shared.debug("No pending request. Dropping response.")
                     continue
                 }
-                if response.type != .atResponse {
-                    _ = RequestResponseMatcher.shared.dequeue()
-                }
-                pending.timeoutTask?.cancel()
+
+                // Match the queued request before clearing it, but only for
+                // responses that are actually completing a request.
+                Logger.shared.debug("Completing pending request \(pending.id)")
+                //pending.timeoutTask?.cancel()
                 pendingRequest = nil
                 pending.continuation.resume(returning: response)
-                Logger.shared.debug("🟢 Continuation RESUMED")
+                Logger.shared.debug("🟢 Continuation RESUMED: \(response.type)")
             }
         }
     }
@@ -715,9 +714,9 @@ extension ELMResponseType {
              .mode22,
              .negative,
              .noData,
-             .atResponse:
+             .atResponse,
+             .unknown:
             return true
-
         default:
             return false
         }

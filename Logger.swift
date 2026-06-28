@@ -42,17 +42,17 @@ final class Logger: ObservableObject {
         guard level == .user || enableDebugLogging else {
             return
         }
+        if text.isEmpty { return }
         console(text)
         let line = LogLine(
             text: text,
             color: color
         )
 
+        lines.reserveCapacity(maxLines)
         lines.append(line)
         if lines.count > maxLines {
-            lines.removeFirst(
-                lines.count - maxLines
-            )
+            lines.removeFirst()
         }
     }
     func tx(
@@ -97,7 +97,7 @@ final class Logger: ObservableObject {
     }
 
     func clear() {
-        lines.removeAll()
+        lines.removeAll(keepingCapacity: true)
     }
     func saveLog() throws -> URL {
         let filename = "rawTraffic.log"
@@ -105,7 +105,7 @@ final class Logger: ObservableObject {
         let url = FileManager.default
             .temporaryDirectory
             .appendingPathComponent(filename)
-        let text = lines
+        let text = lines.lazy
             .map(\.text)
             .joined(separator: "\r\n")
         try text.write(

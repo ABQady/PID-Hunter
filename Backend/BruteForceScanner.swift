@@ -29,6 +29,7 @@ final class BruteForceScanner: ObservableObject {
     @Published private(set) var results: [ScanResult] = []
     @Published var delayMs: Double = 100
     @Published private(set) var scanStatus = ScanStatus()
+    @Published private(set) var hasResumePoint = false
     
     @AppStorage("requestTimeout")
     private var requestTimeout = 2.0
@@ -46,8 +47,10 @@ final class BruteForceScanner: ObservableObject {
     private var currentPID = 0
     
     private func saveResumePoint() {
-        UserDefaults.standard.set(currentHeaderIndex, forKey: "resumeHeader")
-        UserDefaults.standard.set(currentPID, forKey: "resumePID")
+        let defaults = UserDefaults.standard
+        defaults.set(currentHeaderIndex, forKey: "resumeHeader")
+        defaults.set(currentPID, forKey: "resumePID")
+        refreshResumeAvailability()
     }
     
     private func beginScan() {
@@ -55,7 +58,6 @@ final class BruteForceScanner: ObservableObject {
         scanStatus.isScanning = true
         scanStatus.progress = 0
         scanStatus.currentRequest = ""
-        RequestResponseMatcher.shared.clear()
     }
     
     private func finishScan(completed: Bool) {
@@ -70,13 +72,20 @@ final class BruteForceScanner: ObservableObject {
             saveResults()
         }
 
-        RequestResponseMatcher.shared.clear()
         shouldStop = false
     }
 
     private func loadResumePoint() {
-        currentHeaderIndex = UserDefaults.standard.integer(forKey: "resumeHeader")
-        currentPID = UserDefaults.standard.integer(forKey: "resumePID")
+        let defaults = UserDefaults.standard
+        currentHeaderIndex = defaults.object(forKey: "resumeHeader") as? Int ?? 0
+        currentPID = defaults.object(forKey: "resumePID") as? Int ?? 0
+        refreshResumeAvailability()
+    }
+
+    private func refreshResumeAvailability() {
+        let defaults = UserDefaults.standard
+        hasResumePoint = defaults.object(forKey: "resumeHeader") != nil &&
+                         defaults.object(forKey: "resumePID") != nil
     }
     
     private func saveResults() {
@@ -113,24 +122,21 @@ final class BruteForceScanner: ObservableObject {
 
         UserDefaults.standard.removeObject(forKey: "savedResults")
         Logger.shared.clear()
-        RequestResponseMatcher.shared.clear()
         ScanStatistics.shared.reset()
         
-        saveResumePoint()
+        clearResumePoint()
     }
     
     func clearResumePoint() {
         currentHeaderIndex = 0
         currentPID = 0
-        saveResumePoint()
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: "resumeHeader")
+        defaults.removeObject(forKey: "resumePID")
+        refreshResumeAvailability()
     }
     
-    var hasResumePoint: Bool {
-        let header = UserDefaults.standard.integer(forKey: "resumeHeader")
-        let pid = UserDefaults.standard.integer(forKey: "resumePID")
-
-        return header != 0 || pid != 0
-    }
+    // hasResumePoint is now a published property, no longer a computed property.
     
     private func clearResults() {
         results.removeAll()
@@ -326,19 +332,12 @@ final class BruteForceScanner: ObservableObject {
         request: String,
         response: String
     ) {
-        let upper =
-        response.uppercased()
-        if upper.contains("NO DATA")
-            || upper.contains("?")
-            || upper.contains("ERROR")
-            || upper.contains("UNABLE TO CONNECT")
-            || upper.contains("STOPPED")
-            || upper.contains("BUS ERROR")
-            || upper.contains("BUFFER FULL")
-            || upper.contains("SEARCHING")
-            || upper.contains("OK")
-            || upper == ">"
-        {
+        let upper = response.uppercased()
+        let parsed = ELMResponseParser.parse(response)
+        switch parsed.type {
+        case .mode01, .mode21, .mode22, .negative:
+            break
+        default:
             return
         }
         guard !response.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -364,7 +363,9 @@ final class BruteForceScanner: ObservableObject {
 
         Logger.shared.success("✅ Found PID \(request) -> \(response)")
 
-        scanStatus.successCount += 1
+        if parsed.type == .mode01 || parsed.type == .mode21 || parsed.type == .mode22 {
+            scanStatus.successCount += 1
+        }
         saveResults()
     }
     

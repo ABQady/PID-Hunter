@@ -52,11 +52,24 @@ enum ELMResponseParser {
     static func parse(_ text: String) -> ELMResponse {
 
         let upper = text.uppercased()
+        let compact = upper.replacingOccurrences(of: " ", with: "")
+        // Strip informational ELM prefixes that can precede a valid ECU frame.
+        var sanitized = upper
+        for marker in [
+            "BUS INIT:",
+            "BUS INIT",
+            "SEARCHING...",
+            "SEARCHING",
+            "ELM327",
+            "ATI"
+        ] {
+            sanitized = sanitized.replacingOccurrences(of: marker, with: " ")
+        }
         var type: ELMResponseType = .unknown
         var service: UInt8?
         var pid: UInt16?
 
-        let normalized = upper
+        let normalized = sanitized
             .replacingOccurrences(of: "\r", with: " ")
             .replacingOccurrences(of: "\n", with: " ")
 
@@ -67,20 +80,42 @@ enum ELMResponseParser {
         var tokens = spaced
             .split(separator: " ")
             .map(String.init)
+        tokens.removeAll { $0.isEmpty }
+        
+        if tokens.isEmpty {
+            return ELMResponse(
+                raw: text,
+                type: .unknown,
+                header: nil,
+                service: nil,
+                pid: nil,
+                payload: []
+            )
+        }
 
         var header: String?
         
-        if tokens.count >= 5,
+        if tokens.count >= 4,
            tokens[0].count == 2,
            UInt8(tokens[0], radix: 16) != nil,
-           let _ = UInt8(tokens[1], radix: 16),
-           let _ = UInt8(tokens[2], radix: 16),
-           ["41", "61", "62", "7F"].contains(tokens[3]) {
+           UInt8(tokens[1], radix: 16) != nil,
+           UInt8(tokens[2], radix: 16) != nil,
+           ["41", "61", "62", "7F"].contains(tokens[3].uppercased()) {
 
-            header = "\(tokens[0]) \(tokens[1]) \(tokens[2])"
+            header = "\(tokens[0].uppercased()) \(tokens[1].uppercased()) \(tokens[2].uppercased())"
             tokens.removeFirst(3)
         }
         var payload: [UInt8] = []
+        
+        if compact.contains("NODATA") {
+            type = .noData
+        } else if compact.contains("UNABLETOCONNECT") {
+            type = .unableToConnect
+        } else if compact.contains("BUSERROR") {
+            type = .busError
+        } else if compact.contains("STOPPED") {
+            type = .stopped
+        }
         
         for (index, token) in tokens.enumerated() {
             switch token {
@@ -92,7 +127,8 @@ enum ELMResponseParser {
                 type = .mode22
             case "7F":
                 type = .negative
-                continue
+                payload = tokens.dropFirst(index + 1).compactMap { UInt8($0, radix: 16) }
+                break
             default:
                 continue
             }
@@ -116,27 +152,29 @@ enum ELMResponseParser {
         }
         
         if type == .unknown {
-            if upper == "OK"
-                || upper.hasPrefix("ELM")
-                || upper.contains("ISO")
-                || upper.contains("KWP")
-                || upper.contains("CAN")
-                || upper.contains("J1850") {
+            if compact == "OK"
+                || compact.hasPrefix("ELM")
+                || compact.hasPrefix("ISO")
+                || compact.hasPrefix("KWP")
+                || compact.hasPrefix("CAN")
+                || compact.hasPrefix("J1850") {
 
                 type = .atResponse
 
-            } else if upper.contains("NO DATA") {
+            } else if compact.contains("NODATA") {
                 type = .noData
-            } else if upper.contains("STOPPED") {
+            } else if compact.contains("STOPPED") {
                 type = .stopped
-            } else if upper.contains("BUS ERROR") {
+            } else if compact.contains("BUSERROR") {
                 type = .busError
-            } else if upper.contains("UNABLE TO CONNECT") {
+            } else if compact.contains("UNABLETOCONNECT") {
                 type = .unableToConnect
-            } else if upper.contains("SEARCHING") {
+            } else if compact.contains("SEARCHING") {
                 type = .searching
             }
         }
+        
+        
         
         return ELMResponse(
             raw: text,
@@ -146,6 +184,16 @@ enum ELMResponseParser {
             pid: pid,
             payload: payload
         )
+    }
+}
+extension ELMResponse {
+    var isSuspicious: Bool {
+        switch type {
+        case .mode01, .mode21, .mode22:
+            return payload.isEmpty
+        default:
+            return false
+        }
     }
 }
 extension String {
