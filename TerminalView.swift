@@ -131,6 +131,15 @@ struct TerminalView: View {
             }
             // MARK: Actions - single horizontal HStack
             HStack(alignment: .center, spacing: 10) {
+                Button {
+                    Logger.shared.clear()
+                } label: {
+                    Label("Clear", systemImage: "trash")
+                }
+                .buttonStyle(.bordered)
+                .disabled(logger.lines.isEmpty)
+                
+                
                 Spacer()
                 Button(role: .destructive) {
                     guard bt.isConnected else {
@@ -172,6 +181,15 @@ struct TerminalView: View {
                     }
                 } label: {
                     Label("Test ECU", systemImage: "stethoscope")
+                }
+                .buttonStyle(.bordered)
+                
+                Button {
+                    Task {
+                        await ModeDiscovery.shared.discover()
+                    }
+                } label: {
+                    Label("Discover Modes", systemImage: "dot.scope")
                 }
                 .buttonStyle(.bordered)
             }

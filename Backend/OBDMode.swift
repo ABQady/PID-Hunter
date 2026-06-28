@@ -122,4 +122,8 @@ enum OBDMode: String, CaseIterable, Identifiable {
             return UInt8(truncatingIfNeeded: 0x40 + Int(strtoul(rawValue, nil, 16)))
         }
     }
+    
+    var requestService: UInt8 {
+        UInt8(strtoul(rawValue, nil, 16))
+    }
 }

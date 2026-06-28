@@ -7,7 +7,6 @@ import Foundation
 final class ELM327: ObservableObject {
     static let shared = ELM327()
     private(set) var currentHeader = ""
-    private var pendingContinuation: CheckedContinuation<String, Error>?
 
     enum ELMError: Error {
         case timeout
@@ -20,13 +19,9 @@ final class ELM327: ObservableObject {
     // MARK: - Send
     func send(_ command: String) {
         do { try BluetoothManager.shared.send(command)} catch {
+            Logger.shared.error("ELM327.swift send() error, command: \(command)")
             return
         }
-    }
-    
-    func completePending(with response: String) {
-        pendingContinuation?.resume(returning: response)
-        pendingContinuation = nil
     }
 
     // MARK: - Header
@@ -43,24 +38,45 @@ final class ELM327: ObservableObject {
         mode: OBDMode,
         pid: UInt16
     ) {
-        send(
-            mode.rawValue +
-            String(
-                format: "%0\(mode.pidDigits)X",
-                pid
-            )
-        )
+        send(makeCommand(mode: mode, pid: pid))
     }
 
     func request(
         mode: OBDMode,
-        pid: UInt8
-    ) {
-        request(
-            mode: mode,
-            pid: UInt16(pid)
+        pid: UInt16,
+        timeout: Duration = .seconds(1)
+    ) async throws -> ELMResponse {
+
+        try await BluetoothManager.shared.sendAndWait(
+            makeCommand(mode: mode, pid: pid),
+            timeout: timeout
         )
     }
+    
+    func request(
+        mode: OBDMode,
+        timeout: Duration = .seconds(1)
+    ) async throws -> ELMResponse {
+
+        try await request(
+            mode: mode,
+            pid: UInt16(mode.defaultStartPID),
+            timeout: timeout
+        )
+    }
+    
+    private func makeCommand(
+        mode: OBDMode,
+        pid: UInt16
+    ) -> String {
+
+        mode.rawValue +
+        String(
+            format: "%0\(mode.pidDigits)X",
+            pid
+        )
+    }
+
     // MARK: - ECU Identification
     func identifyECU() {
         Task {

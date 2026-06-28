@@ -8,6 +8,7 @@ struct ResultsView: View {
     @ObservedObject private var brute = BruteForceScanner.shared
     @ObservedObject private var ecu = ECUInfo.shared
     @ObservedObject private var stats = ScanStatistics.shared
+    @ObservedObject private var discovery = ModeDiscovery.shared
     
     @State private var search = ""
     @State private var ecuExpanded = true
@@ -90,6 +91,71 @@ struct ResultsView: View {
                                         .overlay {
                                             Capsule()
                                                 .stroke(.green.opacity(0.35))
+                                        }
+                                        .clipShape(Capsule())
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        
+                        if !discovery.supportedModes.isEmpty {
+
+                            Divider()
+                                .padding(.vertical, 8)
+
+                            Text("Discovered Modes")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+
+                            LazyVGrid(
+                                columns: [
+                                    GridItem(.adaptive(minimum: 50))
+                                ],
+                                alignment: .leading,
+                                spacing: 8
+                            ) {
+                                ForEach(discovery.supportedModes) { mode in
+                                    Text(mode.rawValue)
+                                        .font(.system(.caption, design: .monospaced).bold())
+                                        .foregroundStyle(.blue)
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 5)
+                                        .background(.blue.opacity(0.15))
+                                        .overlay {
+                                            Capsule()
+                                                .stroke(.blue.opacity(0.35))
+                                        }
+                                        .clipShape(Capsule())
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        if !discovery.supportedModes.isEmpty {
+                            
+                            Divider()
+                                .padding(.vertical, 8)
+
+                            Text("Discovered Modes")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+
+                            LazyVGrid(
+                                columns: [
+                                    GridItem(.adaptive(minimum: 50))
+                                ],
+                                alignment: .leading,
+                                spacing: 8
+                            ) {
+                                ForEach(discovery.supportedModes) { mode in
+                                    Text(mode.rawValue)
+                                        .font(.system(.caption, design: .monospaced).bold())
+                                        .foregroundStyle(.blue)
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 5)
+                                        .background(.blue.opacity(0.15))
+                                        .overlay {
+                                            Capsule()
+                                                .stroke(.blue.opacity(0.35))
                                         }
                                         .clipShape(Capsule())
                                 }
