@@ -21,6 +21,9 @@ struct TerminalView: View {
     @Binding var startPID: String
     @Binding var endPID: String
     @State private var manualCommand = ""
+    @FocusState private var commandFieldFocused: Bool
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    private var isCompact: Bool { horizontalSizeClass == .compact }
 
     public init(
         selectedMode: Binding<OBDMode>,
@@ -35,7 +38,6 @@ struct TerminalView: View {
     }
     
     private var terminalTab: some View {
-        
         VStack(spacing: 18) {
             ViewThatFits(in: .horizontal) {
             // MARK: Status
@@ -139,7 +141,6 @@ struct TerminalView: View {
                 .buttonStyle(.bordered)
                 .disabled(logger.lines.isEmpty)
                 
-                
                 Spacer()
                 Button(role: .destructive) {
                     guard bt.isConnected else {
@@ -193,50 +194,80 @@ struct TerminalView: View {
                 }
                 .buttonStyle(.bordered)
             }
+            .controlSize(horizontalSizeClass == .compact ? .small : .regular)
+            .if(isCompact) { view in
+                view.labelStyle(.iconOnly)
+            }
+            .if(isCompact) { view in
+                view.font(.title3)
+            }
             
             
             // MARK: Live Log
             VStack(alignment: .leading) {
                 ScrollViewReader { proxy in
-                    HStack {
+                    HStack(spacing: isCompact ? 10 : 16) {
                         Text("Terminal")
-                            .font(.headline)
-                        Spacer()
-                        
+                            .font(isCompact ? .body.weight(.semibold) : .headline)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                            .frame(width: isCompact ? 72 : 70, alignment: .leading)
+                            .padding(.leading, isCompact ? -10 : 0)
+                            .layoutPriority(2)
+                        if !isCompact {
+                            Spacer()
+                        }
+
                         Text(bt.status.title)
-                            .font(.headline)
-                        
-                        Spacer()
-                        
+                            .font(isCompact ? .caption2 : .headline)
+                            .lineLimit(1)
+                            .allowsTightening(true)
+                            .minimumScaleFactor(0.35)
+                            .layoutPriority(10)
+
+                        if !isCompact {
+                            Spacer()
+                        }
+
                         Text("Found: \(brute.scanStatus.successCount)")
-                            .font(.headline)
-                        
-                        Spacer()
-                        
+                            .font(isCompact ? .caption2 : .headline)
+                            .frame(maxWidth: .infinity, alignment: .center)
+
+                        if !isCompact {
+                            Spacer()
+                        }
+
                         Text("TX \(bt.txCount) • RX \(bt.rxCount)")
-                            .font(.headline)
+                            .font(isCompact ? .caption2 : .headline)
+                            .frame(maxWidth: .infinity, alignment: .center)
                             .foregroundStyle(.secondary)
-                        
-                        Spacer()
-                        
+
+                        if !isCompact {
+                            Spacer()
+                        }
+
                         Button("▼ Live") {
                             shouldAutoScroll = true
                             programmaticScroll = true
-                            
+
                             if let last = logger.lines.indices.last {
                                 withAnimation(.linear(duration: 0.05)) {
                                     proxy.scrollTo(last, anchor: .bottom)
                                 }
                             }
-                            
+
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                                 programmaticScroll = false
                             }
                         }
+                        .font(isCompact ? .caption : .body)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .fixedSize()
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal)
                     .padding()
-                    ScrollView {
+                    ScrollView(.vertical, showsIndicators: true) {
                         VStack(alignment: .leading, spacing: 4) {
                             ForEach(Array(logger.lines.enumerated()), id: \.element.id) { index, line in
                                 Text(line.text)
@@ -253,16 +284,17 @@ struct TerminalView: View {
                                 cornerRadius: 18
                             )
                         )
+                        .contentShape(Rectangle())
                     }
-                    .highPriorityGesture(
-                        DragGesture(minimumDistance: 0)
+                    .scrollDismissesKeyboard(.interactively)
+                    .simultaneousGesture(
+                        DragGesture()
                             .onChanged { _ in
                                 shouldAutoScroll = false
                             }
                     )
                     .onScrollPhaseChange { _, phase in
                         guard !programmaticScroll else { return }
-                        
                         if phase == .interacting {
                             shouldAutoScroll = false
                         }
@@ -288,6 +320,8 @@ struct TerminalView: View {
                             .textInputAutocapitalization(.characters)
                             .autocorrectionDisabled()
                             .onSubmit(sendManualCommand)
+                            .focused($commandFieldFocused)
+                            .submitLabel(.send)
 
                         Button("Send") {
                             sendManualCommand()
@@ -300,6 +334,9 @@ struct TerminalView: View {
                         )
                     }
                     .padding()
+                    .onTapGesture {
+                        commandFieldFocused = false
+                    }
                 }
             }
             .frame(maxWidth: .infinity,
@@ -313,6 +350,12 @@ struct TerminalView: View {
                maxHeight: .infinity,
                alignment: .top)
         .padding()
+        .contentShape(Rectangle())
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                commandFieldFocused = false
+            }
+        )
     }
     
     // MARK: - Helpers
@@ -410,7 +453,18 @@ struct TerminalView: View {
     
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 var body: some View {
- 
     terminalTab
 }
+}
+
+// Helper for conditional modifier
+extension View {
+    @ViewBuilder
+    func `if`<Content: View>(_ condition: Bool, transform: (Self) -> Content) -> some View {
+        if condition {
+            transform(self)
+        } else {
+            self
+        }
+    }
 }

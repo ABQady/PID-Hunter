@@ -5,6 +5,7 @@
 //  Created by Ahmed Al Qady on 28/06/2026.
 //
 import SwiftUI
+import UIKit
 
 struct iPhoneLayout: View {
 
@@ -14,9 +15,11 @@ struct iPhoneLayout: View {
     @Binding var endPID: String
     @Binding var delay: Double
 
+    @State private var selectedTab = 1
+
     var body: some View {
 
-        TabView {
+        TabView(selection: $selectedTab) {
 
             SettingsView(
                 header: $header,
@@ -28,6 +31,7 @@ struct iPhoneLayout: View {
             .tabItem {
                 Label("Settings", systemImage: "gearshape")
             }
+            .tag(0)
 
             TerminalView(
                 selectedMode: $selectedMode,
@@ -38,12 +42,19 @@ struct iPhoneLayout: View {
             .tabItem {
                 Label("Terminal", systemImage: "terminal")
             }
+            .tag(1)
 
             ResultsView()
                 .tabItem {
                     Label("Results", systemImage: "list.bullet.rectangle")
                 }
+                .tag(2)
 
+        }
+        .ignoresSafeArea(.keyboard, edges: .bottom)
+        .scrollDismissesKeyboard(.interactively)
+        .onTapGesture {
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         }
 
     }

@@ -16,6 +16,8 @@ let package = Package(
         .iOSApplication(
             name: "PID Hunter",
             targets: ["AppModule"],
+            bundleIdentifier: "PIDHunteriOSV1",
+            teamIdentifier: "D963S94Z88",
             displayVersion: "1.0",
             bundleVersion: "1",
             appIcon: .asset("AppIcon"),

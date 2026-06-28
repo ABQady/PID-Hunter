@@ -278,6 +278,7 @@ struct ResultsView: View {
                         }
                         .frame(maxWidth: .infinity)
                         .frame(minHeight: 250)
+                        .clipShape(RoundedRectangle(cornerRadius: 18))
                         
                     } else {
                         LazyVStack(spacing: 12) {
@@ -317,6 +318,7 @@ struct ResultsView: View {
                     }
                     .padding()
                     .background(.regularMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: 18))
                 }
                 
             }
