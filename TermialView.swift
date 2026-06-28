@@ -312,95 +312,64 @@ struct TerminalView: View {
     
     private func startPIDScan()
     {
-            guard bt.isConnected else {
-                Logger.shared.info("Connect to ELM first")
+        guard bt.isConnected else {
+            Logger.shared.info("Connect to ELM first")
+            return
+        }
+        Logger.shared.clear()
+        RequestResponseMatcher.shared.clear()
+
+        let cleanHeader = header
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+
+        guard cleanHeader.count == 6,
+              cleanHeader.allSatisfy({ $0.isHexDigit }) else {
+            Logger.shared.info("Invalid Header")
+            return
+        }
+        brute.headers = [cleanHeader]
+        shouldAutoScroll = true
+
+        Task {
+            let ok = await Preflight.shared.run(header: cleanHeader)
+
+            guard ok else {
+                Logger.shared.info("❌ Preflight Failed")
                 return
             }
-            Logger.shared.clear()
-            RequestResponseMatcher.shared.clear()
-            
-            let cleanHeader = header
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .uppercased()
-            
-            guard cleanHeader.count == 6,
-                  cleanHeader.allSatisfy({ $0.isHexDigit }) else {
-                Logger.shared.info("Invalid Header")
-                return
-            }
-            brute.headers = [cleanHeader]
-            shouldAutoScroll = true
-            //selectedTab = 1
-            
-            switch selectedMode {
-            case .mode01:
-                Task {
-                    
-                    let ok = await Preflight.shared.run(
-                        header: cleanHeader
-                    )
-                    
-                    guard ok else {
-                        Logger.shared.info("❌ Preflight Failed")
-                        return
-                    }
-                    ScanStatistics.shared.start()
-                    brute.scanMode01()
-                }
-            case .mode21:
-                Task {
-                    
-                    let ok = await Preflight.shared.run(
-                        header: cleanHeader
-                    )
-                    
-                    guard ok else {
-                        Logger.shared.info("❌ Preflight Failed")
-                        return
-                    }
-                    ScanStatistics.shared.start()
-                    brute.scanMode21()
-                }
-            case .mode22:
+
+            ScanStatistics.shared.start()
+
+            if selectedMode.pidDigits == 4 {
                 let startText = startPID
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                     .uppercased()
-                
+
                 let endText = endPID
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                     .uppercased()
-                
-                if let start = UInt16(startText, radix: 16),
-                   let end = UInt16(endText, radix: 16) {
-                    
-                    if start <= end {
-                        Task {
-                            
-                            let ok = await Preflight.shared.run(
-                                header: cleanHeader
-                            )
-                            
-                            guard ok else {
-                                Logger.shared.info("❌ Preflight Failed")
-                                return
-                            }
-                            ScanStatistics.shared.start()
-                            brute.scanMode22(
-                                start: start,
-                                end: end
-                            )
-                        }
-                    } else {
-                        Logger.shared.info("Start PID must be <= End PID")
-                    }
-                    
-                } else {
+
+                guard let start = UInt16(startText, radix: 16),
+                      let end = UInt16(endText, radix: 16) else {
                     Logger.shared.info("Invalid PID range")
-                    
+                    return
                 }
-            default:
-                Logger.shared.info("Mode \(selectedMode.rawValue) is not implemented yet")
+
+                guard start <= end else {
+                    Logger.shared.info("Start PID must be <= End PID")
+                    return
+                }
+
+                brute.scan(
+                    mode: selectedMode,
+                    startPID: start,
+                    endPID: end
+                )
+            } else {
+                brute.scan(mode: selectedMode)
             }
+        }
     }
     private func formatETA(_ seconds: TimeInterval) -> String {
 

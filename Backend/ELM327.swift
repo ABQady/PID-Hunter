@@ -39,34 +39,26 @@ final class ELM327: ObservableObject {
         send("ATSH\(header)")
     }
     // MARK: - PID Requests
-    func requestMode01(
-        pid: UInt8
-    ) {
-        send(
-            String(
-                format: "01%02X",
-                pid
-            )
-        )
-    }
-    func requestMode21(
-        pid: UInt8
-    ) {
-        send(
-            String(
-                format: "21%02X",
-                pid
-            )
-        )
-    }
-    func requestMode22(
+    func request(
+        mode: OBDMode,
         pid: UInt16
     ) {
         send(
+            mode.rawValue +
             String(
-                format: "22%04X",
+                format: "%0\(mode.pidDigits)X",
                 pid
             )
+        )
+    }
+
+    func request(
+        mode: OBDMode,
+        pid: UInt8
+    ) {
+        request(
+            mode: mode,
+            pid: UInt16(pid)
         )
     }
     // MARK: - ECU Identification

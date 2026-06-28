@@ -129,7 +129,7 @@ struct ResultsView: View {
                         
                         statistic(
                             title: "Hits",
-                            value: "\(stats.positiveResponses)"
+                            value: "\(stats.positiveResponses)/\(stats.totalRequests)"
                         )
                     }
                     
@@ -150,9 +150,39 @@ struct ResultsView: View {
                         Spacer()
                         
                         statistic(
+                            title: "Avg",
+                            value: String(format: "%.0f ms", stats.averageRequestTime * 1000)
+                        )
+                    }
+
+                    HStack {
+                        statistic(
+                            title: "Elapsed",
+                            value: Duration.seconds(stats.elapsed)
+                                .formatted(.units(
+                                    allowed: [.hours, .minutes, .seconds],
+                                    width: .abbreviated
+                                ))
+                        )
+
+                        Spacer()
+
+                        statistic(
+                            title: "ETA",
+                            value: stats.eta > 0
+                                ? Duration.seconds(stats.eta)
+                                    .formatted(.units(
+                                        allowed: [.hours, .minutes, .seconds],
+                                        width: .abbreviated
+                                    ))
+                                : "--"
+                        )
+
+                        Spacer()
+
+                        statistic(
                             title: "Hit Rate",
-                            value: String(format: "%.1f%%",
-                                          stats.positiveResponseRate)
+                            value: String(format: "%.1f%%", stats.positiveResponseRate)
                         )
                     }
                     

@@ -78,30 +78,32 @@ struct SettingsView: View {
                     Label(selectedMode.title, systemImage: "info.circle")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    
-                    Text("PID Range")
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
-                    
-                    HStack {
-                        VStack(alignment: .leading) {
-                            Text("Start PID")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            
-                            TextField("0000", text: $startPID)
-                                .textInputAutocapitalization(.characters)
-                                .autocorrectionDisabled()
-                        }
-                        
-                        VStack(alignment: .leading) {
-                            Text("End PID")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            
-                            TextField("FFFF", text: $endPID)
-                                .textInputAutocapitalization(.characters)
-                                .autocorrectionDisabled()
+
+                    if selectedMode.pidDigits == 4 {
+                        Text("PID Range")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text("Start PID")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+
+                                TextField("%0\(selectedMode.pidDigits)X", text: $startPID)
+                                    .textInputAutocapitalization(.characters)
+                                    .autocorrectionDisabled()
+                            }
+
+                            VStack(alignment: .leading) {
+                                Text("End PID")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+
+                                TextField("%0\(selectedMode.pidDigits)X", text: $endPID)
+                                    .textInputAutocapitalization(.characters)
+                                    .autocorrectionDisabled()
+                            }
                         }
                     }
                     Text("Request Delay: \(Int(delay)) ms")

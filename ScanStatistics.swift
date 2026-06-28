@@ -40,11 +40,12 @@ final class ScanStatistics: ObservableObject {
 
         startedAt = nil
         finishedAt = nil
+        totalRequests = 0
     }
     
     func start() {
-        startedAt = .now
         finishedAt = nil
+        startedAt = .now
     }
 
     func finish() {
@@ -59,13 +60,20 @@ final class ScanStatistics: ObservableObject {
             .timeIntervalSince(startedAt)
     }
     
+    var averageRequestTime: TimeInterval {
+        guard requestsSent > 0 else {
+            return 0
+        }
+
+        return elapsed / Double(requestsSent)
+    }
+    
     var eta: TimeInterval {
         guard requestsSent >= 10,
               totalRequests > requestsSent else {
             return 0
         }
-        let average = elapsed / Double(requestsSent)
-        return average * Double(totalRequests - requestsSent)
+        return averageRequestTime * Double(totalRequests - requestsSent)
     }
     
     var positiveResponseRate: Double {

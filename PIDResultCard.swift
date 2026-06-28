@@ -13,21 +13,14 @@ struct PIDResultCard: View {
     @State private var expanded = false
 
     private var payloadBytes: Int {
+        let tokens = result.response.split(separator: " ")
 
-        let tokens = result.response
-            .split(separator: " ")
-
-        switch result.mode {
-
-        case "01", "21":
+        guard let mode = OBDMode(rawValue: result.mode) else {
             return max(tokens.count - 2, 0)
-
-        case "22":
-            return max(tokens.count - 3, 0)
-
-        default:
-            return 0
         }
+
+        let headerBytes = mode.pidDigits == 4 ? 3 : 2
+        return max(tokens.count - headerBytes, 0)
     }
 
     var body: some View {
@@ -63,7 +56,7 @@ struct PIDResultCard: View {
 
                         Spacer()
 
-                        Text("Mode \(result.mode)")
+                        Text(OBDMode(rawValue: result.mode)?.title ?? "Mode \(result.mode)")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -103,7 +96,7 @@ struct PIDResultCard: View {
                 HStack(spacing: 6) {
 
                     InfoChip(
-                        title: "Mode \(result.mode)",
+                        title: OBDMode(rawValue: result.mode)?.rawValue ?? result.mode,
                         color: .blue
                     )
 

@@ -10,10 +10,15 @@ import SwiftUI
 struct ContentView: View {
 
     @State private var header = "81F111"
-    @State private var selectedMode: OBDMode = .mode01    
+    @State private var selectedMode: OBDMode = .mode01
     @State private var startPID = "0000"
     @State private var endPID = "FFFF"
     @State private var delay = 100.0
+
+    private func applyModeDefaults(_ mode: OBDMode) {
+        startPID = String(format: "%0\(mode.pidDigits)X", mode.defaultStartPID)
+        endPID = String(format: "%0\(mode.pidDigits)X", mode.defaultEndPID)
+    }
 
     var body: some View {
 
@@ -41,6 +46,12 @@ struct ContentView: View {
 
             }
 
+        }
+        .onAppear {
+            applyModeDefaults(selectedMode)
+        }
+        .onChange(of: selectedMode) { _, newMode in
+            applyModeDefaults(newMode)
         }
 
     }

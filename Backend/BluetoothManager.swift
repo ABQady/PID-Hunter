@@ -523,24 +523,10 @@ extension BluetoothManager:
         ScanStatistics.shared.responses += 1
         switch response.type {
 
-        case .mode01:
+        case .mode01, .mode21, .mode22:
             retriedProtocol = false
-            status = .mode01OK
-            Logger.shared.success("🎉 Mode 01 Supported")
-            ECUInfo.shared.addService(response.service)
-            ScanStatistics.shared.positiveResponses += 1
-
-        case .mode21:
-            retriedProtocol = false
-            status = .mode21OK
-            Logger.shared.success("🎉 Mode 21 Supported")
-            ECUInfo.shared.addService(response.service)
-            ScanStatistics.shared.positiveResponses += 1
-
-        case .mode22:
-            retriedProtocol = false
-            status = .mode22OK
-            Logger.shared.success("🎉 Mode 22 Supported")
+            status = response.type.status
+            Logger.shared.success("🎉 \(response.type.displayName) Supported")
             ECUInfo.shared.addService(response.service)
             ScanStatistics.shared.positiveResponses += 1
 
@@ -591,8 +577,6 @@ extension BluetoothManager:
         default:
             break
         }
-
-        
     }
     
     
@@ -736,6 +720,27 @@ extension ELMResponseType {
 
         default:
             return false
+        }
+    }
+}
+
+extension ELMResponseType {
+
+    var displayName: String {
+        switch self {
+        case .mode01: return "Mode 01"
+        case .mode21: return "Mode 21"
+        case .mode22: return "Mode 22"
+        default: return "Response"
+        }
+    }
+
+    var status: ECUStatus {
+        switch self {
+        case .mode01: return .mode01OK
+        case .mode21: return .mode21OK
+        case .mode22: return .mode22OK
+        default: return .connected
         }
     }
 }

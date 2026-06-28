@@ -80,4 +80,46 @@ enum OBDMode: String, CaseIterable, Identifiable {
     var supportsBruteForce: Bool {
         Self.supportedScanModes.contains(self)
     }
+
+    var pidDigits: Int {
+        switch self {
+        case .mode22, .mode23:
+            return 4
+        default:
+            return 2
+        }
+    }
+
+    var defaultStartPID: Int {
+        switch self {
+        case .mode22, .mode23:
+            return 0x0000
+        default:
+            return 0x00
+        }
+    }
+
+    var defaultEndPID: Int {
+        switch self {
+        case .mode22, .mode23:
+            return 0xFFFF
+        default:
+            return 0xFF
+        }
+    }
+
+    var responseService: UInt8 {
+        switch self {
+        case .mode01:
+            return 0x41
+        case .mode21:
+            return 0x61
+        case .mode22:
+            return 0x62
+        case .mode23:
+            return 0x63
+        default:
+            return UInt8(truncatingIfNeeded: 0x40 + Int(strtoul(rawValue, nil, 16)))
+        }
+    }
 }

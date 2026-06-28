@@ -198,15 +198,6 @@ final class BruteForceScanner: ObservableObject {
         "82F111"
     ]
     
-    private struct ScanModeConfiguration {
-        let mode: OBDMode
-        let startPID: Int
-        let endPID: Int
-        let pidWidth: Int
-        
-        static let mode01 = Self(mode: .mode01, startPID: 0x00, endPID: 0xFF, pidWidth: 2)
-        static let mode21 = Self(mode: .mode21, startPID: 0x00, endPID: 0xFF, pidWidth: 2)
-    }
 
     func stop() {
         shouldStop = true
@@ -214,11 +205,14 @@ final class BruteForceScanner: ObservableObject {
     }
     
     // MARK: - Generic Scan Implementation
-    private func scan(_ config: ScanModeConfiguration) async {
-        let scanMode = config.mode
-        let startPID = config.startPID
-        let endPID = config.endPID
-        let pidWidth = config.pidWidth
+    private func scan(
+        mode: OBDMode,
+        startPID: Int? = nil,
+        endPID: Int? = nil
+    ) async {
+        let pidWidth = mode.pidDigits
+        let startPID = startPID ?? mode.defaultStartPID
+        let endPID = endPID ?? mode.defaultEndPID
         
         loadResumePoint()
         if currentHeaderIndex >= headers.count {
@@ -256,7 +250,7 @@ final class BruteForceScanner: ObservableObject {
                 }
 
                 let pid = String(format: "%0*X", pidWidth, currentPID)
-                let req = scanMode.rawValue + pid
+                let req = mode.rawValue + pid
                 scanStatus.currentRequest = req
                 if !BluetoothManager.shared.isConnected {
                     guard await ensureConnection(header: header) else {
@@ -272,7 +266,7 @@ final class BruteForceScanner: ObservableObject {
                     resetTimeoutCounter(&consecutiveTimeouts)
                     appendResponse(
                         header: header,
-                        mode: scanMode.rawValue,
+                        mode: mode.rawValue,
                         pid: String(req.dropFirst(2)),
                         request: req,
                         response: response.raw
@@ -311,39 +305,20 @@ final class BruteForceScanner: ObservableObject {
         finishScan(completed: true)
     }
 
-    // MARK: SCAN MODE 01
-    func scanMode01() {
-        Task {
-            ScanStatistics.shared.reset()
-            await scan(.mode01)
-        }
-    }
-    
-    // MARK: SCAN MODE 21
-
-    func scanMode21() {
-        Task {
-            await scan(.mode21)
-        }
-    }
-    
-    // MARK: SCAN MODE 22
-
-    func scanMode22(
-        start: UInt16 = 0x0000,
-        end: UInt16 = 0xFFFF
+    func scan(
+        mode: OBDMode,
+        startPID: UInt16? = nil,
+        endPID: UInt16? = nil
     ) {
         Task {
             await scan(
-                ScanModeConfiguration(
-                    mode: .mode22,
-                    startPID: Int(start),
-                    endPID: Int(end),
-                    pidWidth: 4
-                )
+                mode: mode,
+                startPID: startPID.map(Int.init),
+                endPID: endPID.map(Int.init)
             )
         }
     }
+    
     func appendResponse(
         header: String,
         mode: String,

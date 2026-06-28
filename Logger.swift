@@ -43,10 +43,12 @@ final class Logger: ObservableObject {
             return
         }
         console(text)
-        lines.append(LogLine(
+        let line = LogLine(
             text: text,
             color: color
-        ))
+        )
+
+        lines.append(line)
         if lines.count > maxLines {
             lines.removeFirst(
                 lines.count - maxLines
@@ -98,12 +100,11 @@ final class Logger: ObservableObject {
         lines.removeAll()
     }
     func saveLog() throws -> URL {
-        let url =
-        FileManager.default
+        let filename = "rawTraffic.log"
+
+        let url = FileManager.default
             .temporaryDirectory
-            .appendingPathComponent(
-                "rawTraffic.log"
-            )
+            .appendingPathComponent(filename)
         let text = lines
             .map(\.text)
             .joined(separator: "\r\n")
