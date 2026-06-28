@@ -10,7 +10,7 @@ import SwiftUI
 struct ContentView: View {
 
     @State private var header = "81F111"
-    @State private var selectedMode = 1
+    @State private var selectedMode: OBDMode = .mode01    
     @State private var startPID = "0000"
     @State private var endPID = "FFFF"
     @State private var delay = 100.0

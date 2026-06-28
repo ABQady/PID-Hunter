@@ -16,14 +16,14 @@ struct TerminalView: View {
     @State private var programmaticScroll = false
     @State private var search = ""
     @State private var shouldAutoScroll = true
-    @Binding var selectedMode: Int
+    @Binding var selectedMode: OBDMode
     @Binding var header: String
     @Binding var startPID: String
     @Binding var endPID: String
     @State private var manualCommand = ""
 
     public init(
-        selectedMode: Binding<Int>,
+        selectedMode: Binding<OBDMode>,
         header: Binding<String>,
         startPID: Binding<String>,
         endPID: Binding<String>
@@ -333,7 +333,7 @@ struct TerminalView: View {
             //selectedTab = 1
             
             switch selectedMode {
-            case 1:
+            case .mode01:
                 Task {
                     
                     let ok = await Preflight.shared.run(
@@ -347,7 +347,7 @@ struct TerminalView: View {
                     ScanStatistics.shared.start()
                     brute.scanMode01()
                 }
-            case 21:
+            case .mode21:
                 Task {
                     
                     let ok = await Preflight.shared.run(
@@ -361,7 +361,7 @@ struct TerminalView: View {
                     ScanStatistics.shared.start()
                     brute.scanMode21()
                 }
-            default:
+            case .mode22:
                 let startText = startPID
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                     .uppercased()
@@ -398,6 +398,8 @@ struct TerminalView: View {
                     Logger.shared.info("Invalid PID range")
                     
                 }
+            default:
+                Logger.shared.info("Mode \(selectedMode.rawValue) is not implemented yet")
             }
     }
     private func formatETA(_ seconds: TimeInterval) -> String {

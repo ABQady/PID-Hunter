@@ -24,7 +24,7 @@ struct SettingsView: View {
     private var maxConsecutiveTimeouts = 15
 
     @Binding var header: String
-    @Binding var selectedMode: Int
+    @Binding var selectedMode: OBDMode
     @Binding var startPID: String
     @Binding var endPID: String
     @Binding var delay: Double
@@ -65,13 +65,19 @@ struct SettingsView: View {
                     Text("OBD Mode")
                         .font(.title3)
                         .foregroundStyle(.secondary)
-                    
+
                     Picker("Mode", selection: $selectedMode) {
-                        Text("01").tag(1)
-                        Text("21").tag(21)
-                        Text("22").tag(22)
+                        ForEach(OBDMode.supportedScanModes) { mode in
+                            Text(mode.rawValue)
+                                .help(mode.title)
+                                .tag(mode)
+                        }
                     }
                     .pickerStyle(.segmented)
+
+                    Label(selectedMode.title, systemImage: "info.circle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     
                     Text("PID Range")
                         .font(.title3)

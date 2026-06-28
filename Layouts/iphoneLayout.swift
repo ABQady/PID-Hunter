@@ -9,7 +9,7 @@ import SwiftUI
 struct iPhoneLayout: View {
 
     @Binding var header: String
-    @Binding var selectedMode: Int
+    @Binding var selectedMode: OBDMode
     @Binding var startPID: String
     @Binding var endPID: String
     @Binding var delay: Double

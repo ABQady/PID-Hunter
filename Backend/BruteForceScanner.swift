@@ -199,13 +199,13 @@ final class BruteForceScanner: ObservableObject {
     ]
     
     private struct ScanModeConfiguration {
-        let mode: String
+        let mode: OBDMode
         let startPID: Int
         let endPID: Int
         let pidWidth: Int
         
-        static let mode01 = Self(mode: "01", startPID: 0x00, endPID: 0xFF, pidWidth: 2)
-        static let mode21 = Self(mode: "21", startPID: 0x00, endPID: 0xFF, pidWidth: 2)
+        static let mode01 = Self(mode: .mode01, startPID: 0x00, endPID: 0xFF, pidWidth: 2)
+        static let mode21 = Self(mode: .mode21, startPID: 0x00, endPID: 0xFF, pidWidth: 2)
     }
 
     func stop() {
@@ -215,7 +215,7 @@ final class BruteForceScanner: ObservableObject {
     
     // MARK: - Generic Scan Implementation
     private func scan(_ config: ScanModeConfiguration) async {
-        let mode = config.mode
+        let scanMode = config.mode
         let startPID = config.startPID
         let endPID = config.endPID
         let pidWidth = config.pidWidth
@@ -256,7 +256,7 @@ final class BruteForceScanner: ObservableObject {
                 }
 
                 let pid = String(format: "%0*X", pidWidth, currentPID)
-                let req = mode + pid
+                let req = scanMode.rawValue + pid
                 scanStatus.currentRequest = req
                 if !BluetoothManager.shared.isConnected {
                     guard await ensureConnection(header: header) else {
@@ -272,7 +272,7 @@ final class BruteForceScanner: ObservableObject {
                     resetTimeoutCounter(&consecutiveTimeouts)
                     appendResponse(
                         header: header,
-                        mode: String(req.prefix(2)),
+                        mode: scanMode.rawValue,
                         pid: String(req.dropFirst(2)),
                         request: req,
                         response: response.raw
@@ -336,7 +336,7 @@ final class BruteForceScanner: ObservableObject {
         Task {
             await scan(
                 ScanModeConfiguration(
-                    mode: "22",
+                    mode: .mode22,
                     startPID: Int(start),
                     endPID: Int(end),
                     pidWidth: 4
