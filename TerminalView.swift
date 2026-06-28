@@ -16,6 +16,7 @@ struct TerminalView: View {
     @State private var programmaticScroll = false
     @State private var search = ""
     @State private var shouldAutoScroll = true
+    @State private var showDisconnectConfirmation = false
     @Binding var selectedMode: OBDMode
     @Binding var header: String
     @Binding var startPID: String
@@ -55,12 +56,31 @@ struct TerminalView: View {
                 }
                 Spacer()
                 Button {
-                    bt.startScan()
+                    if bt.isConnected {
+                        showDisconnectConfirmation = true
+                    } else {
+                        bt.startScan()
+                    }
                 } label: {
-                    Label("Scan BLE", systemImage: "dot.radiowaves.left.and.right")
+                    Label(
+                        bt.isConnected ? "Disconnect" : "Scan BLE",
+                        systemImage: bt.isConnected ? "bolt.horizontal.circle.fill" : "dot.radiowaves.left.and.right"
+                    )
                 }
                 .buttonStyle(.bordered)
-                .disabled(bt.isScanning)
+                .disabled(!bt.isConnected && bt.isScanning)
+                .confirmationDialog(
+                    "Disconnect from ELM327?",
+                    isPresented: $showDisconnectConfirmation,
+                    titleVisibility: .visible
+                ) {
+                    Button("Disconnect", role: .destructive) {
+                        bt.disconnect()
+                    }
+                    Button("Cancel", role: .cancel) { }
+                } message: {
+                    Text("Are you sure you want to disconnect from the connected BLE adapter?")
+                }
             }
             .padding()
             .background(.thinMaterial)
