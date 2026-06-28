@@ -3,6 +3,7 @@
 //  PIDHunter by Ahmed AlQady
 //
 import Foundation
+import SwiftUI
 struct ScanResult: Codable, Identifiable {
 
     var id: String {
@@ -29,9 +30,17 @@ final class BruteForceScanner: ObservableObject {
     @Published var delayMs: Double = 100
     @Published private(set) var scanStatus = ScanStatus()
     
+    @AppStorage("requestTimeout")
+    private var requestTimeout = 2.0
+
+    @AppStorage("enableAutoPreflight")
+    private var enableAutoPreflight = true
+
+    @AppStorage("maxConsecutiveTimeouts")
+    private var maxConsecutiveTimeouts = 15
+    
     private var shouldStop = false
     private var seen = Set<String>()
-    private let requestTimeout: TimeInterval = 2.0
     
     private var currentHeaderIndex = 0
     private var currentPID = 0
@@ -141,7 +150,12 @@ final class BruteForceScanner: ObservableObject {
         await BluetoothManager.shared.reconnect()
         try? await Task.sleep(for: .milliseconds(500))
         
-        let ok = await Preflight.shared.run(header: header)
+        let ok: Bool
+        if enableAutoPreflight {
+            ok = await Preflight.shared.run(header: header)
+        } else {
+            ok = BluetoothManager.shared.isConnected
+        }
 
         guard ok else {
             Logger.shared.error("❌ Reconnect failed")
@@ -161,14 +175,19 @@ final class BruteForceScanner: ObservableObject {
 
         try? await Task.sleep(for: .milliseconds(Int(delayMs)))
     }
+    
+    private func resetTimeoutCounter(_ counter: inout Int) {
+        counter = 0
+    }
 
     @discardableResult
-    private func handleConnectionLoss(header: String) async -> Bool {
+    private func handleConnectionLoss(header: String, consecutiveTimeouts: inout Int) async -> Bool {
         Logger.shared.error("Connection lost")
 
         guard await ensureConnection(header: header) else {
             return false
         }
+        resetTimeoutCounter(&consecutiveTimeouts)
 
         return true
     }
@@ -225,6 +244,7 @@ final class BruteForceScanner: ObservableObject {
         ScanStatistics.shared.totalRequests = total
 
         beginScan()
+        var consecutiveTimeouts = 0
 
         while currentHeaderIndex < headers.count {
             let header = headers[currentHeaderIndex]
@@ -247,8 +267,9 @@ final class BruteForceScanner: ObservableObject {
                 do {
                     let response = try await BluetoothManager.shared.sendAndWait(
                         req,
-                        timeout: .seconds(2)
+                        timeout: .seconds(requestTimeout)
                     )
+                    resetTimeoutCounter(&consecutiveTimeouts)
                     appendResponse(
                         header: header,
                         mode: String(req.prefix(2)),
@@ -260,10 +281,18 @@ final class BruteForceScanner: ObservableObject {
                         try? await Task.sleep(for: .milliseconds(Int(delayMs)))
                     }
                 } catch BluetoothManager.BluetoothError.timeout {
+                    consecutiveTimeouts += 1
+
+                    if consecutiveTimeouts >= maxConsecutiveTimeouts {
+                        Logger.shared.error("Consecutive timeout limit (\(maxConsecutiveTimeouts)) reached. Stopping scan.")
+                        ScanStatistics.shared.finish()
+                        finishScan(completed: false)
+                        return
+                    }
                     await handleTimeout()
                 } catch {
                     if !BluetoothManager.shared.isConnected {
-                        guard await handleConnectionLoss(header: header) else {
+                        guard await handleConnectionLoss(header: header, consecutiveTimeouts: &consecutiveTimeouts) else {
                             continue
                         }
                         continue

@@ -14,6 +14,15 @@ struct SettingsView: View {
     @AppStorage("enableDebugLogging")
     private var enableDebugLogging = false
 
+    @AppStorage("requestTimeout")
+    private var requestTimeout = 2.0
+
+    @AppStorage("enableAutoPreflight")
+    private var enableAutoPreflight = true
+
+    @AppStorage("maxConsecutiveTimeouts")
+    private var maxConsecutiveTimeouts = 15
+
     @Binding var header: String
     @Binding var selectedMode: Int
     @Binding var startPID: String
@@ -98,6 +107,46 @@ struct SettingsView: View {
                         in: 50...1000,
                         step: 10
                     )
+                    
+                    Divider()
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Request Timeout: \(requestTimeout, specifier: "%.1f") s")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+
+                        Slider(
+                            value: $requestTimeout,
+                            in: 0.5...5.0,
+                            step: 0.5
+                        )
+                    }
+
+                    Divider()
+
+                    Stepper(value: $maxConsecutiveTimeouts, in: 1...100) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Max Consecutive Timeouts")
+                                .font(.headline)
+
+                            Text("Stop scan after \(maxConsecutiveTimeouts) consecutive request timeouts.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    Divider()
+
+                    Toggle(isOn: $enableAutoPreflight) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Label("Auto Preflight", systemImage: "checklist")
+                                .font(.headline)
+
+                            Text("Automatically initialize the ELM327 before each scan.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                     
                     Divider()
                     
