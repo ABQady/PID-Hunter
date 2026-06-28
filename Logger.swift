@@ -4,6 +4,11 @@
 import Foundation
 import SwiftUI
 
+enum LogLevel {
+    case user
+    case debug
+}
+
 struct LogLine: Identifiable {
     let id = UUID()
     let text: String
@@ -15,6 +20,8 @@ final class Logger: ObservableObject {
     static let shared = Logger()
 
     @Published var lines: [LogLine] = []
+    @AppStorage("enableDebugLogging")
+    private var enableDebugLogging = false
     private let maxLines = 5000
     private let formatter: DateFormatter = {
         let f = DateFormatter()
@@ -29,9 +36,13 @@ final class Logger: ObservableObject {
     }
     private func append(
         _ text: String,
-        color: Color
+        color: Color,
+        level: LogLevel = .user
     ) {
-        print(text)
+        guard level == .user || enableDebugLogging else {
+            return
+        }
+        console(text)
         lines.append(LogLine(
             text: text,
             color: color
@@ -46,31 +57,43 @@ final class Logger: ObservableObject {
         _ command: String
     ) {
         append(
-            "\(stamp()) >> \(command)", color: .blue)
+            "\(stamp()) >> \(command)", color: .blue, level: .debug)
     }
     func rx(
         _ response: String
     ) {
         append(
-            "\(stamp()) << \(response)",color: .green)
+            "\(stamp()) << \(response)",color: .green, level: .debug)
     }
     func info(
         _ text: String
     ) {
         append(
-            "\(stamp()) [INFO] \(text)",color: .primary)
+            "\(stamp()) [INFO] \(text)",color: .primary, level: .user)
     }
     func success(_ text: String) {
-        append("\(stamp()) ✅ \(text)", color: .mint)
+        append("\(stamp()) ✅ \(text)", color: .mint, level: .user)
     }
 
     func warning(_ text: String) {
-        append("\(stamp()) ⚠️ \(text)", color: .orange)
+        append("\(stamp()) ⚠️ \(text)", color: .orange, level: .user)
     }
 
     func error(_ text: String) {
-        append("\(stamp()) ❌ \(text)", color: .red)
+        append("\(stamp()) ❌ \(text)", color: .red, level: .user)
     }
+
+    func debug(_ text: String) {
+        append("\(stamp()) [DEBUG] \(text)",
+               color: .secondary,
+               level: .debug)
+    }
+
+    func console(_ text: String) {
+        guard enableDebugLogging else { return }
+        print(text)
+    }
+
     func clear() {
         lines.removeAll()
     }

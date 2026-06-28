@@ -11,6 +11,8 @@ import UIKit
 
 struct SettingsView: View {
     @ObservedObject private var brute = BruteForceScanner.shared
+    @AppStorage("enableDebugLogging")
+    private var enableDebugLogging = false
 
     @Binding var header: String
     @Binding var selectedMode: Int
@@ -96,6 +98,20 @@ struct SettingsView: View {
                         in: 50...1000,
                         step: 10
                     )
+                    
+                    Divider()
+                    
+                    Toggle(isOn: $enableDebugLogging) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Label("Enable Debug Logging", systemImage: "ladybug.fill")
+                                .font(.headline)
+
+                            Text("Show internal parser, assembler and Bluetooth diagnostic messages.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .padding(.leading, 28)
+                        }
+                    }
                 }
                 .textFieldStyle(.roundedBorder)
                 .padding()

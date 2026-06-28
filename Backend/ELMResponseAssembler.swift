@@ -26,8 +26,8 @@ final class ELMResponseAssembler {
         if !buffer.isEmpty &&
             now.timeIntervalSince(lastChunkTime) > timeout {
 
-            Logger.shared.warning("Assembler Timeout")
-            Logger.shared.warning("Discarded (\(buffer.count) bytes)")
+            Logger.shared.debug("Assembler timeout")
+            Logger.shared.debug("Discarded buffer (\(buffer.count) bytes)")
             buffer.removeAll()
         }
 
@@ -35,8 +35,8 @@ final class ELMResponseAssembler {
         buffer += chunk
         
         guard buffer.count <= maxBufferSize else {
-            Logger.shared.warning("Assembler Overflow")
-            Logger.shared.warning("Discarded (\(buffer.count) bytes)")
+            Logger.shared.debug("Assembler buffer overflow")
+            Logger.shared.debug("Discarded buffer (\(buffer.count) bytes)")
             buffer.removeAll()
             return []
         }
@@ -58,7 +58,7 @@ final class ELMResponseAssembler {
             }
        }
         if !responses.isEmpty {
-            Logger.shared.success(
+            Logger.shared.debug(
                 "Assembler completed \(responses.count) response(s)"
             )
         }

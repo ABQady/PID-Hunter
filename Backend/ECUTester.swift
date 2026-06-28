@@ -37,7 +37,7 @@ final class ECUTester {
             return
         }
 
-        Logger.shared.success("ECU response: \(response.raw)")
+        Logger.shared.info("ECU response: \(response.raw)")
 
         Logger.shared.info("===== ECU TEST END =====")
     }

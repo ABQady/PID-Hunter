@@ -106,7 +106,7 @@ final class BluetoothManager: NSObject, ObservableObject {
                     Logger.shared.warning("Scan timed out")
                 }
             }
-        print("Scanning...")
+        Logger.shared.console("Scanning...")
         Logger.shared.info("Scanning...")
     }
     func stopScan() {
@@ -158,12 +158,12 @@ final class BluetoothManager: NSObject, ObservableObject {
         else {
             throw BluetoothError.disconnected
         }
-        print("TX UUID =", tx.uuid.uuidString)
-        print("TX Props =", tx.properties)
-        print(">> \(command)")
+        Logger.shared.console("TX UUID = \(tx.uuid.uuidString)")
+        Logger.shared.console("TX Props = \(tx.properties)")
+        Logger.shared.console(">> \(command)")
         Logger.shared.tx(command)
-        Logger.shared.info("TX UUID = \(tx.uuid.uuidString)")
-        Logger.shared.info("TX Props = \(tx.properties)")
+        Logger.shared.debug("TX UUID = \(tx.uuid.uuidString)")
+        Logger.shared.debug("TX Props = \(tx.properties)")
         lastSendTime = Date()
         let type: CBCharacteristicWriteType =
         tx.properties.contains(.write)
@@ -174,7 +174,7 @@ final class BluetoothManager: NSObject, ObservableObject {
             String(format: "%02X", $0)
         }.joined(separator: " ")
         
-        Logger.shared.info("TX HEX = \(hex)")
+        Logger.shared.debug("TX HEX = \(hex)")
         
         status = .waitingResponse
         peripheral.writeValue(
@@ -199,7 +199,7 @@ final class BluetoothManager: NSObject, ObservableObject {
         }
 
         return try await withCheckedThrowingContinuation { continuation in
-            Logger.shared.warning("📌 Registering continuation")
+            Logger.shared.debug("📌 Registering continuation")
             let requestID = UUID()
             if !command.uppercased().hasPrefix("AT") {
                 RequestResponseMatcher.shared.enqueue(
@@ -228,7 +228,7 @@ final class BluetoothManager: NSObject, ObservableObject {
             pendingRequest?.timeoutTask = timeoutTask
             do {
                 try send(command)
-                Logger.shared.warning("📤 Command sent successfully")
+                Logger.shared.debug("📤 Command sent successfully")
             } catch {
                 if !command.uppercased().hasPrefix("AT") {
                     _ = RequestResponseMatcher.shared.dequeue()
@@ -341,22 +341,22 @@ extension BluetoothManager:
         Task { @MainActor in
             switch central.state {
             case .poweredOn:
-                print("Bluetooth Ready")
+                Logger.shared.console("Bluetooth Ready")
                 Logger.shared.success("Bluetooth Ready")
             case .poweredOff:
-                print("Bluetooth Off")
+                Logger.shared.console("Bluetooth Off")
                 Logger.shared.error("Bluetooth Off")
             case .resetting:
-                print("Bluetooth Resetting")
+                Logger.shared.console("Bluetooth Resetting")
                 Logger.shared.warning("Bluetooth Restarting")
             case .unsupported:
-                print("Bluetooth Unsupported")
+                Logger.shared.console("Bluetooth Unsupported")
                 Logger.shared.error("Bluetooth Unsupported")
             case .unauthorized:
-                print("Bluetooth Unauthorized")
+                Logger.shared.console("Bluetooth Unauthorized")
                 Logger.shared.error("Bluetooth Unauthorized")
             default:
-                print("Bluetooth Unknown")
+                Logger.shared.console("Bluetooth Unknown")
                 Logger.shared.warning("Bluetooth Unknown")
             }
         }
@@ -378,7 +378,7 @@ extension BluetoothManager:
                     peripheral
                 )
                 if let name = peripheral.name, !name.isEmpty {
-                    print("Found:", name)
+                    Logger.shared.console("Found: \(name)")
                 }
                 if let name = peripheral.name?.lowercased() {
                     Logger.shared.success("Found: \(name)")
@@ -386,7 +386,7 @@ extension BluetoothManager:
                     if elmPeripheral == nil &&
                         (name.contains("elm") || name.contains("obd")) {
                         
-                        print("🚀 Auto connecting to \(name)")
+                        Logger.shared.console("🚀 Auto connecting to \(name)")
                         stopScan()
                         status = .connecting
                         connect(to: peripheral)
@@ -400,7 +400,7 @@ extension BluetoothManager:
         didConnect peripheral: CBPeripheral
     ) {
         Task { @MainActor in
-            print("Connected to \(peripheral.name ?? "Unknown")")
+            Logger.shared.console("Connected to \(peripheral.name ?? "Unknown")")
             Logger.shared.success("Connected to \(peripheral.name ?? "Unknown")")
             stopScan()
             peripheral.discoverServices(nil)
@@ -432,7 +432,7 @@ extension BluetoothManager:
             RequestResponseMatcher.shared.clear()
             ECUInfo.shared.clear()
             
-            print("Disconnected")
+            Logger.shared.console("Disconnected")
             if let error {
                 Logger.shared.error("Disconnected: \(error.localizedDescription)")
             } else {
@@ -464,8 +464,8 @@ extension BluetoothManager:
                 return
             }
             for service in services {
-                print("===== SERVICE =====")
-                print(service.uuid.uuidString)
+                Logger.shared.console("===== SERVICE =====")
+                Logger.shared.console(service.uuid.uuidString)
                 Logger.shared.success("===== SERVICE =====")
                 Logger.shared.success(service.uuid.uuidString)
                 peripheral.discoverCharacteristics(nil, for: service)
@@ -494,13 +494,13 @@ extension BluetoothManager:
                 return
             }
             for c in chars {
-                print("SERVICE :", service.uuid.uuidString)
-                print("CHAR    :", c.uuid.uuidString)
-                print("PROPS   :", c.properties)
+                Logger.shared.console("SERVICE : \(service.uuid.uuidString)")
+                Logger.shared.console("CHAR    : \(c.uuid.uuidString)")
+                Logger.shared.console("PROPS   : \(c.properties)")
                 
-                Logger.shared.info("SERVICE: \(service.uuid.uuidString)")
-                Logger.shared.info("CHAR: \(c.uuid.uuidString)")
-                Logger.shared.info("PROPS: \(c.properties)")
+                Logger.shared.debug("SERVICE: \(service.uuid.uuidString)")
+                Logger.shared.debug("CHAR: \(c.uuid.uuidString)")
+                Logger.shared.debug("PROPS: \(c.properties)")
                 
                 // RX
                 if c.uuid.uuidString.uppercased() == "FFF1" {
@@ -616,12 +616,12 @@ extension BluetoothManager:
             let responses = ELMResponseAssembler.shared.append(chunk)
             guard !responses.isEmpty else {
                 
-                Logger.shared.info("RX Chunk (\(value.count) bytes)")
+                Logger.shared.debug("RX Chunk (\(value.count) bytes)")
                 return
             }
             for response in responses {
-                Logger.shared.warning("🔵 ENTER didUpdateValueFor loop")
-                Logger.shared.warning("🔵 Parsed type = \(response.type)")
+                Logger.shared.debug("🔵 ENTER didUpdateValueFor loop")
+                Logger.shared.debug("🔵 Parsed type = \(response.type)")
                 let raw = response.raw
                 
                 let upper = raw.uppercased()
@@ -637,7 +637,7 @@ extension BluetoothManager:
                     ECUInfo.shared.protocolName = raw
                 }
 
-                Logger.shared.success("RX Complete (\(responses.count) response(s))")
+                Logger.shared.debug("RX Complete (\(responses.count) response(s))")
                 Logger.shared.rx(raw)
 
                 rxCount += 1
@@ -649,9 +649,9 @@ extension BluetoothManager:
                     .map { String(format: "%02X", $0) }
                     .joined(separator: " ")
 
-                print("<< TEXT:", raw)
-                print("<< HEX :", hex)
-                Logger.shared.success("RX HEX = \(hex)")
+                Logger.shared.console("<< TEXT: \(raw)")
+                Logger.shared.console("<< HEX : \(hex)")
+                Logger.shared.debug("RX HEX = \(hex)")
                                 
                 // removed guard response.type != .unknown block
 
@@ -666,8 +666,8 @@ extension BluetoothManager:
                     continue
                 }
                 
-                Logger.shared.warning("🔵 Response Type = \(response.type)")
-                Logger.shared.warning(
+                Logger.shared.debug("🔵 Response Type = \(response.type)")
+                Logger.shared.debug(
                     "🔵 Continuation = \(pendingRequest == nil ? "nil" : "exists")"
                 )
 
@@ -680,7 +680,7 @@ extension BluetoothManager:
                 pending.timeoutTask?.cancel()
                 pendingRequest = nil
                 pending.continuation.resume(returning: response)
-                Logger.shared.success("🟢 Continuation RESUMED")
+                Logger.shared.debug("🟢 Continuation RESUMED")
             }
         }
     }
@@ -696,13 +696,11 @@ extension BluetoothManager:
                 return
             }
 
-            Logger.shared.info(
+            Logger.shared.debug(
                 "Notify \(characteristic.uuid.uuidString): \(characteristic.isNotifying)"
             )
 
-            print(
-                "Notify \(characteristic.uuid.uuidString): \(characteristic.isNotifying)"
-            )
+            Logger.shared.console("Notify \(characteristic.uuid.uuidString): \(characteristic.isNotifying)")
             
             guard characteristic.uuid.uuidString.uppercased() == "FFF1" else {
                 return
