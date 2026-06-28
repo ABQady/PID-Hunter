@@ -153,115 +153,140 @@ final class BruteForceScanner: ObservableObject {
         
         return true
     }
+
+    private func handleTimeout() async {
+        Logger.shared.warning("⏰ Request timeout")
+
+        guard delayMs > 0 else { return }
+
+        try? await Task.sleep(for: .milliseconds(Int(delayMs)))
+    }
+
+    @discardableResult
+    private func handleConnectionLoss(header: String) async -> Bool {
+        Logger.shared.error("Connection lost")
+
+        guard await ensureConnection(header: header) else {
+            return false
+        }
+
+        return true
+    }
     
     var headers = [
         "81F111",
         "80F111",
         "82F111"
     ]
+    
+    private struct ScanModeConfiguration {
+        let mode: String
+        let startPID: Int
+        let endPID: Int
+        let pidWidth: Int
+        
+        static let mode01 = Self(mode: "01", startPID: 0x00, endPID: 0xFF, pidWidth: 2)
+        static let mode21 = Self(mode: "21", startPID: 0x00, endPID: 0xFF, pidWidth: 2)
+    }
 
     func stop() {
         shouldStop = true
         ScanStatistics.shared.finish()
     }
     
+    // MARK: - Generic Scan Implementation
+    private func scan(_ config: ScanModeConfiguration) async {
+        let mode = config.mode
+        let startPID = config.startPID
+        let endPID = config.endPID
+        let pidWidth = config.pidWidth
+        
+        loadResumePoint()
+        if currentHeaderIndex >= headers.count {
+            currentHeaderIndex = 0
+        }
+        // Clamp currentPID to range
+        if currentPID < startPID || currentPID > endPID {
+            currentPID = startPID
+        }
+
+        // Clear or load results as needed
+        if currentHeaderIndex == 0 && currentPID == startPID {
+            clearResults()
+        } else {
+            loadResults()
+        }
+
+        let count = endPID - startPID + 1
+        let total = headers.count * count
+        var done = currentHeaderIndex * count + (currentPID - startPID)
+
+        ScanStatistics.shared.reset()
+        ScanStatistics.shared.totalRequests = total
+
+        beginScan()
+
+        while currentHeaderIndex < headers.count {
+            let header = headers[currentHeaderIndex]
+            ELM327.shared.setHeader(header)
+            while currentPID <= endPID {
+                if shouldStop {
+                    finishScan(completed: false)
+                    return
+                }
+
+                let pid = String(format: "%0*X", pidWidth, currentPID)
+                let req = mode + pid
+                scanStatus.currentRequest = req
+                if !BluetoothManager.shared.isConnected {
+                    guard await ensureConnection(header: header) else {
+                        continue
+                    }
+                    continue
+                }
+                do {
+                    let response = try await BluetoothManager.shared.sendAndWait(
+                        req,
+                        timeout: .seconds(2)
+                    )
+                    appendResponse(
+                        header: header,
+                        mode: String(req.prefix(2)),
+                        pid: String(req.dropFirst(2)),
+                        request: req,
+                        response: response.raw
+                    )
+                    if delayMs > 0 {
+                        try? await Task.sleep(for: .milliseconds(Int(delayMs)))
+                    }
+                } catch BluetoothManager.BluetoothError.timeout {
+                    await handleTimeout()
+                } catch {
+                    if !BluetoothManager.shared.isConnected {
+                        guard await handleConnectionLoss(header: header) else {
+                            continue
+                        }
+                        continue
+                    }
+                }
+                done += 1
+                currentPID += 1
+                saveResumePoint()
+                scanStatus.progress = Double(done) / Double(total)
+            }
+            currentHeaderIndex += 1
+            currentPID = startPID
+            saveResumePoint()
+        }
+        ScanStatistics.shared.finish()
+        finishScan(completed: true)
+    }
+
     // MARK: SCAN MODE 01
-    
     func scanMode01() {
         Task {
             ScanStatistics.shared.reset()
-            loadResumePoint()
-            if currentHeaderIndex >= headers.count {
-                currentHeaderIndex = 0
-                currentPID = 0
-            }
-//            ELM327.shared.send("ATPC")
-//            try? await Task.sleep(for: .milliseconds(200))
-            
-            if currentHeaderIndex == 0 && currentPID == 0 {
-                clearResults()
-            } else {
-                loadResults()
-            }
-            
-            let total =
-            headers.count * 256
-            
-            ScanStatistics.shared.reset()
-            ScanStatistics.shared.totalRequests = total
-            
-            beginScan()
-            
-            var done =
-                currentHeaderIndex * 256 +
-                currentPID
-            while currentHeaderIndex < headers.count {
-
-                let header = headers[currentHeaderIndex]
-
-                ELM327.shared.setHeader(header)
-
-                while currentPID <= 0x00FF {
-                    if shouldStop {
-                        finishScan(completed: false)
-                        return
-                    }
-
-                    let req = String(format: "01%02X", UInt8(currentPID))
-                    scanStatus.currentRequest = req
-                    if !BluetoothManager.shared.isConnected {
-                        guard await ensureConnection(header: header) else {
-                            continue
-                        }
-
-                        continue
-                    }
-                    do {
-                        let response = try await BluetoothManager.shared.sendAndWait(
-                            req,
-                            timeout: .seconds(2)
-                        )
-                        appendResponse(
-                            header: header,
-                            mode: String(req.prefix(2)),
-                            pid: String(req.dropFirst(2)),
-                            request: req,
-                            response: response.raw
-                        )
-                        if delayMs > 0 {
-                            try? await Task.sleep(for: .milliseconds(Int(delayMs)))
-                        }
-                    } catch BluetoothManager.BluetoothError.timeout {
-                        Logger.shared.warning("⏰ Request timeout")
-                        if delayMs > 0 {
-                            try? await Task.sleep(for: .milliseconds(Int(delayMs)))
-                        }
-                    } catch {
-                        if !BluetoothManager.shared.isConnected {
-                            Logger.shared.error("Connection lost")
-                            guard await ensureConnection(header: header) else {
-                                continue
-                            }
-                            continue
-                        }
-                    }
-                    done += 1
-                    currentPID += 1
-                    saveResumePoint()
-                    scanStatus.progress =
-                    Double(done)
-                    /
-                    Double(total)
-                    //try? await Task.sleep(
-                    //    nanoseconds: delay
-                    //)
-                }
-                currentHeaderIndex += 1
-                currentPID = 0
-                saveResumePoint()
-            }
-            ScanStatistics.shared.finish()
-            finishScan(completed: true)
+            await scan(.mode01)
         }
     }
     
@@ -269,94 +294,7 @@ final class BruteForceScanner: ObservableObject {
 
     func scanMode21() {
         Task {
-            loadResumePoint()
-            if currentHeaderIndex >= headers.count {
-                currentHeaderIndex = 0
-                currentPID = 0
-            }
-//            ELM327.shared.send("ATPC")
-//            try? await Task.sleep(for: .milliseconds(200))
-            if currentHeaderIndex == 0 && currentPID == 0 {
-                clearResults()
-            } else {
-                loadResults()
-            }
-            let total =
-            headers.count * 256
-            
-            ScanStatistics.shared.reset()
-            ScanStatistics.shared.totalRequests = total
-            
-            beginScan()
-            
-            var done =
-                currentHeaderIndex * 256 +
-                currentPID
-            while currentHeaderIndex < headers.count {
-
-                let header = headers[currentHeaderIndex]
-
-                ELM327.shared.setHeader(header)
-
-                while currentPID <= 0x00FF {
-
-                    if shouldStop {
-                        finishScan(completed: false)
-                        return
-                    }
-
-                    let req = String(format: "21%02X", UInt8(currentPID))
-                    
-                    scanStatus.currentRequest = req
-                    if !BluetoothManager.shared.isConnected {
-                        guard await ensureConnection(header: header) else {
-                            continue
-                        }
-                        continue
-                    }
-                    do {
-                        let response = try await BluetoothManager.shared.sendAndWait(
-                            req,
-                            timeout: .seconds(2)
-                        )
-                        appendResponse(
-                            header: header,
-                            mode: String(req.prefix(2)),
-                            pid: String(req.dropFirst(2)),
-                            request: req,
-                            response: response.raw
-                        )
-                        if delayMs > 0 {
-                            try? await Task.sleep(for: .milliseconds(Int(delayMs)))
-                        }
-                    } catch BluetoothManager.BluetoothError.timeout {
-                        Logger.shared.warning("⏰ Request timeout")
-                        if delayMs > 0 {
-                            try? await Task.sleep(for: .milliseconds(Int(delayMs)))
-                        }
-                    } catch {
-                        if !BluetoothManager.shared.isConnected {
-                            Logger.shared.error("Connection lost")
-                            guard await ensureConnection(header: header) else {
-                                continue
-                            }
-                            continue
-                        }
-                    }
-                    done += 1
-                    currentPID += 1
-                    saveResumePoint()
-                    scanStatus.progress =
-                    Double(done)
-                    /
-                    Double(total)
-                }
-                currentHeaderIndex += 1
-                currentPID = 0
-                saveResumePoint()
-            }
-            ScanStatistics.shared.finish()
-            finishScan(completed: true)
+            await scan(.mode21)
         }
     }
     
@@ -367,96 +305,14 @@ final class BruteForceScanner: ObservableObject {
         end: UInt16 = 0xFFFF
     ) {
         Task {
-            loadResumePoint()
-            
-            if currentHeaderIndex >= headers.count {
-                currentHeaderIndex = 0
-            }
-            
-            if currentPID < start || currentPID > end {
-                currentPID = Int(start)
-            }
-            
-//            ELM327.shared.send("ATPC")
-//            try? await Task.sleep(for: .milliseconds(200))
-            
-            if currentHeaderIndex == 0 && currentPID == Int(start) {
-                clearResults()
-            } else {
-                loadResults()
-            }
-            
-            beginScan()
-
-            let count = Int(end) - Int(start) + 1
-            let total = headers.count * count
-            var done =
-                currentHeaderIndex * count +
-                Int(currentPID - Int(start))
-            
-            ScanStatistics.shared.reset()
-            ScanStatistics.shared.totalRequests = total
-            
-            while currentHeaderIndex < headers.count {
-                let header = headers[currentHeaderIndex]
-                ELM327.shared.setHeader(header)
-                while currentPID <= Int(end) {
-                    if shouldStop {
-                        finishScan(completed: false)
-                        return
-                    }
-
-                    let req = String(format: "22%04X", UInt16(currentPID))
-                    scanStatus.currentRequest = req
-                    if !BluetoothManager.shared.isConnected {
-                        guard await ensureConnection(header: header) else {
-                            continue
-                        }
-                        continue
-                    }
-                    do {
-                        let response = try await BluetoothManager.shared.sendAndWait(
-                            req,
-                            timeout: .seconds(2)
-                        )
-                        appendResponse(
-                            header: header,
-                            mode: String(req.prefix(2)),
-                            pid: String(req.dropFirst(2)),
-                            request: req,
-                            response: response.raw
-                        )
-                        if delayMs > 0 {
-                            try? await Task.sleep(for: .milliseconds(Int(delayMs)))
-                        }
-                    } catch BluetoothManager.BluetoothError.timeout {
-                        Logger.shared.warning("⏰ Request timeout")
-                        if delayMs > 0 {
-                            try? await Task.sleep(for: .milliseconds(Int(delayMs)))
-                        }
-                    } catch {
-                        if !BluetoothManager.shared.isConnected {
-                            Logger.shared.error("Connection lost")
-                            guard await ensureConnection(header: header) else {
-                                continue
-                            }
-                            continue
-                        }
-                    }
-                    done += 1
-                    currentPID += 1
-                    saveResumePoint()
-                    scanStatus.progress =
-                    Double(done)
-                    /
-                    Double(total)
-                }
-                currentHeaderIndex += 1
-                currentPID = Int(start)
-                saveResumePoint()
-            }
-            ScanStatistics.shared.finish()
-            finishScan(completed: true)
+            await scan(
+                ScanModeConfiguration(
+                    mode: "22",
+                    startPID: Int(start),
+                    endPID: Int(end),
+                    pidWidth: 4
+                )
+            )
         }
     }
     func appendResponse(
@@ -523,4 +379,3 @@ final class BruteForceScanner: ObservableObject {
         return url
     }
 }
-
