@@ -151,38 +151,13 @@ struct PIDHunterTabView: View {
             }
     }
     
+    //////////////////// MAR: Settings Tab
+    
     private var settingsTab: some View {
         ScrollView {
             
             VStack(spacing: 18) {
                 
-                // MARK: Status
-                HStack {
-                    Circle()
-                        .fill(
-                            bt.isConnected
-                            ? Color.green
-                            : Color.red
-                        )
-                        .frame(width: 12, height: 12)
-                    Text(
-                        bt.isConnected
-                        ? "Connected"
-                        : "Disconnected"
-                    )
-                    Spacer()
-                    Button("Scan BLE") {
-                        bt.startScan()
-                    }
-                    .disabled(bt.isScanning)
-                }
-                .padding()
-                .background(.thinMaterial)
-                .clipShape(
-                    RoundedRectangle(
-                        cornerRadius: 18
-                    )
-                )
                 // MARK: Configuration
                 VStack(alignment: .leading, spacing: 12) {
                     
@@ -257,7 +232,7 @@ struct PIDHunterTabView: View {
                     )
                 )
                 
-                // MARK: Export
+/////////////////////////// MARK: Export
                 HStack(alignment: .center) {
                     Button("Export CSV") {
                         do {
@@ -276,25 +251,46 @@ struct PIDHunterTabView: View {
                         }
                     }
                 }
-                .buttonStyle(
-                    .bordered
-                )
+                .buttonStyle(.bordered)
                 .padding()
                 .background(.thinMaterial)
-                .clipShape(
-                    RoundedRectangle(
-                        cornerRadius: 18
-                    )
+                .clipShape(RoundedRectangle(cornerRadius: 18)
                 )
             }
             .padding()
         }
     }
     
-    
+/////////////////////////// MARK: TERMINAL TAB
     private var terminalTab: some View {
         
         VStack(spacing: 18) {
+            // MARK: Status
+            HStack {
+                Circle()
+                    .fill(bt.isConnected ? Color.green: Color.red)
+                    .frame(width: 12, height: 12)
+                Text(bt.isConnected ? "Connected" : "Disconnected")
+                Spacer()
+                if bt.isConnected {
+                    Text("Mode: \(selectedMode)")
+                        .monospacedDigit()
+                    Spacer()
+                    Text("Header: \(header)")
+                        .font(.system(.body, design: .monospaced))
+                }
+                Spacer()
+                Button {
+                    bt.startScan()
+                } label: {
+                    Label("Scan BLE", systemImage: "dot.radiowaves.left.and.right")
+                }
+                .buttonStyle(.bordered)
+                .disabled(bt.isScanning)
+            }
+            .padding()
+            .background(.thinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 18))
             // MARK: Progress
             VStack(alignment: .leading) {
                 Text("Progress")
@@ -349,11 +345,7 @@ struct PIDHunterTabView: View {
             }
             .padding()
             .background(.thinMaterial)
-            .clipShape(
-                RoundedRectangle(
-                    cornerRadius: 18
-                )
-            )
+            .clipShape(RoundedRectangle(cornerRadius: 18))
             if brute.hasResumePoint {
 
                 Text("Resume available")
@@ -361,8 +353,10 @@ struct PIDHunterTabView: View {
                     .foregroundStyle(.orange)
             }
             
-            // MARK: Actions
+/////////////////// MARK: Actions
+            
             HStack(alignment:.center, spacing: 10) {
+                Spacer()
                 Button(role: .destructive) {
                     guard bt.isConnected else {
                             Logger.shared.info("Connect to ELM first")
@@ -372,24 +366,27 @@ struct PIDHunterTabView: View {
                     Logger.shared.info("🗑️ Starting fresh scan")
                     startPIDScan()
                 } label: {
-                    Label("New Scan", systemImage: "trash")
+                    Label("Scan", systemImage: "dot.radiowaves.up.forward")
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.borderedProminent)
                 
-                Spacer()
-                
+                Button(role: .destructive)
+                {
+                    brute.stop()
+                } label: {
+                    Label("Stop",systemImage:"stop.fill")
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!brute.scanStatus.isScanning)
                 Button {
                     startPIDScan()
                 }
                 label: {
-                    Label(
-                        "Resume Scan",
-                        systemImage:
-                            "play.fill"
-                    )
+                    Label("Resume",systemImage: "play.fill")
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(brute.scanStatus.isScanning)
+                Spacer()
                 Button {
                     Task {
                         let cleanHeader = header
@@ -402,20 +399,9 @@ struct PIDHunterTabView: View {
                     Label("Test ECU", systemImage: "stethoscope")
                 }
                 .buttonStyle(.bordered)
-                
-                Button(
-                    role: .destructive
-                ) {
-                    brute.stop()
-                } label: {
-                    Label(
-                        "Stop",
-                        systemImage:
-                            "stop.fill"
-                    )
-                }
-                .disabled(!brute.scanStatus.isScanning)
             }
+            
+            
             // MARK: Live Log
             VStack(alignment: .leading) {
                 ScrollViewReader { proxy in
@@ -435,7 +421,7 @@ struct PIDHunterTabView: View {
                         Spacer()
                         
                         Text("TX \(bt.txCount) • RX \(bt.rxCount)")
-                            .font(.caption)
+                            .font(.headline)
                             .foregroundStyle(.secondary)
                         
                         Spacer()
@@ -533,7 +519,7 @@ struct PIDHunterTabView: View {
     }
     
     
-    
+/////////////////////////// MARK: Results TAB
     private var resultsTab: some View {
         VStack(spacing: 16) {
             ///Mark ECU INFO
@@ -746,7 +732,6 @@ struct PIDHunterTabView: View {
     ) -> some View {
 
         VStack {
-
             Text(value)
                 .font(.title2.bold())
                 .monospacedDigit()
@@ -754,7 +739,6 @@ struct PIDHunterTabView: View {
             Text(title)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-
         }
         .frame(maxWidth: .infinity)
     }

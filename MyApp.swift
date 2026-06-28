@@ -3,9 +3,7 @@ import SwiftUI
 struct PIDHunterApp: App {
     var body: some Scene {
         WindowGroup {
-            //MyContentView()
-            PIDHunterTabView()
+            ContentView()
         }
-        .defaultSize(width: 650,height: 1000)
     }
 }
