@@ -82,7 +82,19 @@ final class ELMResponseAssembler {
                                upper.hasPrefix("KWP")
 
             if isELMChatter && !hasECUFrame {
-                Logger.shared.debug("Assembler ignored informational response: \(trimmed)")
+                Logger.shared.debug("Assembler accepted AT response: \(trimmed)")
+
+                responses.append(
+                    ELMResponse(
+                        raw: trimmed,
+                        type: .atResponse,
+                        header: nil,
+                        service: nil,
+                        pid: nil,
+                        payload: []
+                    )
+                )
+
                 continue
             }
 

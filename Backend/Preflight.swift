@@ -49,7 +49,7 @@ final class Preflight {
             let protocolResponse =
             try await BluetoothManager.shared.sendAndWait(
                 "ATDP",
-                timeout: .seconds(1)
+                timeout: .seconds(2)
             )
 
             Logger.shared.info(
