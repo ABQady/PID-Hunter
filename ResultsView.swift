@@ -15,12 +15,14 @@ struct ResultsView: View {
     @State private var statsExpanded = true
     
     private var filteredResults: [ScanResult] {
-        brute.results.filter {
-            search.isEmpty ||
-            $0.request.localizedCaseInsensitiveContains(search) ||
-            $0.response.localizedCaseInsensitiveContains(search) ||
-            $0.header.localizedCaseInsensitiveContains(search) ||
-            $0.pid.localizedCaseInsensitiveContains(search)
+        let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return brute.results }
+
+        return brute.results.filter {
+            $0.request.localizedCaseInsensitiveContains(query) ||
+            $0.response.localizedCaseInsensitiveContains(query) ||
+            $0.header.localizedCaseInsensitiveContains(query) ||
+            $0.pid.localizedCaseInsensitiveContains(query)
         }
     }
     
@@ -130,38 +132,6 @@ struct ResultsView: View {
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        if !discovery.supportedModes.isEmpty {
-                            
-                            Divider()
-                                .padding(.vertical, 8)
-
-                            Text("Discovered Modes")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-
-                            LazyVGrid(
-                                columns: [
-                                    GridItem(.adaptive(minimum: 50))
-                                ],
-                                alignment: .leading,
-                                spacing: 8
-                            ) {
-                                ForEach(discovery.supportedModes) { mode in
-                                    Text(mode.rawValue)
-                                        .font(.system(.caption, design: .monospaced).bold())
-                                        .foregroundStyle(.blue)
-                                        .padding(.horizontal, 10)
-                                        .padding(.vertical, 5)
-                                        .background(.blue.opacity(0.15))
-                                        .overlay {
-                                            Capsule()
-                                                .stroke(.blue.opacity(0.35))
-                                        }
-                                        .clipShape(Capsule())
-                                }
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        }
                     }
                 }
                 .font(.headline)
@@ -195,7 +165,7 @@ struct ResultsView: View {
                         
                         statistic(
                             title: "Hits",
-                            value: "\(stats.positiveResponses)/\(stats.totalRequests)"
+                            value: "\(brute.scanStatus.successCount)/\(stats.totalRequests)"
                         )
                     }
                     
@@ -217,14 +187,14 @@ struct ResultsView: View {
                         
                         statistic(
                             title: "Avg",
-                            value: String(format: "%.0f ms", stats.averageRequestTime * 1000)
+                            value: String(format: "%.0f ms", stats.averageRequestTime(at: .now) * 1000)
                         )
                     }
 
                     HStack {
                         statistic(
                             title: "Elapsed",
-                            value: Duration.seconds(stats.elapsed)
+                            value: Duration.seconds(stats.elapsed(at: .now))
                                 .formatted(.units(
                                     allowed: [.hours, .minutes, .seconds],
                                     width: .abbreviated
@@ -235,8 +205,8 @@ struct ResultsView: View {
 
                         statistic(
                             title: "ETA",
-                            value: stats.eta > 0
-                                ? Duration.seconds(stats.eta)
+                            value: stats.eta(at: .now) > 0
+                                ? Duration.seconds(stats.eta(at: .now))
                                     .formatted(.units(
                                         allowed: [.hours, .minutes, .seconds],
                                         width: .abbreviated
@@ -282,7 +252,7 @@ struct ResultsView: View {
                         
                     } else {
                         LazyVStack(spacing: 12) {
-                            ForEach(filteredResults.reversed()) { result in
+                            ForEach(Array(filteredResults.reversed())) { result in
                                 PIDResultCard(result: result)
                             }
                         }
@@ -296,20 +266,21 @@ struct ResultsView: View {
                             
                             Spacer()
                             
-                            Text("\(filteredResults.count)")
+                            Text("\(brute.scanStatus.successCount)")
                                 .foregroundStyle(.secondary)
                             
                             Spacer()
                             
                             Button("Copy All") {
-                                let text = brute.results
+                                guard !filteredResults.isEmpty else { return }
+                                let text = filteredResults
                                     .map { "\($0.request) -> \($0.response)" }
                                     .joined(separator: "\n")
                                 
-    #if os(macOS)
+#if os(macOS)
                                 NSPasteboard.general.clearContents()
                                 NSPasteboard.general.setString(text, forType: .string)
-    #endif
+#endif
                             }
                         }
                         
@@ -337,10 +308,12 @@ struct ResultsView: View {
                 Text(value)
                     .font(.title2.bold())
                     .monospacedDigit()
+                    .multilineTextAlignment(.center)
                 
                 Text(title)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)
         }

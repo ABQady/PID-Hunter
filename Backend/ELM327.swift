@@ -18,20 +18,33 @@ final class ELM327: ObservableObject {
     
     // MARK: - Send
     func send(_ command: String) {
-        do { try BluetoothManager.shared.send(command)} catch {
-            Logger.shared.error("ELM327.swift send() error, command: \(command)")
-            return
+        let normalized = command
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+
+        guard !normalized.isEmpty else { return }
+
+        do {
+            try BluetoothManager.shared.send(normalized)
+        } catch {
+            Logger.shared.error("ELM327.send failed: \(normalized)")
         }
     }
 
     // MARK: - Header
     func setHeader(_ header: String) {
-        guard !header.isEmpty else { return }
-        guard currentHeader != header else {
-            return
+        let normalized = header.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+
+        guard !normalized.isEmpty else { return }
+        guard currentHeader != normalized else { return }
+
+        do {
+            try BluetoothManager.shared.send("ATSH\(normalized)")
+            currentHeader = normalized
+            Logger.shared.info("Header -> \(normalized)")
+        } catch {
+            Logger.shared.error("Failed to set header: \(normalized)")
         }
-        currentHeader = header
-        send("ATSH\(header)")
     }
     // MARK: - PID Requests
     func request(
@@ -80,7 +93,7 @@ final class ELM327: ObservableObject {
     // MARK: - ECU Identification
     func identifyECU() {
         Task {
-            let commands = [
+            let commands: [String] = [
                 "ATI",
                 "AT@1",
                 "AT@2",
@@ -92,6 +105,10 @@ final class ELM327: ObservableObject {
                 "090A"
             ]
             for cmd in commands {
+                guard BluetoothManager.shared.isConnected else {
+                    Logger.shared.warning("ECU identification aborted: disconnected")
+                    return
+                }
                 send(cmd)
                 try? await Task.sleep(
                     for: .milliseconds(1000)

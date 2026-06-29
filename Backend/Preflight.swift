@@ -4,6 +4,7 @@
 //
 //  Created by Ahmed Al Qady on 26/06/2026.
 //
+
 import Foundation
 
 @MainActor
@@ -34,28 +35,97 @@ final class Preflight {
         Logger.shared.success("✅ TX Found")
         Logger.shared.success("✅ RX Found")
 
-        ELM327.shared.send("ATDP")
-        try? await Task.sleep(for: .milliseconds(500))
+        let normalizedHeader = header
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
 
-        ELM327.shared.setHeader(header)
-        try? await Task.sleep(for: .milliseconds(300))
-
-        ELM327.shared.send("0100")
-        try? await Task.sleep(for: .seconds(2))
-
-        let rx = BluetoothManager.shared.lastResponse.uppercased()
-
-        if rx.contains("41") {
-            Logger.shared.success("✅ ECU Responded")
-            return true
+        guard normalizedHeader.count == 6,
+              normalizedHeader.allSatisfy(\.isHexDigit) else {
+            Logger.shared.error("❌ Invalid Header")
+            return false
         }
 
-        if rx.contains("NO DATA") {
-            Logger.shared.warning("⚠️ ECU Reachable but returned NO DATA")
-            return true
+        do {
+            let protocolResponse =
+            try await BluetoothManager.shared.sendAndWait(
+                "ATDP",
+                timeout: .seconds(1)
+            )
+
+            Logger.shared.info(
+                "Protocol: \(protocolResponse.raw)"
+            )
+            let protocolText = protocolResponse.raw.uppercased()
+
+            if protocolText.contains("?") {
+                Logger.shared.warning("⚠️ Unable to identify protocol")
+            } else {
+                Logger.shared.info("Protocol: \(protocolResponse.raw)")
+            }
+        } catch BluetoothManager.BluetoothError.timeout {
+            Logger.shared.error("❌ ELM327 Timeout")
+            return false
+        }
+        catch {
+            Logger.shared.error("❌ Failed to communicate with ELM327")
+            return false
         }
 
-        Logger.shared.error("❌ ECU did not respond")
+        guard BluetoothManager.shared.isConnected else {
+            Logger.shared.error("❌ Bluetooth Disconnected")
+            return false
+        }
+
+        do {
+            _ = try await BluetoothManager.shared.sendAndWait(
+                "ATSH \(normalizedHeader)",
+                timeout: .seconds(1)
+            )
+            Logger.shared.info(
+                "Header: \(normalizedHeader)"
+            )
+        } catch BluetoothManager.BluetoothError.timeout {
+            Logger.shared.error("❌ Header Timeout")
+            return false
+        }
+        catch {
+            Logger.shared.error("❌ Failed to set header")
+            return false
+        }
+
+        guard BluetoothManager.shared.isConnected else {
+            Logger.shared.error("❌ Bluetooth Disconnected")
+            return false
+        }
+
+        do {
+            let response = try await BluetoothManager.shared.sendAndWait(
+                "0100",
+                timeout: .seconds(2)
+            )
+
+            let rx = response.raw.uppercased()
+
+            if rx.contains("41") ||
+                rx.contains("61") ||
+                rx.contains("62") {
+
+                Logger.shared.success("✅ ECU Responded")
+                return true
+            }
+
+            if rx.contains("NO DATA") {
+                Logger.shared.warning("⚠️ ECU Reachable but returned NO DATA")
+                return true
+            }
+
+        } catch BluetoothManager.BluetoothError.timeout {
+            Logger.shared.error("❌ ECU Response Timeout")
+        }
+        catch {
+            Logger.shared.error("❌ Preflight Failed")
+        }
+
         return false
     }
 }

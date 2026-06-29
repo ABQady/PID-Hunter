@@ -26,6 +26,12 @@ struct TerminalView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     private var isCompact: Bool { horizontalSizeClass == .compact }
 
+    // Progress fraction for progress bar and percentage
+    private var progressFraction: Double {
+        guard stats.totalRequests > 0 else { return 0 }
+        return min(max(Double(stats.requestsSent) / Double(stats.totalRequests), 0), 1)
+    }
+
     public init(
         selectedMode: Binding<OBDMode>,
         header: Binding<String>,
@@ -90,14 +96,12 @@ struct TerminalView: View {
             VStack(alignment: .leading) {
                 Text("Progress")
                     .font(.headline)
-                ProgressView(
-                    value: max(0.0, min(brute.scanStatus.progress, 1.0))
-                )
-                .progressViewStyle(.linear)
-                .frame(maxWidth: .infinity)
+                ProgressView(value: progressFraction)
+                    .progressViewStyle(.linear)
+                    .frame(maxWidth: .infinity)
                 HStack(alignment: .center, spacing: 4) {
                     Spacer()
-                    Text("\(Int(max(0, min(brute.scanStatus.progress, 1)) * 100))%")
+                    Text("\(Int(progressFraction * 100))%")
                     Spacer()
                     HStack {
                         Text("\(stats.requestsSent)")
@@ -107,36 +111,25 @@ struct TerminalView: View {
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
-                    TimelineView(.periodic(from: .now, by: 1)) { _ in
-                        HStack(alignment: .center, spacing: 2) {
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        HStack {
                             Spacer()
-                            Text("Elapsed: \(formatETA(stats.elapsed))")
-                                .foregroundStyle(.secondary)
-                            Spacer()
+                            Text("Elapsed: \(formatETA(stats.elapsed(at: context.date)))")
+
                             if stats.finishedAt != nil {
-                                Text("Completed in \(formatETA(stats.elapsed)) ✅")
-                                    .foregroundStyle(.green)
+                                Text("Completed in \(formatETA(stats.elapsed(at: context.date))) ✅")
                             } else if !brute.scanStatus.isScanning {
                                 Text("ETA: --:--")
-                                    .foregroundStyle(.secondary)
                             } else if stats.requestsSent < 10 {
                                 Text("ETA: Calculating...")
-                                    .foregroundStyle(.secondary)
                             } else {
-                                Text("ETA: \(formatETA(stats.eta))")
-                                    .foregroundStyle(.secondary)
+                                Text("ETA: \(formatETA(stats.eta(at: context.date)))")
                             }
                         }
                     }
                     Spacer()
                 }
                 .font(.system(.caption, design: .monospaced))
-                .font(
-                    .system(
-                        .caption,
-                        design: .monospaced
-                    )
-                )
             }
             .padding()
             .background(.thinMaterial)
@@ -274,8 +267,9 @@ struct TerminalView: View {
                                     proxy.scrollTo(last, anchor: .bottom)
                                 }
                             }
-
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            // Reset programmaticScroll after animation completes using Task
+                            Task { @MainActor in
+                                try? await Task.sleep(for: .milliseconds(100))
                                 programmaticScroll = false
                             }
                         }
@@ -320,15 +314,14 @@ struct TerminalView: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .onChange(of: shouldAutoScroll) { _, newValue in
-                        print("AutoScroll =", newValue)
+                        // Removed debug print
                     }
                     .onChange(of: logger.lines.count) { _, _ in
                         guard shouldAutoScroll,
                               let last = logger.lines.indices.last else {
                             return
                         }
-                        
-                        DispatchQueue.main.async {
+                        Task { @MainActor in
                             proxy.scrollTo(last, anchor: .bottom)
                         }
                     }
@@ -379,6 +372,10 @@ struct TerminalView: View {
     
     // MARK: - Helpers
     private func sendManualCommand() {
+        guard bt.isConnected else {
+            Logger.shared.info("Connect to ELM first")
+            return
+        }
         let command = manualCommand
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .uppercased()
@@ -396,7 +393,9 @@ struct TerminalView: View {
             Logger.shared.info("Connect to ELM first")
             return
         }
-        Logger.shared.clear()
+        if !brute.hasResumePoint {
+            Logger.shared.clear()
+        }
         
         let cleanHeader = header
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -409,16 +408,19 @@ struct TerminalView: View {
         }
         brute.headers = [cleanHeader]
         shouldAutoScroll = true
+        programmaticScroll = true
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(100))
+            programmaticScroll = false
+        }
 
         Task {
             let ok = await Preflight.shared.run(header: cleanHeader)
 
             guard ok else {
-                Logger.shared.info("❌ Preflight Failed")
+                Logger.shared.error("❌ Preflight Failed")
                 return
             }
-
-            ScanStatistics.shared.start()
 
             if selectedMode.pidDigits == 4 {
                 let startText = startPID
@@ -456,7 +458,7 @@ struct TerminalView: View {
             return "--:--"
         }
 
-        let total = Int(seconds)
+        let total = max(0, Int(seconds.rounded(.down)))
 
         let hours = total / 3600
         let minutes = (total % 3600) / 60
@@ -470,9 +472,9 @@ struct TerminalView: View {
     }
     
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-var body: some View {
-    terminalTab
-}
+    var body: some View {
+        terminalTab
+    }
 }
 
 // Helper for conditional modifier

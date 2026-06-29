@@ -61,8 +61,13 @@ final class BluetoothManager: NSObject, ObservableObject {
 
         startScan()
 
-        while !isConnected {
+        let deadline = Date().addingTimeInterval(5)
+        while !isConnected && Date() < deadline {
             try? await Task.sleep(for: .milliseconds(100))
+        }
+        if !isConnected {
+            Logger.shared.error("Reconnect timed out")
+            stopScan()
         }
     }
     
@@ -96,9 +101,11 @@ final class BluetoothManager: NSObject, ObservableObject {
                 ]
             )
             
-            DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(10))
+
                 guard let self else { return }
-                
+
                 if self.isScanning {
                     self.status = .timeout
                     self.stopScan()
@@ -135,6 +142,12 @@ final class BluetoothManager: NSObject, ObservableObject {
         status = .disconnected
         ELMResponseAssembler.shared.clear()
         ECUInfo.shared.clear()
+        
+        pendingRequest?.timeoutTask?.cancel()
+        if let pending = pendingRequest {
+            pending.continuation.resume(throwing: BluetoothError.disconnected)
+        }
+        pendingRequest = nil
     }
     // MARK: TX - SEND
     func send(
@@ -182,9 +195,9 @@ final class BluetoothManager: NSObject, ObservableObject {
             type: type
         )
         txCount += 1
-        if !command.uppercased().hasPrefix("AT") {
-            ScanStatistics.shared.requestsSent += 1
-        }
+//        if !command.uppercased().hasPrefix("AT") {
+//            ScanStatistics.shared.requestsSent += 1
+//        }
     }
     
     // MARK: Send & Wait
@@ -402,6 +415,7 @@ extension BluetoothManager:
     )
     {
         Task { @MainActor in
+            pendingRequest?.timeoutTask?.cancel()
             ELMResponseAssembler.shared.clear()
             status = .disconnected
             self.isConnected = false
@@ -414,6 +428,9 @@ extension BluetoothManager:
             self.detectedTX = ""
             self.detectedRX = ""
             self.detectedService = ""
+            
+            txCount = 0
+            rxCount = 0
             
             self.discoveredDevices.removeAll()
             
@@ -509,7 +526,6 @@ extension BluetoothManager:
     }
     
     private func analyzeResponse(_ response: ELMResponse) {
-        ScanStatistics.shared.responses += 1
         switch response.type {
 
         case .mode01, .mode21, .mode22:
@@ -541,17 +557,12 @@ extension BluetoothManager:
                 Logger.shared.warning("Retrying...")
 
                 if !retriedProtocol {
-
                     retriedProtocol = true
-
                     try? self.send("ATZ")
-
                     try? await Task.sleep(for: .milliseconds(1500))
-
                     guard self.isConnected else {
                         return
                     }
-
                     try? self.send("ATSP5")
                 }
             }
@@ -634,8 +645,9 @@ extension BluetoothManager:
                 // responses. Some ELM327 adapters prepend BUS INIT / SEARCHING
                 // before the actual ECU frame.
                 if response.type == .unknown {
-                    let upper = response.raw.uppercased()
-                    let compact = upper.replacingOccurrences(of: " ", with: "")
+                    let compact = response.raw
+                        .uppercased()
+                        .replacingOccurrences(of: " ", with: "")
                     let containsFrame = compact.contains("41") ||
                                         compact.contains("61") ||
                                         compact.contains("62") ||
@@ -660,7 +672,7 @@ extension BluetoothManager:
                 // Match the queued request before clearing it, but only for
                 // responses that are actually completing a request.
                 Logger.shared.debug("Completing pending request \(pending.id)")
-                //pending.timeoutTask?.cancel()
+                pending.timeoutTask?.cancel()
                 pendingRequest = nil
                 pending.continuation.resume(returning: response)
                 Logger.shared.debug("🟢 Continuation RESUMED: \(response.type)")

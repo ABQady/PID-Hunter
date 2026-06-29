@@ -46,10 +46,23 @@ final class BruteForceScanner: ObservableObject {
     private var currentHeaderIndex = 0
     private var currentPID = 0
     
-    private func saveResumePoint() {
+    private func saveResumePoint(force: Bool = false) {
+        if !force && (currentPID % 10 != 0) {
+            return
+        }
+
         let defaults = UserDefaults.standard
         defaults.set(currentHeaderIndex, forKey: "resumeHeader")
         defaults.set(currentPID, forKey: "resumePID")
+
+        let stats = ScanStatistics.shared
+        defaults.set(stats.requestsSent, forKey: "resumeRequestsSent")
+        defaults.set(stats.responses, forKey: "resumeResponses")
+        defaults.set(stats.positiveResponses, forKey: "resumePositiveResponses")
+        defaults.set(stats.negativeResponses, forKey: "resumeNegativeResponses")
+        defaults.set(stats.timeouts, forKey: "resumeTimeouts")
+        defaults.set(stats.startedAt, forKey: "resumeStartedAt")
+
         refreshResumeAvailability()
     }
     
@@ -68,7 +81,7 @@ final class BruteForceScanner: ObservableObject {
             scanStatus.progress = 1.0
             clearResumePoint()
         } else {
-            saveResumePoint()
+            saveResumePoint(force: true)
             saveResults()
         }
 
@@ -77,8 +90,19 @@ final class BruteForceScanner: ObservableObject {
 
     private func loadResumePoint() {
         let defaults = UserDefaults.standard
+
         currentHeaderIndex = defaults.object(forKey: "resumeHeader") as? Int ?? 0
         currentPID = defaults.object(forKey: "resumePID") as? Int ?? 0
+
+        let stats = ScanStatistics.shared
+        stats.requestsSent = defaults.object(forKey: "resumeRequestsSent") as? Int ?? 0
+        stats.responses = defaults.object(forKey: "resumeResponses") as? Int ?? 0
+        stats.positiveResponses = defaults.object(forKey: "resumePositiveResponses") as? Int ?? 0
+        stats.negativeResponses = defaults.object(forKey: "resumeNegativeResponses") as? Int ?? 0
+        stats.timeouts = defaults.object(forKey: "resumeTimeouts") as? Int ?? 0
+        stats.startedAt = defaults.object(forKey: "resumeStartedAt") as? Date
+        stats.finishedAt = nil
+
         refreshResumeAvailability()
     }
 
@@ -105,6 +129,9 @@ final class BruteForceScanner: ObservableObject {
         results = saved
         seen = Set(saved.map { "\($0.header)|\($0.request)|\($0.response)" })
         scanStatus.successCount = saved.count
+        scanStatus.progress = ScanStatistics.shared.totalRequests > 0
+            ? Double(ScanStatistics.shared.requestsSent) / Double(ScanStatistics.shared.totalRequests)
+            : 0
     }
     func startFresh() {
 
@@ -133,6 +160,12 @@ final class BruteForceScanner: ObservableObject {
         let defaults = UserDefaults.standard
         defaults.removeObject(forKey: "resumeHeader")
         defaults.removeObject(forKey: "resumePID")
+        defaults.removeObject(forKey: "resumeRequestsSent")
+        defaults.removeObject(forKey: "resumeResponses")
+        defaults.removeObject(forKey: "resumePositiveResponses")
+        defaults.removeObject(forKey: "resumeNegativeResponses")
+        defaults.removeObject(forKey: "resumeTimeouts")
+        defaults.removeObject(forKey: "resumeStartedAt")
         refreshResumeAvailability()
     }
     
@@ -240,8 +273,18 @@ final class BruteForceScanner: ObservableObject {
         let total = headers.count * count
         var done = currentHeaderIndex * count + (currentPID - startPID)
 
-        ScanStatistics.shared.reset()
-        ScanStatistics.shared.totalRequests = total
+        let stats = ScanStatistics.shared
+
+        if currentHeaderIndex == 0 && currentPID == startPID {
+            stats.reset()
+            stats.totalRequests = total
+            stats.start()
+        } else {
+            stats.totalRequests = total
+            if stats.startedAt == nil {
+                stats.start()
+            }
+        }
 
         beginScan()
         var consecutiveTimeouts = 0
@@ -249,6 +292,7 @@ final class BruteForceScanner: ObservableObject {
         while currentHeaderIndex < headers.count {
             let header = headers[currentHeaderIndex]
             ELM327.shared.setHeader(header)
+            try? await Task.sleep(for: .milliseconds(50))
             while currentPID <= endPID {
                 if shouldStop {
                     finishScan(completed: false)
@@ -269,6 +313,18 @@ final class BruteForceScanner: ObservableObject {
                         req,
                         timeout: .seconds(requestTimeout)
                     )
+                    stats.requestsSent += 1
+                    stats.responses += 1
+
+                    let parsed = ELMResponseParser.parse(response.raw)
+                    switch parsed.type {
+                    case .mode01, .mode21, .mode22:
+                        stats.positiveResponses += 1
+                    case .negative:
+                        stats.negativeResponses += 1
+                    default:
+                        break
+                    }
                     resetTimeoutCounter(&consecutiveTimeouts)
                     appendResponse(
                         header: header,
@@ -281,6 +337,10 @@ final class BruteForceScanner: ObservableObject {
                         try? await Task.sleep(for: .milliseconds(Int(delayMs)))
                     }
                 } catch BluetoothManager.BluetoothError.timeout {
+                    stats.requestsSent += 1
+                    stats.timeouts += 1
+                    stats.responses += 1
+
                     consecutiveTimeouts += 1
 
                     if consecutiveTimeouts >= maxConsecutiveTimeouts {
@@ -332,14 +392,14 @@ final class BruteForceScanner: ObservableObject {
         request: String,
         response: String
     ) {
-        let upper = response.uppercased()
         let parsed = ELMResponseParser.parse(response)
-        switch parsed.type {
-        case .mode01, .mode21, .mode22, .negative:
-            break
-        default:
+
+        guard parsed.type == .mode01 ||
+              parsed.type == .mode21 ||
+              parsed.type == .mode22 else {
             return
         }
+
         guard !response.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return
         }
@@ -349,8 +409,9 @@ final class BruteForceScanner: ObservableObject {
         guard !seen.contains(key) else {
             return
         }
-        
+
         seen.insert(key)
+
         results.append(
             ScanResult(
                 header: header,
@@ -360,12 +421,10 @@ final class BruteForceScanner: ObservableObject {
                 response: response
             )
         )
+        results.sort { ($0.header, $0.request) < ($1.header, $1.request) }
 
+        scanStatus.successCount += 1
         Logger.shared.success("✅ Found PID \(request) -> \(response)")
-
-        if parsed.type == .mode01 || parsed.type == .mode21 || parsed.type == .mode22 {
-            scanStatus.successCount += 1
-        }
         saveResults()
     }
     

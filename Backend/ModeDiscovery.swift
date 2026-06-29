@@ -27,6 +27,7 @@ final class ModeDiscovery: ObservableObject {
 
         isRunning = true
         supportedModes.removeAll()
+        Logger.shared.info("────────────")
 
         defer {
             isRunning = false
@@ -35,21 +36,31 @@ final class ModeDiscovery: ObservableObject {
         Logger.shared.info("🔎 Starting mode discovery")
 
         for mode in OBDMode.supportedScanModes {
-
             Logger.shared.info("🔎 Probing \(mode.title)...")
-
             do {
                 let response = try await elm.request(mode: mode)
+
                 if response.type.requestMode == mode.requestService {
                     handleSuccess(mode)
                 } else {
+                    Logger.shared.warning(
+                        "Unexpected response for \(mode.rawValue): \(response.raw)"
+                    )
                     handleFailure(mode)
                 }
+            } catch BluetoothManager.BluetoothError.timeout {
+                Logger.shared.warning("⏰ \(mode.rawValue) Timeout")
+                handleFailure(mode)
             } catch {
+                Logger.shared.error(
+                    "❌ \(mode.rawValue): \(error.localizedDescription)"
+                )
                 handleFailure(mode)
             }
         }
-        Logger.shared.success("🏁 Mode discovery finished")
+        Logger.shared.success(
+            "🏁 Mode discovery finished (\(supportedModes.count) supported)"
+        )
     }
 
     func handleSuccess(_ mode: OBDMode) {
