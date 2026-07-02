@@ -20,23 +20,18 @@ enum SearchEngineCatalog {
         }
     }
 
+    // MARK: - Defaults
+
     static var `default`: SearchEngine? {
         engine(.adaptive)
     }
 
     static var core: [SearchEngine] {
-        all.filter {
-            switch $0.type {
-            case .sequential, .smart, .adaptive:
-                return true
-            default:
-                return false
-            }
-        }
+        all.filter(\.type.isCore)
     }
 
     static var experimental: [SearchEngine] {
-        all.filter { !core.contains($0) }
+        all.filter(\.type.isExperimental)
     }
 
     static var benchmarkable: [SearchEngine] {
@@ -56,11 +51,6 @@ enum SearchEngineCatalog {
     static func engine(
         _ type: SearchEngineType
     ) -> SearchEngine? {
-        SearchEngineBootstrap.registerAll()
         return SearchEngineFactory.engine(for: type)
-    }
-
-    static func refresh() {
-        SearchEngineBootstrap.registerAll()
     }
 }

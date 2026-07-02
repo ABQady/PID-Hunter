@@ -11,6 +11,10 @@ struct SequentialSearchStrategy: SearchStrategy {
 
     private var current: Int
 
+    var isExhausted: Bool {
+        current > Int(end)
+    }
+
     init(start: UInt16, end: UInt16) {
         precondition(start <= end, "start must not be greater than end")
         self.start = start

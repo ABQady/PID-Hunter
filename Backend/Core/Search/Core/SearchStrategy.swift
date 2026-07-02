@@ -21,16 +21,23 @@ protocol SearchStrategy {
 
     // MARK: - Feedback
 
-    // TODO: Future SearchResult revisions may include confidence, payload quality and transport metadata.
-    /// Provides a classified scan result so search strategies can update their learning model.
+    /// Future revisions may extend SearchResult with confidence,
+    /// payload quality, transport metadata and timing statistics
+    /// without changing this protocol.
     mutating func registerResult(
         pid: UInt16,
         result: SearchResult,
         latency: Double
     )
     
+    // MARK: - Capabilities
+
+    /// Indicates whether the strategy has exhausted its search space.
+    var isExhausted: Bool { get }
+
     // MARK: - Navigation
 
+    /// Repositions the search cursor without resetting learned state.
     /// Moves the strategy to a specific PID position.
     mutating func seek(to pid: UInt16)
 

@@ -21,6 +21,10 @@ struct SmartSearchStrategy: SearchStrategy {
     private let start: UInt16
     private let end: UInt16
 
+    var isExhausted: Bool {
+        queue.isEmpty && current > Int(end)
+    }
+
     init(start: UInt16, end: UInt16) {
         precondition(start <= end)
         self.start = start

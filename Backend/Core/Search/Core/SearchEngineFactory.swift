@@ -9,16 +9,19 @@ import Foundation
 
 enum SearchEngineFactory {
 
-    private typealias Registry = [SearchEngineType: any SearchEngineDescriptor]
+    // MARK: - Internal
 
-    // MARK: - Registry
+    private static func ensureRegistered() {
+        SearchEngineBootstrap.registerAll()
+    }
 
-    private static var registry: Registry = [:]
+    // MARK: - Registry Access
 
-    // MARK: - Registration
-
-    static func register(_ descriptor: any SearchEngineDescriptor) {
-        registry[descriptor.type] = descriptor
+    private static func descriptor(
+        for type: SearchEngineType
+    ) -> (any SearchEngineDescriptor)? {
+        ensureRegistered()
+        return SearchEngineRegistry.descriptor(for: type)
     }
 
     // MARK: - Public API
@@ -26,9 +29,7 @@ enum SearchEngineFactory {
     static func engine(
         for type: SearchEngineType
     ) -> SearchEngine? {
-        SearchEngineBootstrap.registerAll()
-
-        guard let descriptor = registry[type] else {
+        guard let descriptor = descriptor(for: type) else {
             return nil
         }
 
@@ -40,9 +41,7 @@ enum SearchEngineFactory {
         start: UInt16,
         end: UInt16
     ) -> any SearchStrategy {
-        SearchEngineBootstrap.registerAll()
-
-        guard let descriptor = registry[type] else {
+        guard let descriptor = descriptor(for: type) else {
             preconditionFailure("No SearchEngine registered for \(type)")
         }
 

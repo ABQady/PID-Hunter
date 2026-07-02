@@ -18,6 +18,10 @@ struct AdaptiveSearchStrategy: SearchStrategy {
     private var knowledge = SearchKnowledgeBase()
     private var queue = PriorityPIDQueue()
 
+    var isExhausted: Bool {
+        queue.isEmpty && sequential > Int(end)
+    }
+
     init(start: UInt16, end: UInt16) {
         precondition(start <= end)
         self.start = start
