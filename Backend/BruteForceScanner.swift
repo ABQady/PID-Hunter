@@ -45,6 +45,9 @@ final class BruteForceScanner: ObservableObject {
     
     private var currentHeaderIndex = 0
     private var currentPID = 0
+    private var searchStrategy = SequentialSearchStrategy(start: 0, end: 0)
+    
+    private let requestExecutor = RequestExecutor()
     
     private func saveResumePoint(force: Bool = false) {
         if !force && (currentPID % 10 != 0) {
@@ -142,6 +145,7 @@ final class BruteForceScanner: ObservableObject {
         
         currentHeaderIndex = 0
         currentPID = 0
+        searchStrategy.reset()
 
         results.removeAll()
         seen.removeAll()
@@ -157,6 +161,7 @@ final class BruteForceScanner: ObservableObject {
     func clearResumePoint() {
         currentHeaderIndex = 0
         currentPID = 0
+        searchStrategy.reset()
         let defaults = UserDefaults.standard
         defaults.removeObject(forKey: "resumeHeader")
         defaults.removeObject(forKey: "resumePID")
@@ -230,6 +235,86 @@ final class BruteForceScanner: ObservableObject {
 
         return true
     }
+
+    private func updateProgress(done: Int, total: Int) {
+        saveResumePoint()
+        scanStatus.progress = Double(done) / Double(total)
+    }
+
+    private func makeRequest(mode: OBDMode, pid: String) -> String {
+        mode.rawValue + pid
+    }
+
+    // TODO: Pass SearchResult directly into SearchStrategy after protocol migration.
+    private func processSuccessfulResponse(
+        _ response: ELMResponse,
+        latency: Double,
+        header: String,
+        mode: OBDMode,
+        request: String,
+        pid: UInt16,
+        consecutiveTimeouts: inout Int
+    ) {
+        let stats = ScanStatistics.shared
+        stats.requestsSent += 1
+        stats.responses += 1
+
+        let parsed = response
+        _ = requestExecutor.classify(parsed)
+        switch parsed.type {
+        case .mode01, .mode21, .mode22:
+            stats.positiveResponses += 1
+        case .negative:
+            stats.negativeResponses += 1
+        default:
+            break
+        }
+
+        resetTimeoutCounter(&consecutiveTimeouts)
+
+        appendResponse(
+            header: header,
+            mode: mode.rawValue,
+            pid: String(request.dropFirst(2)),
+            request: request,
+            response: response.raw
+        )
+
+        searchStrategy.registerResult(
+            pid: pid,
+            success: true,
+            response: response.raw,
+            latency: latency
+        )
+    }
+
+    private func processTimeout(
+        pid: UInt16,
+        consecutiveTimeouts: inout Int
+    ) async {
+        let stats = ScanStatistics.shared
+        stats.requestsSent += 1
+        stats.timeouts += 1
+        stats.responses += 1
+
+        consecutiveTimeouts += 1
+
+        if consecutiveTimeouts >= maxConsecutiveTimeouts {
+            Logger.shared.error("Consecutive timeout limit (\(maxConsecutiveTimeouts)) reached. Stopping scan.")
+            ScanStatistics.shared.finish()
+            shouldStop = true
+            return
+        }
+
+        searchStrategy.registerResult(
+            pid: pid,
+            success: false,
+            response: "",
+            latency: requestTimeout
+        )
+
+        await handleTimeout()
+    }
     
     var headers = [
         "81F111",
@@ -244,6 +329,15 @@ final class BruteForceScanner: ObservableObject {
     }
     
     // MARK: - Generic Scan Implementation
+    private func prepareStrategy(startPID: Int, endPID: Int, resumePID: Int) {
+        searchStrategy = SequentialSearchStrategy(
+            start: UInt16(startPID),
+            end: UInt16(endPID)
+        )
+        searchStrategy.seek(to: UInt16(resumePID))
+        currentPID = resumePID
+    }
+
     private func scan(
         mode: OBDMode,
         startPID: Int? = nil,
@@ -253,6 +347,8 @@ final class BruteForceScanner: ObservableObject {
         let startPID = startPID ?? mode.defaultStartPID
         let endPID = endPID ?? mode.defaultEndPID
         
+        // searchStrategy is now created per-header below.
+        
         loadResumePoint()
         if currentHeaderIndex >= headers.count {
             currentHeaderIndex = 0
@@ -261,6 +357,7 @@ final class BruteForceScanner: ObservableObject {
         if currentPID < startPID || currentPID > endPID {
             currentPID = startPID
         }
+        // searchStrategy.seek(to: UInt16(currentPID)) is now handled per-header.
 
         // Clear or load results as needed
         if currentHeaderIndex == 0 && currentPID == startPID {
@@ -288,87 +385,111 @@ final class BruteForceScanner: ObservableObject {
 
         beginScan()
         var consecutiveTimeouts = 0
+        let resumeHeader = UserDefaults.standard.object(forKey: "resumeHeader") as? Int
 
         while currentHeaderIndex < headers.count {
             let header = headers[currentHeaderIndex]
+            // Recreate the strategy for each header so scanning restarts from the
+            // appropriate PID on every ECU header.
+            let resumePID = (currentHeaderIndex == resumeHeader)
+                ? currentPID
+                : startPID
+
+            prepareStrategy(
+                startPID: startPID,
+                endPID: endPID,
+                resumePID: resumePID
+            )
+
             ELM327.shared.setHeader(header)
             try? await Task.sleep(for: .milliseconds(50))
-            while currentPID <= endPID {
-                if shouldStop {
-                    finishScan(completed: false)
-                    return
-                }
 
-                let pid = String(format: "%0*X", pidWidth, currentPID)
-                let req = mode.rawValue + pid
-                scanStatus.currentRequest = req
-                if !BluetoothManager.shared.isConnected {
-                    guard await ensureConnection(header: header) else {
-                        continue
-                    }
-                    continue
-                }
-                do {
-                    let response = try await BluetoothManager.shared.sendAndWait(
-                        req,
-                        timeout: .seconds(requestTimeout)
-                    )
-                    stats.requestsSent += 1
-                    stats.responses += 1
+            await scanHeader(
+                header: header,
+                mode: mode,
+                pidWidth: pidWidth,
+                total: total,
+                done: &done,
+                consecutiveTimeouts: &consecutiveTimeouts
+            )
 
-                    let parsed = ELMResponseParser.parse(response.raw)
-                    switch parsed.type {
-                    case .mode01, .mode21, .mode22:
-                        stats.positiveResponses += 1
-                    case .negative:
-                        stats.negativeResponses += 1
-                    default:
-                        break
-                    }
-                    resetTimeoutCounter(&consecutiveTimeouts)
-                    appendResponse(
-                        header: header,
-                        mode: mode.rawValue,
-                        pid: String(req.dropFirst(2)),
-                        request: req,
-                        response: response.raw
-                    )
-                    if delayMs > 0 {
-                        try? await Task.sleep(for: .milliseconds(Int(delayMs)))
-                    }
-                } catch BluetoothManager.BluetoothError.timeout {
-                    stats.requestsSent += 1
-                    stats.timeouts += 1
-                    stats.responses += 1
-
-                    consecutiveTimeouts += 1
-
-                    if consecutiveTimeouts >= maxConsecutiveTimeouts {
-                        Logger.shared.error("Consecutive timeout limit (\(maxConsecutiveTimeouts)) reached. Stopping scan.")
-                        ScanStatistics.shared.finish()
-                        finishScan(completed: false)
-                        return
-                    }
-                    await handleTimeout()
-                } catch {
-                    if !BluetoothManager.shared.isConnected {
-                        guard await handleConnectionLoss(header: header, consecutiveTimeouts: &consecutiveTimeouts) else {
-                            continue
-                        }
-                        continue
-                    }
-                }
-                done += 1
-                currentPID += 1
-                saveResumePoint()
-                scanStatus.progress = Double(done) / Double(total)
+            if shouldStop {
+                finishScan(completed: false)
+                return
             }
+
             currentHeaderIndex += 1
             currentPID = startPID
+            searchStrategy.reset()
             saveResumePoint()
         }
         ScanStatistics.shared.finish()
         finishScan(completed: true)
+    }
+
+    // MARK: - Header Scan
+    private func scanHeader(
+        header: String,
+        mode: OBDMode,
+        pidWidth: Int,
+        total: Int,
+        done: inout Int,
+        consecutiveTimeouts: inout Int
+    ) async {
+        let stats = ScanStatistics.shared
+        while let nextPID = searchStrategy.nextPID() {
+            currentPID = Int(nextPID)
+            if shouldStop {
+                return
+            }
+
+            let pid = String(format: "%0*X", pidWidth, Int(nextPID))
+            let req = makeRequest(mode: mode, pid: pid)
+            scanStatus.currentRequest = req
+            if !BluetoothManager.shared.isConnected {
+                guard await ensureConnection(header: header) else {
+                    continue
+                }
+                continue
+            }
+
+            let started = ContinuousClock.now
+            switch await requestExecutor.execute(
+                request: req,
+                timeout: requestTimeout
+            ) {
+            case .success(let response):
+                let latency = Double(started.duration(to: .now).components.seconds)
+                    + Double(started.duration(to: .now).components.attoseconds) / 1e18
+                processSuccessfulResponse(
+                    response,
+                    latency: latency,
+                    header: header,
+                    mode: mode,
+                    request: req,
+                    pid: nextPID,
+                    consecutiveTimeouts: &consecutiveTimeouts
+                )
+                if delayMs > 0 {
+                    try? await Task.sleep(for: .milliseconds(Int(delayMs)))
+                }
+            case .timeout:
+                await processTimeout(
+                    pid: nextPID,
+                    consecutiveTimeouts: &consecutiveTimeouts
+                )
+                if shouldStop {
+                    return
+                }
+            case .connectionLost:
+                guard await handleConnectionLoss(header: header, consecutiveTimeouts: &consecutiveTimeouts) else {
+                    continue
+                }
+                continue
+            }
+            done += 1
+            updateProgress(done: done, total: total)
+        }
     }
 
     func scan(
