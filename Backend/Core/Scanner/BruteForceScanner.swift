@@ -245,7 +245,7 @@ final class BruteForceScanner: ObservableObject {
         mode.rawValue + pid
     }
 
-    // TODO: Pass SearchResult directly into SearchStrategy after protocol migration.
+    // TODO: Move statistics updates into a dedicated ScanResultProcessor once learning and analytics are fully separated.
     private func processSuccessfulResponse(
         _ response: ELMResponse,
         latency: Double,
@@ -259,9 +259,8 @@ final class BruteForceScanner: ObservableObject {
         stats.requestsSent += 1
         stats.responses += 1
 
-        let parsed = response
-        _ = requestExecutor.classify(parsed)
-        switch parsed.type {
+        let searchResult = requestExecutor.classify(response)
+        switch response.type {
         case .mode01, .mode21, .mode22:
             stats.positiveResponses += 1
         case .negative:
@@ -282,8 +281,7 @@ final class BruteForceScanner: ObservableObject {
 
         searchStrategy.registerResult(
             pid: pid,
-            success: true,
-            response: response.raw,
+            result: searchResult,
             latency: latency
         )
     }
@@ -308,8 +306,7 @@ final class BruteForceScanner: ObservableObject {
 
         searchStrategy.registerResult(
             pid: pid,
-            success: false,
-            response: "",
+            result: .timeout,
             latency: requestTimeout
         )
 

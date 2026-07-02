@@ -7,6 +7,7 @@
 
 import Foundation
 
+/// Defines how the scanner chooses the next PID and learns from scan results.
 protocol SearchStrategy {
 
     // MARK: - Lifecycle
@@ -20,11 +21,11 @@ protocol SearchStrategy {
 
     // MARK: - Feedback
 
-    /// Provides scan feedback so adaptive strategies can update their state.
+    // TODO: Future SearchResult revisions may include confidence, payload quality and transport metadata.
+    /// Provides a classified scan result so search strategies can update their learning model.
     mutating func registerResult(
         pid: UInt16,
-        success: Bool,
-        response: String,
+        result: SearchResult,
         latency: Double
     )
     

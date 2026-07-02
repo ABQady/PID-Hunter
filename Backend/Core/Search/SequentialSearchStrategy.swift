@@ -34,23 +34,24 @@ struct SequentialSearchStrategy: SearchStrategy {
         return pid
     }
 
+    // MARK: - Learning
     mutating func registerResult(
         pid: UInt16,
-        success: Bool,
-        response: String,
+        result: SearchResult,
         latency: Double
     ) {
         // Sequential search intentionally ignores scan results.
+        _ = pid
+        _ = result
+        _ = latency
     }
     
+    // MARK: - Navigation
     mutating func seek(to pid: UInt16) {
-        if pid <= start {
-            current = Int(start)
-        } else if pid > end {
-            current = Int(end) + 1
-        } else {
-            current = Int(pid)
-        }
+        current = min(
+            max(Int(pid), Int(start)),
+            Int(end) + 1
+        )
     }
 
 }

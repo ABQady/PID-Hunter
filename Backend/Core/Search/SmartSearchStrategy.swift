@@ -37,14 +37,12 @@ struct SmartSearchStrategy: SearchStrategy {
         current = Int(start)
     }
 
+    // MARK: - Navigation
     mutating func seek(to pid: UInt16) {
-        if pid <= start {
-            current = Int(start)
-        } else if pid > end {
-            current = Int(end) + 1
-        } else {
-            current = Int(pid)
-        }
+        current = min(
+            max(Int(pid), Int(start)),
+            Int(end) + 1
+        )
         queue.clear()
         visited.removeAll()
         lastPositivePID = nil
@@ -91,27 +89,23 @@ struct SmartSearchStrategy: SearchStrategy {
         return min(boosted, maxRadius)
     }
 
-    // MARK: - Result Processing
-    // Expands the search around positive hits.
+    // MARK: - Learning
     mutating func registerResult(
         pid: UInt16,
-        success: Bool,
-        response: String,
+        result: SearchResult,
         latency: Double
     ) {
-        guard success else { return }
+        guard case .positive = result else {
+            _ = latency
+            return
+        }
 
-        let upper = response.uppercased()
-        guard !upper.isEmpty else { return }
-
-        guard !upper.contains("NO DATA") else { return }
-        guard !upper.contains("7F") else { return }
-
-        // Calculate the expansion radius before updating the previous hit.
         let radius = radius(for: pid)
 
         lastPositivePID = pid
         positiveHitCount += 1
+
+        _ = latency // Reserved for future latency-aware expansion.
 
         for offset in 1...Int(radius) {
             let delta = UInt16(offset)
