@@ -6,6 +6,7 @@
 //
 struct SequentialSearchStrategy: SearchStrategy {
 
+    let engineType: SearchEngineType = .sequential
     private let start: UInt16
     private let end: UInt16
 

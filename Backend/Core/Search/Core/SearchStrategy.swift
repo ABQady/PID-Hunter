@@ -9,6 +9,8 @@ import Foundation
 
 /// Defines how the scanner chooses the next PID and learns from scan results.
 protocol SearchStrategy {
+    /// Identifies the concrete search engine for telemetry and analytics.
+    var engineType: SearchEngineType { get }
 
     // MARK: - Lifecycle
 

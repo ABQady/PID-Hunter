@@ -32,6 +32,21 @@ struct SettingsView: View {
     @AppStorage("rememberDiscoveries")
     private var rememberDiscoveries = true
 
+    @AppStorage("enableTelemetryLearning")
+    private var enableTelemetryLearning = true
+
+    @AppStorage("successWeight")
+    private var successWeight = 1000.0
+
+    @AppStorage("latencyWeight")
+    private var latencyWeight = 1000.0
+
+    @AppStorage("confidenceWeight")
+    private var confidenceWeight = 2.0
+
+    @AppStorage("distanceWeight")
+    private var distanceWeight = 1.0
+
     @Binding var header: String
     @Binding var selectedMode: OBDMode
     @Binding var startPID: String
@@ -205,6 +220,28 @@ struct SettingsView: View {
                         }
                     }
                     .pickerStyle(.menu)
+
+                    if selectedSearchEngine == SearchEngineType.smart.rawValue {
+
+                        Divider()
+
+                        Toggle("Enable Telemetry Learning", isOn: $enableTelemetryLearning)
+
+                        Group {
+                            Text("Success Weight: \(Int(successWeight))")
+                            Slider(value: $successWeight, in: 100...3000, step: 50)
+
+                            Text("Latency Weight: \(Int(latencyWeight))")
+                            Slider(value: $latencyWeight, in: 100...3000, step: 50)
+
+                            Text("Confidence Weight: \(confidenceWeight, specifier: "%.1f")")
+                            Slider(value: $confidenceWeight, in: 0...10, step: 0.5)
+
+                            Text("Distance Weight: \(distanceWeight, specifier: "%.1f")")
+                            Slider(value: $distanceWeight, in: 0...10, step: 0.5)
+                        }
+                        .font(.caption)
+                    }
 
                     Divider()
 

@@ -9,7 +9,10 @@ import Foundation
 // MARK: - Request Result
 
 enum RequestResult {
-    case success(ELMResponse)
+    case success(
+        response: ELMResponse,
+        latency: TimeInterval
+    )
     case timeout
     case connectionLost
 }
@@ -40,6 +43,14 @@ struct ResponseClassifier {
     }
 }
 
+struct RequestContext {
+    let mode: OBDMode
+    let pid: UInt16
+    let header: String
+    let retryCount: Int
+    let searchEngine: SearchEngineType
+}
+
 // MARK: - Request Executor
 
 @MainActor
@@ -62,6 +73,7 @@ final class RequestExecutor {
     /// Sends a single OBD request and converts transport errors into scanner-friendly results.
     func execute(
         request: String,
+        context: RequestContext,
         timeout: Double
     ) async -> RequestResult {
 
@@ -79,7 +91,26 @@ final class RequestExecutor {
 
             statistics.recordSuccess(latency: result.latency)
 
-            return .success(result.response)
+            let searchResult = classifier.classify(result.response)
+
+            TelemetryStore.shared.record(
+                RequestTelemetry(
+                    timestamp: Date(),
+                    mode: context.mode,
+                    pid: context.pid,
+                    header: context.header,
+                    latency: result.latency,
+                    response: result.response,
+                    classification: searchResult,
+                    retryCount: context.retryCount,
+                    searchEngine: context.searchEngine
+                )
+            )
+
+            return .success(
+                response: result.response,
+                latency: result.latency
+            )
 
         } catch BluetoothManager.BluetoothError.timeout {
             statistics.recordFailure()

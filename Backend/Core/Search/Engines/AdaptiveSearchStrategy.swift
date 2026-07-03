@@ -9,6 +9,7 @@ import Foundation
 
 struct AdaptiveSearchStrategy: SearchStrategy {
 
+    let engineType: SearchEngineType = .adaptive
     private let start: UInt16
     private let end: UInt16
 

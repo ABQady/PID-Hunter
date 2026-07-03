@@ -6,8 +6,24 @@
 //
 
 import Foundation
+import SwiftUI
 
 enum SearchEngineFactory {
+
+    @AppStorage("enableTelemetryLearning")
+    private static var enableTelemetryLearning = true
+
+    @AppStorage("successWeight")
+    private static var successWeight = 1000.0
+
+    @AppStorage("latencyWeight")
+    private static var latencyWeight = 1000.0
+
+    @AppStorage("confidenceWeight")
+    private static var confidenceWeight = 2.0
+
+    @AppStorage("distanceWeight")
+    private static var distanceWeight = 1.0
 
     // MARK: - Internal
 
@@ -26,6 +42,7 @@ enum SearchEngineFactory {
 
     // MARK: - Public API
 
+    @MainActor
     static func engine(
         for type: SearchEngineType
     ) -> SearchEngine? {
@@ -36,6 +53,7 @@ enum SearchEngineFactory {
         return SearchEngine(descriptor: descriptor)
     }
 
+    @MainActor
     static func make(
         type: SearchEngineType,
         start: UInt16,
@@ -45,9 +63,33 @@ enum SearchEngineFactory {
             preconditionFailure("No SearchEngine registered for \(type)")
         }
 
-        return descriptor.makeStrategy(
+        var strategy = descriptor.makeStrategy(
             start: start,
             end: end
         )
+
+        if type == .smart,
+           var smart = strategy as? SmartSearchStrategy {
+
+            let weights = SmartSearchStrategy.ScoringWeights(
+                successWeight: successWeight,
+                latencyWeight: latencyWeight,
+                confidenceWeight: confidenceWeight,
+                distanceWeight: distanceWeight
+            )
+
+            smart = SmartSearchStrategy(
+                start: start,
+                end: end,
+                analyzer: enableTelemetryLearning
+                    ? TelemetryStore.shared.analyzer()
+                    : nil,
+                scoring: weights
+            )
+
+            strategy = smart
+        }
+
+        return strategy
     }
 }

@@ -471,14 +471,20 @@ final class BruteForceScanner: ObservableObject {
                 continue
             }
 
-            let started = ContinuousClock.now
+            // let started = ContinuousClock.now
+            let context = RequestContext(
+                mode: mode,
+                pid: nextPID,
+                header: header,
+                retryCount: 0,
+                searchEngine: searchStrategy.engineType
+            )
             switch await requestExecutor.execute(
                 request: req,
+                context: context,
                 timeout: requestTimeout
             ) {
-            case .success(let response):
-                let latency = Double(started.duration(to: .now).components.seconds)
-                    + Double(started.duration(to: .now).components.attoseconds) / 1e18
+            case .success(let response, let latency):
                 processSuccessfulResponse(
                     response,
                     latency: latency,
