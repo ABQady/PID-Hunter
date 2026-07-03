@@ -60,10 +60,12 @@ final class ELM327: ObservableObject {
         timeout: Duration = .seconds(1)
     ) async throws -> ELMResponse {
 
-        try await BluetoothManager.shared.sendAndWait(
+        let result = try await BluetoothManager.shared.sendAndWait(
             makeCommand(mode: mode, pid: pid),
             timeout: timeout
         )
+
+        return result.response
     }
     
     func request(

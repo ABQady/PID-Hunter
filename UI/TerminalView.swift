@@ -244,15 +244,30 @@ struct TerminalView: View {
                         Text("Found: \(brute.scanStatus.successCount)")
                             .font(isCompact ? .caption2 : .headline)
                             .frame(maxWidth: .infinity, alignment: .center)
+                        Text(
+                            String(
+                                format: "%.0f%%",
+                                brute.statistics.successRate * 100
+                            )
+                        )
+                        .font(isCompact ? .caption2 : .headline)
+                        .foregroundStyle(.secondary)
 
                         if !isCompact {
                             Spacer()
                         }
 
-                        Text("TX \(bt.txCount) • RX \(bt.rxCount)")
-                            .font(isCompact ? .caption2 : .headline)
-                            .frame(maxWidth: .infinity, alignment: .center)
-                            .foregroundStyle(.secondary)
+                        Text(
+                            String(
+                                format: "%.0f ms • TX %d • RX %d",
+                                brute.statistics.averageLatency * 1000,
+                                bt.txCount,
+                                bt.rxCount
+                            )
+                        )
+                        .font(isCompact ? .caption2 : .headline)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .foregroundStyle(.secondary)
 
                         if !isCompact {
                             Spacer()

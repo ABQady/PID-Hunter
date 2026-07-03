@@ -22,6 +22,15 @@ struct SettingsView: View {
 
     @AppStorage("maxConsecutiveTimeouts")
     private var maxConsecutiveTimeouts = 15
+    
+    @AppStorage("selectedSearchEngine")
+    private var selectedSearchEngine = SearchEngineType.sequential.rawValue
+
+    @AppStorage("useResponseLatency")
+    private var useResponseLatency = true
+
+    @AppStorage("rememberDiscoveries")
+    private var rememberDiscoveries = true
 
     @Binding var header: String
     @Binding var selectedMode: OBDMode
@@ -179,6 +188,117 @@ struct SettingsView: View {
                     )
                 )
                 
+                //MARK: Search Engine Settings
+                
+                VStack(alignment: .leading, spacing: 12) {
+
+                    Text("Search Engine")
+                        .font(.headline)
+
+                    Picker("Algorithm", selection: $selectedSearchEngine) {
+                        ForEach(SearchEngineCatalog.all) { engine in
+                            Label(
+                                engine.displayName,
+                                systemImage: engine.icon
+                            )
+                            .tag(engine.type.rawValue)
+                        }
+                    }
+                    .pickerStyle(.menu)
+
+                    Divider()
+
+//                    Toggle(isOn: $useResponseLatency) {
+//
+//                        VStack(alignment: .leading) {
+//
+//                            Label(
+//                                "Use Response Latency",
+//                                systemImage: "timer"
+//                            )
+//
+//                            Text("Allow adaptive engines to prioritize fast ECU responses.")
+//                                .font(.caption)
+//                                .foregroundStyle(.secondary)
+//
+//                        }
+//                    }
+//
+//                    Divider()
+//
+//                    Toggle(isOn: $rememberDiscoveries) {
+//
+//                        VStack(alignment: .leading) {
+//
+//                            Label(
+//                                "Remember Previous Discoveries",
+//                                systemImage: "brain.head.profile"
+//                            )
+//
+//                            Text("Reuse discovered PIDs and learned patterns between scans.")
+//                                .font(.caption)
+//                                .foregroundStyle(.secondary)
+//
+//                        }
+//                    }
+
+                }
+                .padding()
+                .background(.thinMaterial)
+                .clipShape(
+                    RoundedRectangle(cornerRadius: 18)
+                )
+                
+                //MARK: Statistics
+                
+                VStack(alignment: .leading, spacing: 12) {
+
+                    Text("Search Statistics")
+                        .font(.headline)
+
+                    HStack {
+
+                        statistic(
+                            title: "Requests",
+                            value: "\(brute.statistics.requestsSent)"
+                        )
+
+                        Spacer()
+
+                        statistic(
+                            title: "Success",
+                            value: String(
+                                format: "%.1f%%",
+                                brute.statistics.successRate * 100
+                            )
+                        )
+
+                    }
+
+                    HStack {
+                        statistic(
+                            title: "Latency",
+                            value: String(
+                                format: "%.0f ms",
+                                brute.statistics.averageLatency * 1000
+                            )
+                        )
+
+                        Spacer()
+                        statistic(
+                            title: "Hits",
+                            value: "\(brute.scanStatus.successCount)"
+                        )
+
+                    }
+
+                }
+                .padding()
+                .background(.thinMaterial)
+                .clipShape(
+                    RoundedRectangle(cornerRadius: 18)
+                )
+                
                 /////////////////////////// MARK: Export
                 HStack(alignment: .center) {
                 #if os(iOS)
@@ -235,5 +355,22 @@ struct SettingsView: View {
     #else
         settingsTab
     #endif
+    }
+}
+
+@ViewBuilder
+private func statistic(
+    title: String,
+    value: String
+) -> some View {
+
+    VStack(alignment: .leading, spacing: 2) {
+
+        Text(title)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+        Text(value)
+            .font(.headline)
     }
 }

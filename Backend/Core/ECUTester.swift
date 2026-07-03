@@ -31,13 +31,16 @@ final class ECUTester {
             return
         }
 
-        guard let response = try? await bt.sendAndWait("0100", timeout: .seconds(2)) else {
+        guard let result = try? await bt.sendAndWait("0100", timeout: .seconds(2)) else {
             Logger.shared.error("ECU test failed: no response from ECU")
             Logger.shared.info("===== ECU TEST END =====")
             return
         }
 
+        let response = result.response
+
         Logger.shared.info("ECU response: \(response.raw)")
+        Logger.shared.info("Latency: \(Int(result.latency * 1000)) ms")
 
         Logger.shared.info("===== ECU TEST END =====")
     }

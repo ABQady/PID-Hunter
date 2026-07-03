@@ -45,32 +45,49 @@ struct ResponseClassifier {
 @MainActor
 final class RequestExecutor {
 
-    // TODO: Support retries and request classification without exposing BluetoothManager.
+    // TODO:
+    // - Inject an OBDTransport implementation.
+    // - Record SearchStatistics automatically.
+    // - Support retry policies.
+    // - Support request tracing.
 
     private let classifier = ResponseClassifier()
 
+    private(set) var statistics: SearchStatistics
+    
+    init(statistics: SearchStatistics = .init()) {
+        self.statistics = statistics
+    }
+    
     /// Sends a single OBD request and converts transport errors into scanner-friendly results.
     func execute(
         request: String,
         timeout: Double
     ) async -> RequestResult {
 
+        statistics.recordRequest()
+
         guard BluetoothManager.shared.isConnected else {
             return .connectionLost
         }
 
         do {
-            let response = try await BluetoothManager.shared.sendAndWait(
+            let result = try await BluetoothManager.shared.sendAndWait(
                 request,
                 timeout: .seconds(timeout)
             )
 
+            let response = result.response
+            statistics.recordSuccess(latency: result.latency)
+
             return .success(response)
 
         } catch BluetoothManager.BluetoothError.timeout {
+            statistics.recordFailure()
             return .timeout
 
         } catch {
+            statistics.recordFailure()
             Logger.shared.error("Request failed: \(error.localizedDescription)")
             return .connectionLost
         }
@@ -78,5 +95,9 @@ final class RequestExecutor {
 
     func classify(_ response: ELMResponse) -> SearchResult {
         classifier.classify(response)
+    }
+
+    func resetStatistics() {
+        statistics.reset()
     }
 }

@@ -46,11 +46,12 @@ final class Preflight {
         }
 
         do {
-            let protocolResponse =
+            let protocolResult =
             try await BluetoothManager.shared.sendAndWait(
                 "ATDP",
                 timeout: .seconds(2)
             )
+            let protocolResponse = protocolResult.response
 
             Logger.shared.info(
                 "Protocol: \(protocolResponse.raw)"
@@ -99,10 +100,11 @@ final class Preflight {
         }
 
         do {
-            let response = try await BluetoothManager.shared.sendAndWait(
+            let result = try await BluetoothManager.shared.sendAndWait(
                 "0100",
                 timeout: .seconds(2)
             )
+            let response = result.response
 
             let rx = response.raw.uppercased()
 

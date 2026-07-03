@@ -33,7 +33,7 @@ final class BluetoothManager: NSObject, ObservableObject {
     // MARK: Send and Wait
     private struct PendingRequest {
         let id: UUID
-        let continuation: CheckedContinuation<ELMResponse, Error>
+        let continuation: CheckedContinuation<(response: ELMResponse, latency: TimeInterval), Error>
         var timeoutTask: Task<Void, Never>?
     }
 
@@ -205,7 +205,7 @@ final class BluetoothManager: NSObject, ObservableObject {
     func sendAndWait(
         _ command: String,
         timeout: Duration = .seconds(1)
-    ) async throws -> ELMResponse {
+    ) async throws -> (response: ELMResponse, latency: TimeInterval) {
         guard pendingRequest == nil else {
             throw BluetoothError.busy
         }
@@ -314,9 +314,9 @@ final class BluetoothManager: NSObject, ObservableObject {
 
         status = .testingECU
         do {
-            let response = try await sendAndWait("0100", timeout: .seconds(2))
+            let result = try await sendAndWait("0100", timeout: .seconds(2))
             
-            Logger.shared.success("ECU Test Response: \(response.raw)")
+            Logger.shared.success("ECU Test Response: \(result.response.raw)")
         } catch {
             Logger.shared.error("ECU test failed: \(error)")
             return
@@ -594,6 +594,7 @@ extension BluetoothManager:
             
             let ms = Date().timeIntervalSince(lastSendTime) * 1000
             Logger.shared.info("Response Time: \(Int(ms)) ms")
+            let latency = ms / 1000.0
 
             let chunk = String(data: value, encoding: .utf8) ?? "<non-utf8>"
             
@@ -674,7 +675,7 @@ extension BluetoothManager:
                 Logger.shared.debug("Completing pending request \(pending.id)")
                 pending.timeoutTask?.cancel()
                 pendingRequest = nil
-                pending.continuation.resume(returning: response)
+                pending.continuation.resume(returning: (response, latency))
                 Logger.shared.debug("🟢 Continuation RESUMED: \(response.type)")
             }
         }

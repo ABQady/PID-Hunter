@@ -148,46 +148,29 @@ struct ResultsView: View {
                     Divider()
                     
                     HStack {
-                        
-                        statistic(
-                            title: "Requests",
-                            value: "\(stats.requestsSent)"
-                        )
-                        
+                        statistic(title: "Requests", value: "\(stats.requestsSent)")
+
                         Spacer()
-                        
-                        statistic(
-                            title: "Responses",
-                            value: "\(stats.responses)"
-                        )
-                        
+
+                        statistic(title: "Hits", value: "\(brute.scanStatus.successCount)")
+
                         Spacer()
-                        
-                        statistic(
-                            title: "Hits",
-                            value: "\(brute.scanStatus.successCount)/\(stats.totalRequests)"
-                        )
+
+                        statistic(title: "Hit Rate", value: String(format: "%.1f%%", stats.positiveResponseRate))
                     }
-                    
+
                     HStack {
-                        
-                        statistic(
-                            title: "NO DATA",
-                            value: "\(stats.noData)"
-                        )
-                        
+                        statistic(title: "NO DATA", value: "\(stats.noData)")
+
                         Spacer()
-                        
-                        statistic(
-                            title: "Bus Errors",
-                            value: "\(stats.busErrors)"
-                        )
-                        
+
+                        statistic(title: "Bus Errors", value: "\(stats.busErrors)")
+
                         Spacer()
-                        
+
                         statistic(
-                            title: "Avg",
-                            value: String(format: "%.0f ms", stats.averageRequestTime(at: .now) * 1000)
+                            title: "Latency",
+                            value: String(format: "%.0f ms", brute.statistics.averageLatency * 1000)
                         )
                     }
 
@@ -195,10 +178,7 @@ struct ResultsView: View {
                         statistic(
                             title: "Elapsed",
                             value: Duration.seconds(stats.elapsed(at: .now))
-                                .formatted(.units(
-                                    allowed: [.hours, .minutes, .seconds],
-                                    width: .abbreviated
-                                ))
+                                .formatted(.units(allowed: [.hours, .minutes, .seconds], width: .abbreviated))
                         )
 
                         Spacer()
@@ -207,18 +187,15 @@ struct ResultsView: View {
                             title: "ETA",
                             value: stats.eta(at: .now) > 0
                                 ? Duration.seconds(stats.eta(at: .now))
-                                    .formatted(.units(
-                                        allowed: [.hours, .minutes, .seconds],
-                                        width: .abbreviated
-                                    ))
+                                    .formatted(.units(allowed: [.hours, .minutes, .seconds], width: .abbreviated))
                                 : "--"
                         )
 
                         Spacer()
 
                         statistic(
-                            title: "Hit Rate",
-                            value: String(format: "%.1f%%", stats.positiveResponseRate)
+                            title: "Success",
+                            value: String(format: "%.1f%%", brute.statistics.successRate * 100)
                         )
                     }
                     
