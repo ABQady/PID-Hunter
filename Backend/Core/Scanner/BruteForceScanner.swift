@@ -277,13 +277,17 @@ final class BruteForceScanner: ObservableObject {
     ) {
         let searchResult = requestExecutor.classify(response)
         switch response.type {
-        case .mode01, .mode21, .mode22:
-            stats.positiveResponses += 1
-        case .negative:
-            stats.negativeResponses += 1
-        default:
-            break
-        }
+            case .mode01, .mode21, .mode22:
+                stats.recordPositiveResponse()
+            case .negative:
+                stats.recordNegativeResponse()
+            case .noData:
+                stats.recordNoData()
+            case .busError:
+                stats.recordBusError()
+            default:
+                break
+            }
 
         statistics.record(result: searchResult, latency: latency)
 
@@ -311,13 +315,13 @@ final class BruteForceScanner: ObservableObject {
         consecutiveTimeouts: inout Int
     ) async {
         statistics.record(result: .timeout, latency: requestTimeout)
-        stats.timeouts += 1
-
+        stats.recordTimeout()
+        
         consecutiveTimeouts += 1
 
         if consecutiveTimeouts >= maxConsecutiveTimeouts {
             Logger.shared.error("Consecutive timeout limit (\(maxConsecutiveTimeouts)) reached. Stopping scan.")
-            stats.finish()
+            stats.complete()
             shouldStop = true
             return
         }
@@ -337,10 +341,9 @@ final class BruteForceScanner: ObservableObject {
         "82F111"
     ]
     
-
     func stop() {
         shouldStop = true
-        stats.finish()
+        stats.complete()
     }
     
     // MARK: - Generic Scan Implementation
@@ -386,9 +389,7 @@ final class BruteForceScanner: ObservableObject {
         var done = currentHeaderIndex * count + (currentPID - startPID)
 
         if currentHeaderIndex == 0 && currentPID == startPID {
-            stats.reset()
-            stats.totalRequests = total
-            stats.start()
+            stats.begin(totalRequests: total)
         } else {
             stats.totalRequests = total
             if stats.startedAt == nil {
@@ -436,7 +437,7 @@ final class BruteForceScanner: ObservableObject {
             searchStrategy.reset()
             saveResumePoint()
         }
-        stats.finish()
+        stats.complete()
         finishScan(completed: true)
     }
 

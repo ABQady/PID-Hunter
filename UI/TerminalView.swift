@@ -26,6 +26,22 @@ struct TerminalView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     private var isCompact: Bool { horizontalSizeClass == .compact }
 
+    @inline(__always)
+    private var compactStatusTitle: String {
+        switch bt.status.title {
+        case "Waiting for response...":
+            return "Waiting"
+        case "Connected":
+            return "Connected"
+        case "Disconnected":
+            return "Offline"
+        case let title where title.hasPrefix("Connected"):
+            return "Connected"
+        default:
+            return bt.status.title
+        }
+    }
+
     // Progress fraction for progress bar and percentage
     private var progressFraction: Double {
         guard stats.totalRequests > 0 else { return 0 }
@@ -222,19 +238,18 @@ struct TerminalView: View {
             // MARK: Live Log
             VStack(alignment: .leading) {
                 ScrollViewReader { proxy in
-                    HStack(spacing: isCompact ? 10 : 16) {
+                    HStack(spacing: isCompact ? 4 : 16) {
                         Text("Terminal")
                             .font(isCompact ? .body.weight(.semibold) : .headline)
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
-                            .frame(width: isCompact ? 72 : 70, alignment: .leading)
+                            .frame(width: isCompact ? 58 : 70, alignment: .leading)
                             .padding(.leading, isCompact ? -10 : 0)
                             .layoutPriority(2)
                         if !isCompact {
                             Spacer()
                         }
-
-                        Text(bt.status.title)
+                        Text(isCompact ? compactStatusTitle : bt.status.title)
                             .font(isCompact ? .caption2 : .headline)
                             .lineLimit(1)
                             .allowsTightening(true)
@@ -245,39 +260,33 @@ struct TerminalView: View {
                             Spacer()
                         }
 
-                        Text("Found: \(brute.scanStatus.successCount)")
-                            .font(isCompact ? .caption2 : .headline)
-                            .frame(maxWidth: .infinity, alignment: .center)
-                        Text(
-                            String(
-                                format: "%.0f%%",
-                                brute.statistics.successRate * 100
-                            )
-                        )
-                        .font(isCompact ? .caption2 : .headline)
-                        .foregroundStyle(.secondary)
+                        Text(isCompact ? "F: \(brute.scanStatus.successCount)" : "Found: \(brute.scanStatus.successCount)")
+                            .font(isCompact ? .caption2.monospacedDigit() : .headline)
+                            .fixedSize()
+
+                        Text(String(format: isCompact ? "%.0f%%" : "%.0f%%", brute.statistics.successRate * 100))
+                            .font(isCompact ? .caption2.monospacedDigit() : .headline)
+                            .foregroundStyle(.secondary)
+                            .fixedSize()
 
                         if !isCompact {
                             Spacer()
                         }
 
                         Text(
-                            String(
-                                format: "%.0f ms • TX %d • RX %d",
-                                brute.statistics.averageLatency * 1000,
-                                bt.txCount,
-                                bt.rxCount
-                            )
+                            isCompact
+                            ? String(format: "%.0fms %d/%d", brute.statistics.averageLatency * 1000, bt.txCount, bt.rxCount)
+                            : String(format: "%.0f ms • TX %d • RX %d", brute.statistics.averageLatency * 1000, bt.txCount, bt.rxCount)
                         )
-                        .font(isCompact ? .caption2 : .headline)
-                        .frame(maxWidth: .infinity, alignment: .center)
+                        .font(isCompact ? .caption2.monospacedDigit() : .headline)
                         .foregroundStyle(.secondary)
+                        .fixedSize()
 
                         if !isCompact {
                             Spacer()
                         }
 
-                        Button("▼ Live") {
+                        Button {
                             shouldAutoScroll = true
                             programmaticScroll = true
 
@@ -290,6 +299,12 @@ struct TerminalView: View {
                             Task { @MainActor in
                                 try? await Task.sleep(for: .milliseconds(100))
                                 programmaticScroll = false
+                            }
+                        } label: {
+                            if isCompact {
+                                Image(systemName: "arrow.down.circle.fill")
+                            } else {
+                                Text("▼ Live")
                             }
                         }
                         .font(isCompact ? .caption : .body)

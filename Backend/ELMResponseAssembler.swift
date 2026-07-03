@@ -35,11 +35,6 @@ final class ELMResponseAssembler {
         lastChunkTime = now
         buffer += chunk
 
-        // Ignore ELM informational chatter until a complete response is received.
-        // These messages may legitimately precede a real ECU frame.
-        buffer = buffer.replacingOccurrences(of: "\rBUS INIT:", with: "\rBUS INIT: ")
-        buffer = buffer.replacingOccurrences(of: "\rSEARCHING...", with: "\rSEARCHING... ")
-
         guard buffer.count <= maxBufferSize else {
             Logger.shared.debug("Assembler buffer overflow")
             Logger.shared.debug("Discarded buffer (\(buffer.count) bytes)")
@@ -64,47 +59,17 @@ final class ELMResponseAssembler {
             }
 
             let parsed = ELMResponseParser.parse(trimmed)
-            let upper = trimmed.uppercased()
-            let compact = upper.replacingOccurrences(of: " ", with: "")
-
-            let knownServicePrefixes = ["41", "61", "62", "7F"]
-            let hasECUFrame = knownServicePrefixes.contains {
-                compact.hasPrefix($0) || compact.contains("\r\($0)")
-            }
-
-            // Detect real ECU service frames while avoiding false positives in ELM text.
-            let isELMChatter = upper.contains("BUS INIT") ||
-                               upper.contains("SEARCHING") ||
-                               upper.contains("ELM327") ||
-                               upper.contains("ATI") ||
-                               upper == "OK" ||
-                               upper.hasPrefix("ISO ") ||
-                               upper.hasPrefix("KWP")
-
-            if isELMChatter && !hasECUFrame {
-                Logger.shared.debug("Assembler accepted AT response: \(trimmed)")
-
-                responses.append(
-                    ELMResponse(
-                        raw: trimmed,
-                        type: .atResponse,
-                        header: nil,
-                        service: nil,
-                        pid: nil,
-                        payload: []
-                    )
-                )
-
-                continue
-            }
-
-            if parsed.type == .unknown && !hasECUFrame {
+            
+            switch parsed.type {
+            case .unknown:
                 Logger.shared.debug("Assembler discarded unknown response: \(trimmed)")
-                continue
-            }
 
-            Logger.shared.debug("Assembler accepted response: \(parsed.type)")
-            responses.append(parsed)
+            default:
+                Logger.shared.debug(
+                    "Assembler accepted \(parsed.type): \(trimmed)"
+                )
+                responses.append(parsed)
+            }
        }
         if !responses.isEmpty {
             Logger.shared.debug(

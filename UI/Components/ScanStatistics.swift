@@ -117,4 +117,44 @@ final class ScanStatistics: ObservableObject {
         guard totalRequests > 0 else { return 0 }
         return Double(requestsSent) * 100 / Double(totalRequests)
     }
+    
+    // MARK: - Recording
+
+    func begin(totalRequests: Int) {
+        reset()
+        self.totalRequests = totalRequests
+        start()
+    }
+
+    func recordPositiveResponse() {
+        requestsSent += 1
+        responses += 1
+        positiveResponses += 1
+    }
+
+    func recordNegativeResponse() {
+        requestsSent += 1
+        responses += 1
+        negativeResponses += 1
+    }
+
+    func recordNoData() {
+        requestsSent += 1
+        responses += 1
+        noData += 1
+    }
+
+    func recordTimeout() {
+        requestsSent += 1
+        timeouts += 1
+    }
+
+    func recordBusError() {
+        requestsSent += 1
+        busErrors += 1
+    }
+
+    func complete() {
+        finish()
+    }
 }

@@ -58,8 +58,6 @@ enum ELMResponseParser {
         "BUS INIT",
         "SEARCHING...",
         "SEARCHING",
-        "ELM327",
-        "ATI"
     ]
 
     static func parse(_ text: String) -> ELMResponse {
@@ -113,13 +111,13 @@ enum ELMResponseParser {
         }
         var payload: [UInt8] = []
         
-        if compact.contains("NODATA") {
+        if upper.contains("NO DATA") {
             type = .noData
-        } else if compact.contains("UNABLETOCONNECT") {
+        } else if upper.contains("UNABLE TO CONNECT") {
             type = .unableToConnect
-        } else if compact.contains("BUSERROR") {
+        } else if upper.contains("BUS ERROR") {
             type = .busError
-        } else if compact.contains("STOPPED") {
+        } else if upper.contains("STOPPED") {
             type = .stopped
         }
         
@@ -167,15 +165,7 @@ enum ELMResponseParser {
 
                 type = .atResponse
 
-            } else if compact.contains("NODATA") {
-                type = .noData
-            } else if compact.contains("STOPPED") {
-                type = .stopped
-            } else if compact.contains("BUSERROR") {
-                type = .busError
-            } else if compact.contains("UNABLETOCONNECT") {
-                type = .unableToConnect
-            } else if compact.contains("SEARCHING") {
+            } else if upper.contains("SEARCHING") {
                 type = .searching
             }
         }
