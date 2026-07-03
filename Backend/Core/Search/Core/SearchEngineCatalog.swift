@@ -10,14 +10,17 @@ import Foundation
 @MainActor
 enum SearchEngineCatalog {
 
+    @inline(__always)
+    private static func registeredEngines() -> [SearchEngine] {
+        SearchEngineBootstrap.registerAll()
+
+        return SearchEngineType.allCases.compactMap(SearchEngineFactory.engine)
+    }
+
     // MARK: - Collections
 
     static var all: [SearchEngine] {
-        SearchEngineBootstrap.registerAll()
-
-        return SearchEngineType.allCases.compactMap {
-            SearchEngineFactory.engine(for: $0)
-        }
+        registeredEngines()
     }
 
     // MARK: - Defaults
@@ -26,20 +29,17 @@ enum SearchEngineCatalog {
         engine(.adaptive)
     }
 
-    static var core: [SearchEngine] {
-        all.filter(\.type.isCore)
-    }
+    // MARK: - Groups
 
-    static var experimental: [SearchEngine] {
-        all.filter(\.type.isExperimental)
-    }
+    static var core: [SearchEngine] { all.filter(\.isCore) }
 
-    static var benchmarkable: [SearchEngine] {
-        all.filter(\.supportsBenchmark)
-    }
+    static var experimental: [SearchEngine] { all.filter(\.type.isExperimental) }
+
+    static var benchmarkable: [SearchEngine] { all.filter(\.supportsBenchmark) }
 
     // MARK: - Utilities
 
+    @inline(__always)
     static func contains(
         _ type: SearchEngineType
     ) -> Bool {
@@ -51,6 +51,6 @@ enum SearchEngineCatalog {
     static func engine(
         _ type: SearchEngineType
     ) -> SearchEngine? {
-        return SearchEngineFactory.engine(for: type)
+        SearchEngineFactory.engine(for: type)
     }
 }

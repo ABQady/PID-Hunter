@@ -9,6 +9,10 @@ struct DynamicPID: Identifiable {
     let id = UUID()
     
     let request: String
+
+    var sampleCount: Int {
+        samples.count
+    }
     
     var samples: [String] = []
     
@@ -37,7 +41,6 @@ final class DynamicScanner: ObservableObject {
     func stop() {
         stopFlag = true
         running = false
-        RequestResponseMatcher.shared.clear()
     }
     
     func monitor(requests: [String]) {
@@ -50,14 +53,10 @@ final class DynamicScanner: ObservableObject {
         stopFlag = false
         running = true
         
-        pids.removeAll()
+        pids.removeAll(keepingCapacity: true)
         
-        for req in requests {
-            pids.append(
-                DynamicPID(
-                    request: req
-                )
-            )
+        pids = requests.map {
+            DynamicPID(request: $0)
         }
         
         Task {
@@ -75,19 +74,25 @@ final class DynamicScanner: ObservableObject {
                     }
                     
                     let req = pids[index].request
-                                    
-                    ELM327.shared.send(req)
 
-                    let startWait = Date()
+                    if stopFlag {
+                        break
+                    }
 
-                    while !RequestResponseMatcher.shared.pending.isEmpty {
+                    do {
+                        let result = try await ELM327.shared.request(
+                            command: req,
+                            timeout: .seconds(requestTimeout)
+                        )
 
-                        if Date().timeIntervalSince(startWait) > requestTimeout {
-                            RequestResponseMatcher.shared.clear()
-                            break
-                        }
-
-                        try? await Task.sleep(for: .milliseconds(10))
+                        processResponse(
+                            request: req,
+                            response: result.response.raw
+                        )
+                    } catch BluetoothManager.BluetoothError.timeout {
+                        // Ignore timeout and continue scanning.
+                    } catch {
+                        Logger.shared.debug("DynamicScanner request failed: \(error.localizedDescription)")
                     }
                 }
             }
@@ -111,6 +116,10 @@ final class DynamicScanner: ObservableObject {
             .trimmingCharacters(
                 in: .whitespacesAndNewlines
             )
+
+        guard !cleaned.isEmpty else {
+            return
+        }
         
         let upper = cleaned.uppercased()
 
@@ -128,13 +137,17 @@ final class DynamicScanner: ObservableObject {
             return
         }
         
-        pids[index].samples.append(cleaned)
-        
-        if pids[index].samples.count > maxSamplesPerPID {
-            pids[index].samples.removeFirst()
+        var pid = pids[index]
+
+        pid.samples.append(cleaned)
+
+        if pid.samples.count > maxSamplesPerPID {
+            pid.samples.removeFirst()
         }
-        
-        pids[index].uniqueValues.insert(cleaned)
+
+        pid.uniqueValues.insert(cleaned)
+
+        pids[index] = pid
     }
     
     func changedOnly() -> [DynamicPID] {

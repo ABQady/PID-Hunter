@@ -12,10 +12,16 @@ struct SequentialSearchStrategy: SearchStrategy {
 
     private var current: Int
 
+    @inline(__always)
+    private var currentPID: UInt16 {
+        UInt16(current)
+    }
+
     var isExhausted: Bool {
         current > Int(end)
     }
 
+    // MARK: - Lifecycle
     init(start: UInt16, end: UInt16) {
         precondition(start <= end, "start must not be greater than end")
         self.start = start
@@ -23,20 +29,18 @@ struct SequentialSearchStrategy: SearchStrategy {
         self.current = Int(start)
     }
 
+    // MARK: - State
     mutating func reset() {
         current = Int(start)
     }
 
     // MARK: - PID Selection
     mutating func nextPID() -> UInt16? {
-
         guard current <= Int(end) else {
             return nil
         }
-
-        let pid = UInt16(current)
-        current += 1
-        return pid
+        defer { current += 1 }
+        return currentPID
     }
 
     // MARK: - Learning
@@ -53,10 +57,11 @@ struct SequentialSearchStrategy: SearchStrategy {
     
     // MARK: - Navigation
     mutating func seek(to pid: UInt16) {
-        current = min(
+        let clamped = min(
             max(Int(pid), Int(start)),
             Int(end) + 1
         )
+        current = clamped
     }
 
 }

@@ -25,6 +25,15 @@ enum SearchEngineFactory {
     @AppStorage("distanceWeight")
     private static var distanceWeight = 1.0
 
+    private static var smartScoringWeights: SmartSearchStrategy.ScoringWeights {
+        .init(
+            successWeight: successWeight,
+            latencyWeight: latencyWeight,
+            confidenceWeight: confidenceWeight,
+            distanceWeight: distanceWeight
+        )
+    }
+
     // MARK: - Internal
 
     private static func ensureRegistered() {
@@ -40,7 +49,33 @@ enum SearchEngineFactory {
         return SearchEngineRegistry.descriptor(for: type)
     }
 
-    // MARK: - Public API
+    // MARK: - Strategy Creation
+
+    @MainActor
+    private static func makeStrategy(
+        descriptor: any SearchEngineDescriptor,
+        type: SearchEngineType,
+        start: UInt16,
+        end: UInt16
+    ) -> any SearchStrategy {
+        if type == .smart {
+            return SmartSearchStrategy(
+                start: start,
+                end: end,
+                analyzer: enableTelemetryLearning
+                    ? TelemetryStore.shared.analyzer()
+                    : nil,
+                scoring: smartScoringWeights
+            )
+        }
+
+        return descriptor.makeStrategy(
+            start: start,
+            end: end
+        )
+    }
+
+    // MARK: - Factory
 
     @MainActor
     static func engine(
@@ -63,33 +98,11 @@ enum SearchEngineFactory {
             preconditionFailure("No SearchEngine registered for \(type)")
         }
 
-        var strategy = descriptor.makeStrategy(
+        return makeStrategy(
+            descriptor: descriptor,
+            type: type,
             start: start,
             end: end
         )
-
-        if type == .smart,
-           var smart = strategy as? SmartSearchStrategy {
-
-            let weights = SmartSearchStrategy.ScoringWeights(
-                successWeight: successWeight,
-                latencyWeight: latencyWeight,
-                confidenceWeight: confidenceWeight,
-                distanceWeight: distanceWeight
-            )
-
-            smart = SmartSearchStrategy(
-                start: start,
-                end: end,
-                analyzer: enableTelemetryLearning
-                    ? TelemetryStore.shared.analyzer()
-                    : nil,
-                scoring: weights
-            )
-
-            strategy = smart
-        }
-
-        return strategy
     }
 }

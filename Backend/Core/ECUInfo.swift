@@ -7,8 +7,20 @@
 import Foundation
 
 struct SupportedServices {
+    private(set) var services: [String] = []
 
-    var services: [String] = []
+    mutating func insert(_ service: String) {
+        guard !services.contains(service) else {
+            return
+        }
+
+        services.append(service)
+        services.sort()
+    }
+
+    mutating func removeAll() {
+        services.removeAll(keepingCapacity: true)
+    }
 }
 
 @MainActor
@@ -32,7 +44,7 @@ final class ECUInfo: ObservableObject {
         protocolName = "-"
         header = "-"
         status = "-"
-        services = SupportedServices()
+        services.removeAll()
         lastConnected = nil
     }
     
@@ -44,11 +56,6 @@ final class ECUInfo: ObservableObject {
 
         let value = String(format: "%02X", service)
 
-        guard !services.services.contains(value) else {
-            return
-        }
-
-        services.services.append(value)
-        services.services.sort()
+        services.insert(value)
     }
 }

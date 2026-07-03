@@ -29,6 +29,11 @@ enum OBDMode: String, CaseIterable, Identifiable {
         .mode22
     ]
 
+    private static let extendedPIDModes: Set<OBDMode> = [
+        .mode22,
+        .mode23
+    ]
+
     var id: String {
         rawValue
     }
@@ -82,32 +87,18 @@ enum OBDMode: String, CaseIterable, Identifiable {
     }
 
     var pidDigits: Int {
-        switch self {
-        case .mode22, .mode23:
-            return 4
-        default:
-            return 2
-        }
+        Self.extendedPIDModes.contains(self) ? 4 : 2
     }
 
     var defaultStartPID: Int {
-        switch self {
-        case .mode22, .mode23:
-            return 0x0000
-        default:
-            return 0x00
-        }
+        Self.extendedPIDModes.contains(self) ? 0x0000 : 0x00
     }
 
     var defaultEndPID: Int {
-        switch self {
-        case .mode22, .mode23:
-            return 0xFFFF
-        default:
-            return 0xFF
-        }
+        Self.extendedPIDModes.contains(self) ? 0xFFFF : 0xFF
     }
 
+    @inline(__always)
     var responseService: UInt8 {
         switch self {
         case .mode01:
@@ -119,11 +110,12 @@ enum OBDMode: String, CaseIterable, Identifiable {
         case .mode23:
             return 0x63
         default:
-            return UInt8(truncatingIfNeeded: 0x40 + Int(strtoul(rawValue, nil, 16)))
+            return requestService &+ 0x40
         }
     }
     
+    @inline(__always)
     var requestService: UInt8 {
-        UInt8(strtoul(rawValue, nil, 16))
+        UInt8(rawValue, radix: 16) ?? 0
     }
 }

@@ -6,32 +6,31 @@
 //
 import Foundation
 
-enum ECUStatus: String {
-
+enum ECUStatus: String, CaseIterable {
     case disconnected
     case scanningBLE
+    case connecting
     case connected
     case initializingELM
     case settingProtocol
+    case checkingProtocol
     case settingHeader
     case testingECU
+    case waitingResponse
+    case receivingResponse
+    case idleScanning
     case mode01OK
     case mode21OK
     case mode22OK
-    case noData
     case searching
+    case noData
     case busError
     case unableToConnect
     case timeout
     case unknown
-    case connecting
-    case checkingProtocol
-    case waitingResponse
-    case receivingResponse
-    case idleScanning
-
 }
 
+// MARK: - Display
 extension ECUStatus {
 
     var title: String {
@@ -61,7 +60,7 @@ extension ECUStatus {
             return "🕖 Waiting for response..."
             
         case .receivingResponse:
-            return "⬆️ Recieving response..."
+            return "⬆️ Receiving response..."
             
         case .idleScanning:
             return "🔎 Scanning..."
@@ -98,6 +97,22 @@ extension ECUStatus {
 
         case .unknown:
             return "❓ UNKNOWN"
+        }
+    }
+
+    var isConnectedState: Bool {
+        switch self {
+        case .connected,
+             .waitingResponse,
+             .receivingResponse,
+             .idleScanning,
+             .mode01OK,
+             .mode21OK,
+             .mode22OK:
+            return true
+
+        default:
+            return false
         }
     }
 }

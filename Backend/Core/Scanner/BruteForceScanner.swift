@@ -29,6 +29,7 @@ final class BruteForceScanner: ObservableObject {
     @Published private(set) var results: [ScanResult] = []
     @Published var delayMs: Double = 100
     @Published private(set) var scanStatus = ScanStatus()
+    @Published private(set) var statistics = SearchStatistics()
     @Published private(set) var hasResumePoint = false
     
     @AppStorage("requestTimeout")
@@ -48,10 +49,16 @@ final class BruteForceScanner: ObservableObject {
     private var searchStrategy = SequentialSearchStrategy(start: 0, end: 0)
     
     private let requestExecutor = RequestExecutor()
-    private func refreshStatistics() {
-        statistics = requestExecutor.statistics
+    @inline(__always)
+    private var stats: ScanStatistics {
+        ScanStatistics.shared
     }
-    @Published private(set) var statistics = SearchStatistics()
+    @inline(__always)
+    private func applyDelay() async {
+        guard delayMs > 0 else { return }
+        try? await Task.sleep(for: .milliseconds(Int(delayMs)))
+    }
+    
     
     private func saveResumePoint(force: Bool = false) {
         if !force && (currentPID % 10 != 0) {
@@ -78,7 +85,7 @@ final class BruteForceScanner: ObservableObject {
     private func beginScan() {
         shouldStop = false
         requestExecutor.resetStatistics()
-        refreshStatistics()
+        statistics.reset()
         scanStatus.isScanning = true
         scanStatus.progress = 0
         scanStatus.currentRequest = ""
@@ -87,8 +94,6 @@ final class BruteForceScanner: ObservableObject {
     private func finishScan(completed: Bool) {
         scanStatus.isScanning = false
         scanStatus.currentRequest = ""
-
-        refreshStatistics()
 
         Logger.shared.info(
             "Requests: \(statistics.requestsSent), Success: \(statistics.successfulResponses), Failures: \(statistics.failedResponses)"
@@ -113,7 +118,6 @@ final class BruteForceScanner: ObservableObject {
 
         let stats = ScanStatistics.shared
         requestExecutor.resetStatistics()
-        refreshStatistics()
         // Remove assignments to stats.requestsSent and stats.responses
         stats.positiveResponses = defaults.object(forKey: "resumePositiveResponses") as? Int ?? 0
         stats.negativeResponses = defaults.object(forKey: "resumeNegativeResponses") as? Int ?? 0
@@ -151,7 +155,6 @@ final class BruteForceScanner: ObservableObject {
         scanStatus.progress = total > 0
             ? Double(statistics.requestsSent) / Double(total)
             : 0
-        refreshStatistics()
     }
     func startFresh() {
 
@@ -172,7 +175,6 @@ final class BruteForceScanner: ObservableObject {
         Logger.shared.clear()
         ScanStatistics.shared.reset()
         requestExecutor.resetStatistics()
-        refreshStatistics()
         clearResumePoint()
     }
     
@@ -273,53 +275,49 @@ final class BruteForceScanner: ObservableObject {
         pid: UInt16,
         consecutiveTimeouts: inout Int
     ) {
-        // let stats = ScanStatistics.shared
-        // stats.requestsSent += 1
-        // stats.responses += 1
-
         let searchResult = requestExecutor.classify(response)
         switch response.type {
         case .mode01, .mode21, .mode22:
-            ScanStatistics.shared.positiveResponses += 1
+            stats.positiveResponses += 1
         case .negative:
-            ScanStatistics.shared.negativeResponses += 1
+            stats.negativeResponses += 1
         default:
             break
         }
 
+        statistics.record(result: searchResult, latency: latency)
+
         resetTimeoutCounter(&consecutiveTimeouts)
 
-        appendResponse(
+        if appendResponse(
             header: header,
             mode: mode.rawValue,
             pid: String(request.dropFirst(2)),
             request: request,
             response: response.raw
-        )
+        ) {
+            statistics.recordDiscovery()
+        }
 
         searchStrategy.registerResult(
             pid: pid,
             result: searchResult,
             latency: latency
         )
-        
-        refreshStatistics()
     }
 
     private func processTimeout(
         pid: UInt16,
         consecutiveTimeouts: inout Int
     ) async {
-        let stats = ScanStatistics.shared
-        // stats.requestsSent += 1
+        statistics.record(result: .timeout, latency: requestTimeout)
         stats.timeouts += 1
-        // stats.responses += 1
 
         consecutiveTimeouts += 1
 
         if consecutiveTimeouts >= maxConsecutiveTimeouts {
             Logger.shared.error("Consecutive timeout limit (\(maxConsecutiveTimeouts)) reached. Stopping scan.")
-            ScanStatistics.shared.finish()
+            stats.finish()
             shouldStop = true
             return
         }
@@ -331,7 +329,6 @@ final class BruteForceScanner: ObservableObject {
         )
 
         await handleTimeout()
-        refreshStatistics()
     }
     
     var headers = [
@@ -343,7 +340,7 @@ final class BruteForceScanner: ObservableObject {
 
     func stop() {
         shouldStop = true
-        ScanStatistics.shared.finish()
+        stats.finish()
     }
     
     // MARK: - Generic Scan Implementation
@@ -387,8 +384,6 @@ final class BruteForceScanner: ObservableObject {
         let count = endPID - startPID + 1
         let total = headers.count * count
         var done = currentHeaderIndex * count + (currentPID - startPID)
-
-        let stats = ScanStatistics.shared
 
         if currentHeaderIndex == 0 && currentPID == startPID {
             stats.reset()
@@ -441,7 +436,7 @@ final class BruteForceScanner: ObservableObject {
             searchStrategy.reset()
             saveResumePoint()
         }
-        ScanStatistics.shared.finish()
+        stats.finish()
         finishScan(completed: true)
     }
 
@@ -454,7 +449,6 @@ final class BruteForceScanner: ObservableObject {
         done: inout Int,
         consecutiveTimeouts: inout Int
     ) async {
-        let stats = ScanStatistics.shared
         while let nextPID = searchStrategy.nextPID() {
             currentPID = Int(nextPID)
             if shouldStop {
@@ -471,7 +465,6 @@ final class BruteForceScanner: ObservableObject {
                 continue
             }
 
-            // let started = ContinuousClock.now
             let context = RequestContext(
                 mode: mode,
                 pid: nextPID,
@@ -494,9 +487,7 @@ final class BruteForceScanner: ObservableObject {
                     pid: nextPID,
                     consecutiveTimeouts: &consecutiveTimeouts
                 )
-                if delayMs > 0 {
-                    try? await Task.sleep(for: .milliseconds(Int(delayMs)))
-                }
+                await applyDelay()
             case .timeout:
                 await processTimeout(
                     pid: nextPID,
@@ -530,29 +521,30 @@ final class BruteForceScanner: ObservableObject {
         }
     }
     
+    @discardableResult
     func appendResponse(
         header: String,
         mode: String,
         pid: String,
         request: String,
         response: String
-    ) {
+    ) -> Bool {
         let parsed = ELMResponseParser.parse(response)
 
         guard parsed.type == .mode01 ||
               parsed.type == .mode21 ||
               parsed.type == .mode22 else {
-            return
+            return false
         }
 
         guard !response.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return
+            return false
         }
 
         let key = "\(header)|\(request)|\(response)"
 
         guard !seen.contains(key) else {
-            return
+            return false
         }
 
         seen.insert(key)
@@ -571,6 +563,7 @@ final class BruteForceScanner: ObservableObject {
         scanStatus.successCount += 1
         Logger.shared.success("✅ Found PID \(request) -> \(response)")
         saveResults()
+        return true
     }
     
     func exportJSON() throws -> URL {

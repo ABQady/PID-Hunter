@@ -34,6 +34,29 @@ struct SearchKnowledgeBase {
 
     private(set) var regions: [UInt16: RegionKnowledge] = [:]
 
+    private static let neighborhood = -4...4
+
+    // MARK: - Private
+
+    @inline(__always)
+    private func weight(for offset: Int) -> Double {
+        max(0.0, 1.0 - (Double(abs(offset)) / 5.0))
+    }
+
+    @inline(__always)
+    private func delta(for outcome: Outcome) -> Double {
+        switch outcome {
+        case .positive:
+            return 10
+        case .negative:
+            return 2
+        case .noData:
+            return -3
+        case .timeout:
+            return -1
+        }
+    }
+
     mutating func reset() {
         regions.removeAll(keepingCapacity: true)
     }
@@ -56,19 +79,10 @@ struct SearchKnowledgeBase {
 
         regions[pid] = knowledge
 
-        let delta: Double
-
-        switch outcome {
-        case .positive:
-            delta = 10
-        case .negative:
-            delta = 2
-        case .noData:
-            delta = -3
-        case .timeout:
-            delta = -1
-        }
-        return adjustRegion(around: pid, delta: delta)
+        return adjustRegion(
+            around: pid,
+            delta: delta(for: outcome)
+        )
     }
 
     func score(for pid: UInt16) -> Double {
@@ -79,16 +93,14 @@ struct SearchKnowledgeBase {
         regions[pid]
     }
 
-    // MARK: - Private
-
     private mutating func adjustRegion(around pid: UInt16, delta: Double) -> [Candidate] {
         var candidates: [Candidate] = []
-        for offset in -4...4 {
+        for offset in Self.neighborhood {
             let value = Int(pid) + offset
             guard (0...0xFFFF).contains(value) else { continue }
 
             let neighbor = UInt16(value)
-            let weight = max(0.0, 1.0 - (Double(abs(offset)) / 5.0))
+            let weight = weight(for: offset)
             var knowledge = regions[neighbor] ?? RegionKnowledge()
             knowledge.score += delta * weight
             regions[neighbor] = knowledge
@@ -99,8 +111,6 @@ struct SearchKnowledgeBase {
                 )
             )
         }
-        return candidates.sorted { lhs, rhs in
-            lhs.priority > rhs.priority
-        }
+        return candidates.sorted(by: { $0.priority > $1.priority })
     }
 }

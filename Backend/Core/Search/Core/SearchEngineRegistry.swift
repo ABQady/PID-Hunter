@@ -11,8 +11,17 @@ enum SearchEngineRegistry {
 
     private static var descriptors: [SearchEngineType: any SearchEngineDescriptor] = [:]
 
+    @inline(__always)
+    private static func descriptorKey(
+        for descriptor: any SearchEngineDescriptor
+    ) -> SearchEngineType {
+        descriptor.type
+    }
+
+    // MARK: - Registration
+
     static func register(_ descriptor: any SearchEngineDescriptor) {
-        let type = descriptor.type
+        let type = descriptorKey(for: descriptor)
 
         precondition(
             descriptors[type] == nil,
@@ -22,15 +31,27 @@ enum SearchEngineRegistry {
         descriptors[type] = descriptor
     }
 
+    // MARK: - Lookup
+
     static func descriptor(for type: SearchEngineType) -> (any SearchEngineDescriptor)? {
         descriptors[type]
     }
 
-    static var allDescriptors: [any SearchEngineDescriptor] {
-        SearchEngineType.allCases.compactMap { descriptors[$0] }
+    @inline(__always)
+    private static func descriptorForAllCases(
+        _ type: SearchEngineType
+    ) -> (any SearchEngineDescriptor)? {
+        descriptors[type]
     }
 
+    @inline(__always)
+    static var allDescriptors: [any SearchEngineDescriptor] {
+        SearchEngineType.allCases.compactMap(descriptorForAllCases)
+    }
+
+    // MARK: - Maintenance
+
     static func removeAll() {
-        descriptors.removeAll()
+        descriptors.removeAll(keepingCapacity: true)
     }
 }

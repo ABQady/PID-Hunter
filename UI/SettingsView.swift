@@ -47,6 +47,14 @@ struct SettingsView: View {
     @AppStorage("distanceWeight")
     private var distanceWeight = 1.0
 
+    private var selectedEngine: SearchEngine? {
+        SearchEngineCatalog.engine(SearchEngineType(rawValue: selectedSearchEngine) ?? .sequential)
+    }
+
+    private var isSmartEngineSelected: Bool {
+        selectedEngine?.type == .smart
+    }
+
     @Binding var header: String
     @Binding var selectedMode: OBDMode
     @Binding var startPID: String
@@ -61,6 +69,30 @@ struct SettingsView: View {
     #if os(iOS)
     @State private var exportedFile: ExportedFile?
     #endif
+
+    // MARK: - Export
+
+    private func exportCSV() {
+        do {
+            let url = try CSVExporter.export(brute.results)
+            #if os(iOS)
+            exportedFile = ExportedFile(url: url)
+            #endif
+        } catch {
+            print(error)
+        }
+    }
+
+    private func exportLog() {
+        do {
+            let url = try Logger.shared.saveLog()
+            #if os(iOS)
+            exportedFile = ExportedFile(url: url)
+            #endif
+        } catch {
+            print(error)
+        }
+    }
 
     private var settingsTab: some View {
         ScrollView {
@@ -220,8 +252,13 @@ struct SettingsView: View {
                         }
                     }
                     .pickerStyle(.menu)
+                    if let engine = selectedEngine {
+                        Label(engine.description, systemImage: engine.icon)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
 
-                    if selectedSearchEngine == SearchEngineType.smart.rawValue {
+                    if isSmartEngineSelected {
 
                         Divider()
 
@@ -340,37 +377,17 @@ struct SettingsView: View {
                 HStack(alignment: .center) {
                 #if os(iOS)
                     Button("Export CSV") {
-                        do {
-                            let url = try CSVExporter.export(brute.results)
-                            exportedFile = ExportedFile(url: url)
-                        } catch {
-                            print(error)
-                        }
+                        exportCSV()
                     }
-
                     Button("Export Log") {
-                        do {
-                            let url = try Logger.shared.saveLog()
-                            exportedFile = ExportedFile(url: url)
-                        } catch {
-                            print(error)
-                        }
+                        exportLog()
                     }
                 #else
                     Button("Export CSV") {
-                        do {
-                            _ = try CSVExporter.export(brute.results)
-                        } catch {
-                            print(error)
-                        }
+                        exportCSV()
                     }
-
                     Button("Export Log") {
-                        do {
-                            _ = try Logger.shared.saveLog()
-                        } catch {
-                            print(error)
-                        }
+                        exportLog()
                     }
                 #endif
                 }

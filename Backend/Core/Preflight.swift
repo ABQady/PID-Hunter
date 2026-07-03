@@ -12,6 +12,19 @@ final class Preflight {
 
     static let shared = Preflight()
 
+    @inline(__always)
+    private func ensureConnected() -> Bool {
+        guard BluetoothManager.shared.isConnected else {
+            Logger.shared.error("❌ Bluetooth Disconnected")
+            return false
+        }
+        return true
+    }
+
+    private func normalizeHeader(_ header: String) -> String {
+        header.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+    }
+
     func run(header: String) async -> Bool {
 
         Logger.shared.info("========== PREFLIGHT ==========")
@@ -35,9 +48,7 @@ final class Preflight {
         Logger.shared.success("✅ TX Found")
         Logger.shared.success("✅ RX Found")
 
-        let normalizedHeader = header
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .uppercased()
+        let normalizedHeader = normalizeHeader(header)
 
         guard normalizedHeader.count == 6,
               normalizedHeader.allSatisfy(\.isHexDigit) else {
@@ -53,9 +64,6 @@ final class Preflight {
             )
             let protocolResponse = protocolResult.response
 
-            Logger.shared.info(
-                "Protocol: \(protocolResponse.raw)"
-            )
             let protocolText = protocolResponse.raw.uppercased()
 
             if protocolText.contains("?") {
@@ -72,8 +80,7 @@ final class Preflight {
             return false
         }
 
-        guard BluetoothManager.shared.isConnected else {
-            Logger.shared.error("❌ Bluetooth Disconnected")
+        guard ensureConnected() else {
             return false
         }
 
@@ -94,8 +101,7 @@ final class Preflight {
             return false
         }
 
-        guard BluetoothManager.shared.isConnected else {
-            Logger.shared.error("❌ Bluetooth Disconnected")
+        guard ensureConnected() else {
             return false
         }
 
@@ -107,10 +113,9 @@ final class Preflight {
             let response = result.response
 
             let rx = response.raw.uppercased()
+            let positiveServices: Set<String> = ["41", "61", "62"]
 
-            if rx.contains("41") ||
-                rx.contains("61") ||
-                rx.contains("62") {
+            if positiveServices.contains(where: { rx.contains($0) }) {
 
                 Logger.shared.success("✅ ECU Responded")
                 return true

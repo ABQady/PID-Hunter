@@ -13,21 +13,33 @@ final class TelemetryStore: ObservableObject {
     static let shared = TelemetryStore()
 
     @Published private(set) var requests: [RequestTelemetry] = []
+    private var cachedAnalyzer: TelemetryAnalyzer?
+    private var analyzerDirty = true
 
-    /// Read-only view used by analytics and search strategies.
-    var telemetry: [RequestTelemetry] {
-        requests
+    @inline(__always)
+    private func invalidateAnalyzer() {
+        analyzerDirty = true
+        cachedAnalyzer = nil
     }
 
+    // MARK: - Recording
     func record(_ request: RequestTelemetry) {
         requests.append(request)
+        invalidateAnalyzer()
     }
 
     func clear() {
-        requests.removeAll()
+        requests.removeAll(keepingCapacity: true)
+        invalidateAnalyzer()
     }
 
+    // MARK: - Analysis
     func analyzer() -> TelemetryAnalyzer {
-        TelemetryAnalyzer(telemetry: requests)
+        if analyzerDirty || cachedAnalyzer == nil {
+            cachedAnalyzer = TelemetryAnalyzer(telemetry: requests)
+            analyzerDirty = false
+        }
+
+        return cachedAnalyzer!
     }
 }

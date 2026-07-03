@@ -24,6 +24,8 @@ final class ScanStatistics: ObservableObject {
     
     @Published var totalRequests = 0
 
+    // MARK: - Lifecycle
+
     private init() {}
 
     func reset() {
@@ -33,16 +35,18 @@ final class ScanStatistics: ObservableObject {
 
         positiveResponses = 0
         negativeResponses = 0
-
         noData = 0
         busErrors = 0
         timeouts = 0
 
+        totalRequests = 0
+
         startedAt = nil
         finishedAt = nil
-        totalRequests = 0
     }
     
+    // MARK: - Timing
+
     func start() {
         guard startedAt == nil else { return }
 
@@ -55,11 +59,15 @@ final class ScanStatistics: ObservableObject {
         finishedAt = .now
     }
 
+    // MARK: - Derived Values
+
+    @inline(__always)
     func elapsed(at now: Date) -> TimeInterval {
         guard let startedAt else { return 0 }
         return (finishedAt ?? now).timeIntervalSince(startedAt)
     }
     
+    @inline(__always)
     func averageRequestTime(at now: Date) -> TimeInterval {
         let elapsed = elapsed(at: now)
         guard requestsSent > 0, elapsed > 0 else {
@@ -68,6 +76,7 @@ final class ScanStatistics: ObservableObject {
         return elapsed / Double(requestsSent)
     }
     
+    @inline(__always)
     func eta(at now: Date) -> TimeInterval {
         let average = averageRequestTime(at: now)
 
@@ -82,6 +91,7 @@ final class ScanStatistics: ObservableObject {
         return average * Double(totalRequests - requestsSent)
     }
     
+    @inline(__always)
     var positiveResponseRate: Double {
 
         guard requestsSent > 0 else {
@@ -92,6 +102,7 @@ final class ScanStatistics: ObservableObject {
                Double(requestsSent)
     }
     
+    @inline(__always)
     var failureRate: Double {
 
         guard requestsSent > 0 else {
@@ -99,5 +110,11 @@ final class ScanStatistics: ObservableObject {
         }
 
         return max(0, min(100, 100 - positiveResponseRate))
+    }
+    
+    @inline(__always)
+    var completionRate: Double {
+        guard totalRequests > 0 else { return 0 }
+        return Double(requestsSent) * 100 / Double(totalRequests)
     }
 }

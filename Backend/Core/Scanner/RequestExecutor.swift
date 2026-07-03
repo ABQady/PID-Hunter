@@ -63,13 +63,30 @@ final class RequestExecutor {
     // - Support request tracing.
 
     private let classifier = ResponseClassifier()
+    private let transport = ELM327.shared
+    private let telemetry = TelemetryStore.shared
 
-    private(set) var statistics: SearchStatistics
-    
-    init(statistics: SearchStatistics = .init()) {
-        self.statistics = statistics
+    @inline(__always)
+    private func recordTelemetry(
+        context: RequestContext,
+        result: ELM327.ELMRequestResult,
+        classification: SearchResult
+    ) {
+        telemetry.record(
+            RequestTelemetry(
+                timestamp: Date(),
+                mode: context.mode,
+                pid: context.pid,
+                header: context.header,
+                latency: result.latency,
+                response: result.response,
+                classification: classification,
+                retryCount: context.retryCount,
+                searchEngine: context.searchEngine
+            )
+        )
     }
-    
+
     /// Sends a single OBD request and converts transport errors into scanner-friendly results.
     func execute(
         request: String,
@@ -77,34 +94,24 @@ final class RequestExecutor {
         timeout: Double
     ) async -> RequestResult {
 
-        statistics.recordRequest()
+        Logger.shared.debug("Executing request: \(request)")
 
         guard BluetoothManager.shared.isConnected else {
             return .connectionLost
         }
 
         do {
-            let result = try await ELM327.shared.request(
+            let result = try await transport.request(
                 command: request,
                 timeout: .seconds(timeout)
             )
 
-            statistics.recordSuccess(latency: result.latency)
-
             let searchResult = classifier.classify(result.response)
 
-            TelemetryStore.shared.record(
-                RequestTelemetry(
-                    timestamp: Date(),
-                    mode: context.mode,
-                    pid: context.pid,
-                    header: context.header,
-                    latency: result.latency,
-                    response: result.response,
-                    classification: searchResult,
-                    retryCount: context.retryCount,
-                    searchEngine: context.searchEngine
-                )
+            recordTelemetry(
+                context: context,
+                result: result,
+                classification: searchResult
             )
 
             return .success(
@@ -113,11 +120,10 @@ final class RequestExecutor {
             )
 
         } catch BluetoothManager.BluetoothError.timeout {
-            statistics.recordFailure()
+            Logger.shared.debug("Request timed out: \(request)")
             return .timeout
 
         } catch {
-            statistics.recordFailure()
             Logger.shared.error("Request failed: \(error.localizedDescription)")
             return .connectionLost
         }
@@ -128,6 +134,6 @@ final class RequestExecutor {
     }
 
     func resetStatistics() {
-        statistics.reset()
+        ScanStatistics.shared.reset()
     }
 }

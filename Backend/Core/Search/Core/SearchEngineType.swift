@@ -19,17 +19,34 @@ enum SearchEngineType: String, CaseIterable, Codable, Identifiable {
     case cluster
     case hybrid
 
-    // MARK: - Categories
+    // MARK: - Identity
 
-    var isCore: Bool {
+    var displayName: String {
         switch self {
-        case .sequential, .smart, .adaptive:
-            return true
-        default:
-            return false
+        case .sequential: return "Sequential"
+        case .smart: return "Smart"
+        case .adaptive: return "Adaptive"
+        case .ucb: return "UCB"
+        case .thompson: return "Thompson"
+        case .heatMap: return "Heat Map"
+        case .cluster: return "Cluster"
+        case .hybrid: return "Hybrid"
         }
     }
 
+    // MARK: - Categories
+
+    private static let coreEngines: Set<SearchEngineType> = [
+        .sequential,
+        .smart,
+        .adaptive
+    ]
+
+    var isCore: Bool {
+        Self.coreEngines.contains(self)
+    }
+
+    @inline(__always)
     var isExperimental: Bool {
         !isCore
     }

@@ -19,13 +19,18 @@ final class ELM327: ObservableObject {
     }
     
     private init() {}
+    
+    @inline(__always)
+    private func normalize(_ value: String) -> String {
+        value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+    }
 
     
     // MARK: - Send
     func send(_ command: String) {
-        let normalized = command
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .uppercased()
+        let normalized = normalize(command)
 
         guard !normalized.isEmpty else { return }
 
@@ -38,7 +43,7 @@ final class ELM327: ObservableObject {
 
     // MARK: - Header
     func setHeader(_ header: String) {
-        let normalized = header.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let normalized = normalize(header)
 
         guard !normalized.isEmpty else { return }
         guard currentHeader != normalized else { return }
@@ -93,9 +98,7 @@ final class ELM327: ObservableObject {
         timeout: Duration = .seconds(1)
     ) async throws -> ELMRequestResult {
 
-        let normalized = command
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .uppercased()
+        let normalized = normalize(command)
 
         let result = try await BluetoothManager.shared.sendAndWait(
             normalized,
@@ -108,6 +111,7 @@ final class ELM327: ObservableObject {
         )
     }
     
+    @inline(__always)
     private func makeCommand(
         mode: OBDMode,
         pid: UInt16
@@ -123,7 +127,7 @@ final class ELM327: ObservableObject {
     // MARK: - ECU Identification
     func identifyECU() {
         Task {
-            let commands: [String] = [
+            let identificationCommands: [String] = [
                 "ATI",
                 "AT@1",
                 "AT@2",
@@ -134,15 +138,14 @@ final class ELM327: ObservableObject {
                 "0906",
                 "090A"
             ]
-            for cmd in commands {
+            for command in identificationCommands {
                 guard BluetoothManager.shared.isConnected else {
                     Logger.shared.warning("ECU identification aborted: disconnected")
                     return
                 }
-                send(cmd)
-                try? await Task.sleep(
-                    for: .milliseconds(1000)
-                )
+
+                send(command)
+                try? await Task.sleep(for: .milliseconds(1000))
             }
         }
     }

@@ -9,6 +9,10 @@ final class CSVExporter {
     private static func escapeCSV(_ value: String) -> String {
         value.replacingOccurrences(of: "\"", with: "\"\"")
     }
+    
+    private static func csvField(_ value: String) -> String {
+        "\"\(escapeCSV(value))\""
+    }
 
     private static func writeCSV(
         _ csv: String,
@@ -28,6 +32,7 @@ final class CSVExporter {
         return url
     }
     
+    // MARK: - Scan Results
     static func export(
         _ results: [ScanResult]
     ) throws -> URL {
@@ -36,21 +41,13 @@ final class CSVExporter {
         "Header,Mode,PID,Request,Response\n"
         
         for row in results {
-            
-            csv +=
-            "\"\(escapeCSV(row.header))\","
-            
-            csv +=
-            "\"\(escapeCSV(row.mode))\","
-            
-            csv +=
-            "\"\(escapeCSV(row.pid))\","
-            
-            csv +=
-            "\"\(escapeCSV(row.request))\","
-            
-            csv +=
-            "\"\(escapeCSV(row.response))\"\n"
+            csv += [
+                csvField(row.header),
+                csvField(row.mode),
+                csvField(row.pid),
+                csvField(row.request),
+                csvField(row.response)
+            ].joined(separator: ",") + "\n"
         }
         
         return try writeCSV(
@@ -59,6 +56,7 @@ final class CSVExporter {
         )
     }
     
+    // MARK: - Dynamic Scan
     static func exportDynamic(
         _ rows: [DynamicPID]
     ) throws -> URL {
@@ -67,9 +65,11 @@ final class CSVExporter {
         "Request,Changed,UniqueValues\n"
         
         for row in rows {
-            csv += "\"\(escapeCSV(row.request))\","
-            csv += "\"\(String(row.hasChanged))\","
-            csv += "\"\(escapeCSV(row.uniqueValues.joined(separator: " | ")))\"\n"
+            csv += [
+                csvField(row.request),
+                csvField(String(row.hasChanged)),
+                csvField(row.uniqueValues.joined(separator: " | "))
+            ].joined(separator: ",") + "\n"
         }
         
         return try writeCSV(

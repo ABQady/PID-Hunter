@@ -19,10 +19,33 @@ struct AdaptiveSearchStrategy: SearchStrategy {
     private var knowledge = SearchKnowledgeBase()
     private var queue = PriorityPIDQueue()
 
+    @inline(__always)
+    private func outcome(for result: SearchResult) -> SearchKnowledgeBase.Outcome {
+        switch result {
+        case .positive: return .positive
+        case .negative: return .negative
+        case .noData:   return .noData
+        case .timeout:  return .timeout
+        }
+    }
+
+    @inline(__always)
+    private mutating func enqueueCandidates(
+        _ candidates: [SearchKnowledgeBase.Candidate]
+    ) {
+        for candidate in candidates where !visited.contains(candidate.pid) {
+            queue.enqueue(
+                pid: candidate.pid,
+                priority: candidate.priority
+            )
+        }
+    }
+
     var isExhausted: Bool {
         queue.isEmpty && sequential > Int(end)
     }
 
+    // MARK: - Lifecycle
     init(start: UInt16, end: UInt16) {
         precondition(start <= end)
         self.start = start
@@ -30,6 +53,7 @@ struct AdaptiveSearchStrategy: SearchStrategy {
         self.sequential = Int(start)
     }
 
+    // MARK: - State
     mutating func reset() {
         sequential = Int(start)
         visited.removeAll(keepingCapacity: true)
@@ -63,36 +87,12 @@ struct AdaptiveSearchStrategy: SearchStrategy {
         result: SearchResult,
         latency: Double
     ) {
-        let outcome: SearchKnowledgeBase.Outcome
-
-        switch result {
-        case .positive:
-            outcome = .positive
-        case .negative:
-            outcome = .negative
-        case .noData:
-            outcome = .noData
-        case .timeout:
-            outcome = .timeout
-        }
-
-        let candidates = knowledge.record(outcome, for: pid)
-
-        if let info = knowledge.knowledge(for: pid),
-           info.samples > 0,
-           latency > 0 {
-            // Reserved for future latency-aware scoring.
-        }
-
-        for candidate in candidates {
-            guard !visited.contains(candidate.pid) else { continue }
-
-            queue.enqueue(
-                pid: candidate.pid,
-                priority: candidate.priority
-            )
-        }
-
+        let candidates = knowledge.record(
+            outcome(for: result),
+            for: pid
+        )
+        _ = knowledge.knowledge(for: pid)
+        enqueueCandidates(candidates)
         _ = latency
     }
 

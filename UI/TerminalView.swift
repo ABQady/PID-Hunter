@@ -32,6 +32,13 @@ struct TerminalView: View {
         return min(max(Double(stats.requestsSent) / Double(stats.totalRequests), 0), 1)
     }
 
+    @inline(__always)
+    private var cleanHeader: String {
+        header
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+    }
+
     public init(
         selectedMode: Binding<OBDMode>,
         header: Binding<String>,
@@ -43,7 +50,8 @@ struct TerminalView: View {
         _startPID = startPID
         _endPID = endPID
     }
-    
+
+    // MARK: - Sections
     private var terminalTab: some View {
         VStack(spacing: 18) {
             // MARK: Status
@@ -186,10 +194,6 @@ struct TerminalView: View {
                 Spacer()
                 Button {
                     Task {
-                        let cleanHeader = header
-                            .trimmingCharacters(in: .whitespacesAndNewlines)
-                            .uppercased()
-                        
                         await ECUTester.shared.run(header: cleanHeader)
                     }
                 } label: {
@@ -385,23 +389,24 @@ struct TerminalView: View {
         )
     }
     
-    // MARK: - Helpers
+    // MARK: - Commands
     private func sendManualCommand() {
         guard bt.isConnected else {
             Logger.shared.info("Connect to ELM first")
             return
         }
-        let command = manualCommand
+        let normalizedCommand = manualCommand
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .uppercased()
-        guard !command.isEmpty else {
+        guard !normalizedCommand.isEmpty else {
             return
         }
-        Logger.shared.tx(command)
-        ELM327.shared.send(command)
+        Logger.shared.tx(normalizedCommand)
+        ELM327.shared.send(normalizedCommand)
         manualCommand = ""
     }
-    
+
+    // MARK: - Scan
     private func startPIDScan()
     {
         guard bt.isConnected else {
@@ -411,17 +416,15 @@ struct TerminalView: View {
         if !brute.hasResumePoint {
             Logger.shared.clear()
         }
-        
-        let cleanHeader = header
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .uppercased()
 
-        guard cleanHeader.count == 6,
-              cleanHeader.allSatisfy({ $0.isHexDigit }) else {
+        let headerValue = cleanHeader
+
+        guard headerValue.count == 6,
+              headerValue.allSatisfy({ $0.isHexDigit }) else {
             Logger.shared.info("Invalid Header")
             return
         }
-        brute.headers = [cleanHeader]
+        brute.headers = [headerValue]
         shouldAutoScroll = true
         programmaticScroll = true
         Task { @MainActor in
@@ -430,7 +433,7 @@ struct TerminalView: View {
         }
 
         Task {
-            let ok = await Preflight.shared.run(header: cleanHeader)
+            let ok = await Preflight.shared.run(header: headerValue)
 
             guard ok else {
                 Logger.shared.error("❌ Preflight Failed")
@@ -467,17 +470,20 @@ struct TerminalView: View {
             }
         }
     }
+
+    // MARK: - Formatting
+    @inline(__always)
     private func formatETA(_ seconds: TimeInterval) -> String {
 
         guard seconds > 0 else {
             return "--:--"
         }
 
-        let total = max(0, Int(seconds.rounded(.down)))
+        let totalSeconds = max(0, Int(seconds.rounded(.down)))
 
-        let hours = total / 3600
-        let minutes = (total % 3600) / 60
-        let secs = total % 60
+        let hours = totalSeconds / 3600
+        let minutes = (totalSeconds % 3600) / 60
+        let secs = totalSeconds % 60
 
         if hours > 0 {
             return String(format: "%02d:%02d:%02d", hours, minutes, secs)

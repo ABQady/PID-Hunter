@@ -26,6 +26,10 @@ struct ResultsView: View {
         }
     }
     
+    private var hasResults: Bool {
+        !filteredResults.isEmpty
+    }
+    
     // MARK: - Results View
     private var resultsView: some View {
         ScrollView {
@@ -140,6 +144,7 @@ struct ResultsView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 18))
                 
                 
+                // MARK: - Statistics Section
                 // MARK: - Scan Statistics
                 Divider()
                 
@@ -177,18 +182,14 @@ struct ResultsView: View {
                     HStack {
                         statistic(
                             title: "Elapsed",
-                            value: Duration.seconds(stats.elapsed(at: .now))
-                                .formatted(.units(allowed: [.hours, .minutes, .seconds], width: .abbreviated))
+                            value: formattedElapsed()
                         )
 
                         Spacer()
 
                         statistic(
                             title: "ETA",
-                            value: stats.eta(at: .now) > 0
-                                ? Duration.seconds(stats.eta(at: .now))
-                                    .formatted(.units(allowed: [.hours, .minutes, .seconds], width: .abbreviated))
-                                : "--"
+                            value: formattedETA()
                         )
 
                         Spacer()
@@ -209,7 +210,7 @@ struct ResultsView: View {
                 
                 // MARK: - PID Results
                 Section {
-                    if filteredResults.isEmpty {
+                    if !hasResults {
                         
                         ContentUnavailableView {
                             Label(
@@ -249,7 +250,7 @@ struct ResultsView: View {
                             Spacer()
                             
                             Button("Copy All") {
-                                guard !filteredResults.isEmpty else { return }
+                                guard hasResults else { return }
                                 let text = filteredResults
                                     .map { "\($0.request) -> \($0.response)" }
                                     .joined(separator: "\n")
@@ -274,29 +275,46 @@ struct ResultsView: View {
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
     }
-        // MARK: - Helpers
-        @ViewBuilder
-        private func statistic(
-            title: String,
-            value: String
-        ) -> some View {
-            
-            VStack {
-                Text(value)
-                    .font(.title2.bold())
-                    .monospacedDigit()
-                    .multilineTextAlignment(.center)
-                
-                Text(title)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-            .frame(maxWidth: .infinity)
-        }
-        
-        var body: some View {
-            
-            resultsView
-        }
+    
+    // MARK: - Result Helpers
+    @inline(__always)
+    private func formattedElapsed() -> String {
+        Duration.seconds(stats.elapsed(at: .now))
+            .formatted(.units(allowed: [.hours, .minutes, .seconds], width: .abbreviated))
     }
+
+    @inline(__always)
+    private func formattedETA() -> String {
+        let eta = stats.eta(at: .now)
+        guard eta > 0 else { return "--" }
+
+        return Duration.seconds(eta)
+            .formatted(.units(allowed: [.hours, .minutes, .seconds], width: .abbreviated))
+    }
+    
+    // MARK: - Helpers
+    @ViewBuilder
+    private func statistic(
+        title: String,
+        value: String
+    ) -> some View {
+        
+        VStack {
+            Text(value)
+                .font(.title2.bold())
+                .monospacedDigit()
+                .multilineTextAlignment(.center)
+            
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+    }
+    
+    var body: some View {
+        
+        resultsView
+    }
+}

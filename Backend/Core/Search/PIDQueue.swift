@@ -9,6 +9,8 @@ import Foundation
 
 struct PIDQueue {
 
+    private static let compactionThreshold = 64
+
     private var storage: [UInt16] = []
     private var queued: Set<UInt16> = []
     private var head = 0
@@ -20,6 +22,13 @@ struct PIDQueue {
     var count: Int {
         storage.count - head
     }
+
+    @inline(__always)
+    private var shouldCompact: Bool {
+        head > Self.compactionThreshold && head * 2 >= storage.count
+    }
+
+    // MARK: - Queue Operations
 
     mutating func enqueue(_ pid: UInt16) {
         guard queued.insert(pid).inserted else { return }
@@ -36,7 +45,7 @@ struct PIDQueue {
         head += 1
         queued.remove(pid)
 
-        if head > 64 && head * 2 >= storage.count {
+        if shouldCompact {
             storage.removeFirst(head)
             head = 0
         }
@@ -48,16 +57,21 @@ struct PIDQueue {
         return pid
     }
 
+    // MARK: - Utilities
+
+    @inline(__always)
     mutating func clear() {
         storage.removeAll(keepingCapacity: true)
         queued.removeAll(keepingCapacity: true)
         head = 0
     }
 
+    @inline(__always)
     mutating func reserveCapacity(_ capacity: Int) {
         storage.reserveCapacity(capacity)
     }
 
+    @inline(__always)
     func contains(_ pid: UInt16) -> Bool {
         queued.contains(pid)
     }

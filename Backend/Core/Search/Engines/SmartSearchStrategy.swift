@@ -33,13 +33,40 @@ struct SmartSearchStrategy: SearchStrategy {
     private let neighborhoodRadius: UInt16 = 3
 
     private var current: Int
+    @inline(__always)
+    private var currentPID: UInt16 {
+        UInt16(current)
+    }
     private let start: UInt16
     private let end: UInt16
+    @inline(__always)
+    private mutating func resetState() {
+        queue.clear()
+        queue.reserveCapacity(64)
+        visited.removeAll(keepingCapacity: true)
+        lastPositivePID = nil
+        positiveHitCount = 0
+    }
+
+    @inline(__always)
+    private func effectiveRadius(
+        for pid: UInt16,
+        baseRadius: UInt16
+    ) -> UInt16 {
+        guard let statistics = analyzer?.statistics(for: pid),
+              statistics.isReliable,
+              statistics.successRate > 0.8 else {
+            return baseRadius
+        }
+
+        return min(baseRadius + 2, 16)
+    }
 
     var isExhausted: Bool {
         queue.isEmpty && current > Int(end)
     }
 
+    // MARK: - Lifecycle
     init(
         start: UInt16,
         end: UInt16,
@@ -55,11 +82,7 @@ struct SmartSearchStrategy: SearchStrategy {
     }
 
     mutating func reset() {
-        queue.clear()
-        queue.reserveCapacity(64)
-        visited.removeAll()
-        lastPositivePID = nil
-        positiveHitCount = 0
+        resetState()
         current = Int(start)
     }
 
@@ -69,11 +92,7 @@ struct SmartSearchStrategy: SearchStrategy {
             max(Int(pid), Int(start)),
             Int(end) + 1
         )
-        queue.clear()
-        visited.removeAll()
-        lastPositivePID = nil
-        positiveHitCount = 0
-        queue.reserveCapacity(64)
+        resetState()
     }
 
     // MARK: - PID Selection
@@ -91,10 +110,9 @@ struct SmartSearchStrategy: SearchStrategy {
         }
 
         while current <= Int(end) {
-            let pid = UInt16(current)
-            current += 1
-            guard visited.insert(pid).inserted else { continue }
-            return pid
+            defer { current += 1 }
+            guard visited.insert(currentPID).inserted else { continue }
+            return currentPID
         }
 
         return nil
@@ -127,16 +145,10 @@ struct SmartSearchStrategy: SearchStrategy {
         }
 
         let radius = radius(for: pid)
-        let statistics = analyzer?.statistics(for: pid)
-
-        let effectiveRadius: UInt16
-        if let statistics,
-           statistics.isReliable,
-           statistics.successRate > 0.8 {
-            effectiveRadius = min(radius + 2, 16)
-        } else {
-            effectiveRadius = radius
-        }
+        let effectiveRadius = effectiveRadius(
+            for: pid,
+            baseRadius: radius
+        )
 
         lastPositivePID = pid
         positiveHitCount += 1

@@ -8,14 +8,21 @@
 final class TelemetryAnalyzer {
 
     private let telemetry: [RequestTelemetry]
+    private static let neighborhoodRadius = 8
 
     private lazy var groupedByPID: [UInt16: [RequestTelemetry]] = {
         Dictionary(grouping: telemetry, by: \.pid)
+    }()
+    
+    private lazy var statisticsCache: [UInt16: PIDStatistics] = {
+        groupedByPID.mapValues(makeStatistics)
     }()
 
     init(telemetry: [RequestTelemetry]) {
         self.telemetry = telemetry
     }
+
+    // MARK: - Statistics
 
     private func averageLatency(for samples: [RequestTelemetry]) -> Double {
         guard !samples.isEmpty else { return 0 }
@@ -52,19 +59,25 @@ final class TelemetryAnalyzer {
         return Double(successes) / Double(samples.count)
     }
 
-    private var statisticsByPID: [UInt16: PIDStatistics] {
-        groupedByPID.mapValues { samples in
-            PIDStatistics(
-                pid: samples.first!.pid,
-                requestCount: samples.count,
-                averageLatency: averageLatency(for: samples),
-                medianLatency: medianLatency(for: samples),
-                successRate: successRate(for: samples),
-                firstSeen: samples.map(\.timestamp).min()!,
-                lastSeen: samples.map(\.timestamp).max()!
-            )
-        }
+    private func makeStatistics(
+        for samples: [RequestTelemetry]
+    ) -> PIDStatistics {
+        PIDStatistics(
+            pid: samples.first!.pid,
+            requestCount: samples.count,
+            averageLatency: averageLatency(for: samples),
+            medianLatency: medianLatency(for: samples),
+            successRate: successRate(for: samples),
+            firstSeen: samples.map(\.timestamp).min()!,
+            lastSeen: samples.map(\.timestamp).max()!
+        )
     }
+
+    private var statisticsByPID: [UInt16: PIDStatistics] {
+        statisticsCache
+    }
+
+    // MARK: - Public API
 
     func fastestPIDs(limit: Int = 10) -> [UInt16] {
         statisticsByPID.values
@@ -91,7 +104,7 @@ final class TelemetryAnalyzer {
 
     func averageLatency(around pid: UInt16) -> Double {
         let samples = telemetry.filter {
-            abs(Int($0.pid) - Int(pid)) <= 8
+            abs(Int($0.pid) - Int(pid)) <= Self.neighborhoodRadius
         }
         guard !samples.isEmpty else {
             return 0

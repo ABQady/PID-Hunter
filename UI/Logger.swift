@@ -4,7 +4,7 @@
 import Foundation
 import SwiftUI
 
-enum LogLevel {
+private enum LogLevel {
     case user
     case debug
 }
@@ -23,17 +23,27 @@ final class Logger: ObservableObject {
     @AppStorage("enableDebugLogging")
     private var enableDebugLogging = false
     private let maxLines = 5000
-    private let formatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm:ss.SSS"
-        return f
-    }()
-    private init() {}
+    private static let logFilename = "rawTraffic.log"
+
+    // MARK: - Helpers
+
+    @inline(__always)
     private func stamp() -> String {
         formatter.string(
             from: Date()
         )
     }
+
+    private let formatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss.SSS"
+        return f
+    }()
+
+    private init() {}
+
+    // MARK: - Logging
+
     private func append(
         _ text: String,
         color: Color,
@@ -49,12 +59,14 @@ final class Logger: ObservableObject {
             color: color
         )
 
-        lines.reserveCapacity(maxLines)
         lines.append(line)
         if lines.count > maxLines {
-            lines.removeFirst()
+            lines.removeFirst(lines.count - maxLines)
         }
     }
+
+    // MARK: - Public API
+
     func tx(
         _ command: String
     ) {
@@ -96,11 +108,13 @@ final class Logger: ObservableObject {
         print(text)
     }
 
+    // MARK: - Maintenance
+
     func clear() {
         lines.removeAll(keepingCapacity: true)
     }
     func saveLog() throws -> URL {
-        let filename = "rawTraffic.log"
+        let filename = Self.logFilename
 
         let url = FileManager.default
             .temporaryDirectory

@@ -10,11 +10,22 @@ import Foundation
 enum SearchEngineBootstrap {
 
     private static var isBootstrapped = false
+
+    private static let experimentalEngines: [(SearchEngineType, String, String)] = [
+        (.ucb, "UCB", "function"),
+        (.thompson, "Thompson", "chart.xyaxis.line"),
+        (.heatMap, "Heat Map", "flame"),
+        (.cluster, "Cluster", "square.grid.3x3.fill"),
+        (.hybrid, "Hybrid", "point.3.connected.trianglepath.dotted")
+    ]
     
     // MARK: - Public API
 
+    // MARK: - Bootstrap
     static func registerAll() {
-        guard !isBootstrapped else { return }
+        guard !isBootstrapped else {
+            return
+        }
         isBootstrapped = true
 
         registerCoreEngines()
@@ -29,6 +40,7 @@ enum SearchEngineBootstrap {
         SearchEngineRegistry.register(AdaptiveSearchEngineDescriptor())
     }
 
+    @inline(__always)
     private static func registerExperimental(
         _ type: SearchEngineType,
         name: String,
@@ -38,8 +50,7 @@ enum SearchEngineBootstrap {
             ExperimentalAdaptiveDescriptor(
                 type: type,
                 displayName: name,
-                description: "Experimental engine backed by Adaptive.",
-                icon: icon
+                description: "Experimental engine backed by Adaptive."
             )
         )
     }
@@ -47,10 +58,8 @@ enum SearchEngineBootstrap {
     // MARK: - Experimental Engines
 
     private static func registerExperimentalEngines() {
-        registerExperimental(.ucb, name: "UCB", icon: "function")
-        registerExperimental(.thompson, name: "Thompson", icon: "chart.xyaxis.line")
-        registerExperimental(.heatMap, name: "Heat Map", icon: "flame")
-        registerExperimental(.cluster, name: "Cluster", icon: "square.grid.3x3.fill")
-        registerExperimental(.hybrid, name: "Hybrid", icon: "point.3.connected.trianglepath.dotted")
+        for (type, name, icon) in experimentalEngines {
+            registerExperimental(type, name: name, icon: icon)
+        }
     }
 }

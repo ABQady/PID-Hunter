@@ -67,12 +67,12 @@ final class ELMResponseAssembler {
             let upper = trimmed.uppercased()
             let compact = upper.replacingOccurrences(of: " ", with: "")
 
-            let hasECUFrame = compact.contains("4100") ||
-                              compact.contains("41") ||
-                              compact.contains("61") ||
-                              compact.contains("62") ||
-                              compact.contains("7F")
+            let knownServicePrefixes = ["41", "61", "62", "7F"]
+            let hasECUFrame = knownServicePrefixes.contains {
+                compact.hasPrefix($0) || compact.contains("\r\($0)")
+            }
 
+            // Detect real ECU service frames while avoiding false positives in ELM text.
             let isELMChatter = upper.contains("BUS INIT") ||
                                upper.contains("SEARCHING") ||
                                upper.contains("ELM327") ||

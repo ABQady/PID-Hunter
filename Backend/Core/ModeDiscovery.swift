@@ -17,6 +17,37 @@ final class ModeDiscovery: ObservableObject {
 
     private let elm = ELM327.shared
 
+    @inline(__always)
+    private func finishDiscovery() {
+        Logger.shared.success(
+            "🏁 Mode discovery finished (\(supportedModes.count) supported)"
+        )
+    }
+
+    private func probe(_ mode: OBDMode) async {
+        Logger.shared.info("🔎 Probing \(mode.title)...")
+
+        do {
+            let result = try await elm.request(mode: mode)
+            let response = result.response
+
+            if response.type.requestMode == mode.requestService {
+                handleSuccess(mode)
+            } else {
+                Logger.shared.warning(
+                    "Unexpected response for \(mode.rawValue): \(response.raw)"
+                )
+                handleFailure(mode)
+            }
+        } catch BluetoothManager.BluetoothError.timeout {
+            Logger.shared.warning("⏰ \(mode.rawValue) Timeout")
+            handleFailure(mode)
+        } catch {
+            Logger.shared.error("❌ \(mode.rawValue): \(error.localizedDescription)")
+            handleFailure(mode)
+        }
+    }
+
     private init() { }
 
     func discover() async {
@@ -36,32 +67,9 @@ final class ModeDiscovery: ObservableObject {
         Logger.shared.info("🔎 Starting mode discovery")
 
         for mode in OBDMode.supportedScanModes {
-            Logger.shared.info("🔎 Probing \(mode.title)...")
-            do {
-                let result = try await elm.request(mode: mode)
-                let response = result.response
-
-                if response.type.requestMode == mode.requestService {
-                    handleSuccess(mode)
-                } else {
-                    Logger.shared.warning(
-                        "Unexpected response for \(mode.rawValue): \(response.raw)"
-                    )
-                    handleFailure(mode)
-                }
-            } catch BluetoothManager.BluetoothError.timeout {
-                Logger.shared.warning("⏰ \(mode.rawValue) Timeout")
-                handleFailure(mode)
-            } catch {
-                Logger.shared.error(
-                    "❌ \(mode.rawValue): \(error.localizedDescription)"
-                )
-                handleFailure(mode)
-            }
+            await probe(mode)
         }
-        Logger.shared.success(
-            "🏁 Mode discovery finished (\(supportedModes.count) supported)"
-        )
+        finishDiscovery()
     }
 
     func handleSuccess(_ mode: OBDMode) {
@@ -80,7 +88,6 @@ final class ModeDiscovery: ObservableObject {
     }
 
     func reset() {
-        supportedModes.removeAll()
+        supportedModes.removeAll(keepingCapacity: true)
     }
 }
-

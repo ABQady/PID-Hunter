@@ -10,32 +10,39 @@ struct SearchEngine: Identifiable, Hashable {
 
     let descriptor: any SearchEngineDescriptor
 
+    @inline(__always)
+    private var metadata: any SearchEngineDescriptor {
+        descriptor
+    }
+
     // MARK: - Identifiable
     var id: SearchEngineType {
         type
     }
 
     // MARK: - Metadata
+    @inline(__always)
     var type: SearchEngineType {
-        descriptor.type
+        metadata.type
     }
 
     var displayName: String {
-        descriptor.displayName
+        metadata.displayName
     }
 
     var description: String {
-        descriptor.description
+        metadata.description
     }
 
     var icon: String {
-        descriptor.icon
+        metadata.icon
     }
 
     var supportsBenchmark: Bool {
-        descriptor.supportsBenchmark
+        metadata.supportsBenchmark
     }
 
+    // MARK: - Classification
     var isCore: Bool {
         type.isCore
     }
@@ -49,18 +56,20 @@ struct SearchEngine: Identifiable, Hashable {
         start: UInt16,
         end: UInt16
     ) -> any SearchStrategy {
-        descriptor.makeStrategy(
+        metadata.makeStrategy(
             start: start,
             end: end
         )
     }
 
     // MARK: - Equatable & Hashable
+    @inline(__always)
     static func == (lhs: SearchEngine, rhs: SearchEngine) -> Bool {
-        lhs.type == rhs.type
+        lhs.id == rhs.id
     }
 
+    @inline(__always)
     func hash(into hasher: inout Hasher) {
-        hasher.combine(type)
+        hasher.combine(id)
     }
 }

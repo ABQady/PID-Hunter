@@ -49,20 +49,26 @@ enum ELMResponseType {
 
 enum ELMResponseParser {
 
+    private static let ecuServiceTokens: Set<String> = [
+        "41", "61", "62", "7F"
+    ]
+
+    private static let informationalMarkers = [
+        "BUS INIT:",
+        "BUS INIT",
+        "SEARCHING...",
+        "SEARCHING",
+        "ELM327",
+        "ATI"
+    ]
+
     static func parse(_ text: String) -> ELMResponse {
 
         let upper = text.uppercased()
         let compact = upper.replacingOccurrences(of: " ", with: "")
         // Strip informational ELM prefixes that can precede a valid ECU frame.
         var sanitized = upper
-        for marker in [
-            "BUS INIT:",
-            "BUS INIT",
-            "SEARCHING...",
-            "SEARCHING",
-            "ELM327",
-            "ATI"
-        ] {
+        for marker in informationalMarkers {
             sanitized = sanitized.replacingOccurrences(of: marker, with: " ")
         }
         var type: ELMResponseType = .unknown
@@ -100,7 +106,7 @@ enum ELMResponseParser {
            UInt8(tokens[0], radix: 16) != nil,
            UInt8(tokens[1], radix: 16) != nil,
            UInt8(tokens[2], radix: 16) != nil,
-           ["41", "61", "62", "7F"].contains(tokens[3].uppercased()) {
+           ecuServiceTokens.contains(tokens[3].uppercased()) {
 
             header = "\(tokens[0].uppercased()) \(tokens[1].uppercased()) \(tokens[2].uppercased())"
             tokens.removeFirst(3)
@@ -174,7 +180,10 @@ enum ELMResponseParser {
             }
         }
         
-        
+        if type == .negative {
+            service = nil
+            pid = nil
+        }
         
         return ELMResponse(
             raw: text,

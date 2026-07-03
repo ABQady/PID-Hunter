@@ -22,17 +22,28 @@ struct PIDStatistics {
 
     let lastSeen: Date
 
+    // MARK: - Reliability
+    @inline(__always)
     var isReliable: Bool {
         requestCount >= 5
     }
 
+    // MARK: - Derived Values
+    @inline(__always)
     var latencySpread: TimeInterval {
         medianLatency - averageLatency
     }
+
+    @inline(__always)
+    var latencyVariance: Double {
+        abs(latencySpread)
+    }
 }
 
+// MARK: - Comparable
 extension PIDStatistics: Comparable {
 
+    @inline(__always)
     static func < (lhs: PIDStatistics, rhs: PIDStatistics) -> Bool {
         lhs.averageLatency < rhs.averageLatency
     }

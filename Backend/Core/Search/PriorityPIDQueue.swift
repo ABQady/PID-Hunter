@@ -19,6 +19,12 @@ struct PriorityPIDQueue {
     private var indices: [UInt16: Int] = [:]
     private var nextSequence = 0
 
+    @inline(__always)
+    private func isHigherPriority(_ lhs: Node, than rhs: Node) -> Bool {
+        lhs.priority > rhs.priority ||
+        (lhs.priority == rhs.priority && lhs.sequence < rhs.sequence)
+    }
+
     var isEmpty: Bool {
         heap.isEmpty
     }
@@ -75,16 +81,18 @@ struct PriorityPIDQueue {
         return pid
     }
 
+    @inline(__always)
     func contains(_ pid: UInt16) -> Bool {
         indices[pid] != nil
     }
 
+    @inline(__always)
     func priority(of pid: UInt16) -> Double? {
         guard let index = indices[pid] else { return nil }
         return heap[index].priority
     }
 
-    // MARK: - Heap
+    // MARK: - Heap Operations
 
     private mutating func siftUp(from index: Int) {
         var child = index
@@ -92,8 +100,7 @@ struct PriorityPIDQueue {
             let parent = (child - 1) / 2
             let childNode = heap[child]
             let parentNode = heap[parent]
-            if childNode.priority > parentNode.priority ||
-                (childNode.priority == parentNode.priority && childNode.sequence < parentNode.sequence) {
+            if isHigherPriority(childNode, than: parentNode) {
                 swapNodes(child, parent)
                 child = parent
             } else {
@@ -112,16 +119,14 @@ struct PriorityPIDQueue {
             if left < heap.count {
                 let leftNode = heap[left]
                 let candNode = heap[candidate]
-                if leftNode.priority > candNode.priority ||
-                    (leftNode.priority == candNode.priority && leftNode.sequence < candNode.sequence) {
+                if isHigherPriority(leftNode, than: candNode) {
                     candidate = left
                 }
             }
             if right < heap.count {
                 let rightNode = heap[right]
                 let candNode = heap[candidate]
-                if rightNode.priority > candNode.priority ||
-                    (rightNode.priority == candNode.priority && rightNode.sequence < candNode.sequence) {
+                if isHigherPriority(rightNode, than: candNode) {
                     candidate = right
                 }
             }

@@ -9,6 +9,11 @@ import Foundation
 
 struct SearchConfiguration: Sendable {
 
+    // MARK: - Defaults
+
+    static let defaultTimeout: TimeInterval = 1.0
+    static let defaultRequestDelay: TimeInterval = 0
+
     // MARK: - Scan Range
 
     let startPID: UInt16
@@ -24,6 +29,13 @@ struct SearchConfiguration: Sendable {
     let requestDelay: TimeInterval
     let timeout: TimeInterval
 
+    // MARK: - Derived Values
+
+    @inline(__always)
+    var pidCount: Int {
+        Int(endPID) - Int(startPID) + 1
+    }
+
     // MARK: - Initialization
 
     init(
@@ -31,10 +43,12 @@ struct SearchConfiguration: Sendable {
         endPID: UInt16,
         mode: String,
         header: String,
-        requestDelay: TimeInterval = 0,
-        timeout: TimeInterval = 1.0
+        requestDelay: TimeInterval = Self.defaultRequestDelay,
+        timeout: TimeInterval = Self.defaultTimeout
     ) {
         precondition(startPID <= endPID, "startPID must not exceed endPID")
+        precondition(requestDelay >= 0, "requestDelay must not be negative")
+        precondition(timeout > 0, "timeout must be greater than zero")
 
         self.startPID = startPID
         self.endPID = endPID

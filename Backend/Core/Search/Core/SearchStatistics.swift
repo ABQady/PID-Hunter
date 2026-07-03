@@ -15,10 +15,13 @@ struct SearchStatistics: Sendable, Codable {
     private(set) var successfulResponses: Int = 0
     private(set) var failedResponses: Int = 0
 
+    // MARK: - Derived Values
+    @inline(__always)
     var completedRequests: Int {
         successfulResponses + failedResponses
     }
 
+    @inline(__always)
     var successRate: Double {
         guard completedRequests > 0 else { return 0 }
         return Double(successfulResponses) / Double(completedRequests)
@@ -34,17 +37,25 @@ struct SearchStatistics: Sendable, Codable {
     private(set) var fastestResponse: TimeInterval = .greatestFiniteMagnitude
     private(set) var slowestResponse: TimeInterval = 0
 
+    @inline(__always)
     var averageLatency: TimeInterval {
         guard successfulResponses > 0 else { return 0 }
         return totalLatency / Double(successfulResponses)
     }
 
+    @inline(__always)
     var fastestSuccessfulResponse: TimeInterval {
         successfulResponses == 0 ? 0 : fastestResponse
     }
 
+    @inline(__always)
     var hasSuccessfulResponses: Bool {
         successfulResponses > 0
+    }
+
+    @inline(__always)
+    var hasFailures: Bool {
+        failedResponses > 0
     }
 
     mutating func recordRequest() {
@@ -90,19 +101,20 @@ struct SearchStatistics: Sendable, Codable {
 
     mutating func record(result: SearchResult, latency: TimeInterval) {
         recordRequest()
-
-        switch result {
-        case .positive:
+        if case .positive = result {
             recordSuccess(latency: latency)
-
-        case .noData,
-             .negative,
-             .timeout:
+        } else {
             recordFailure()
         }
     }
 
     mutating func reset() {
-        self = SearchStatistics()
+        requestsSent = 0
+        successfulResponses = 0
+        failedResponses = 0
+        discoveredPIDs = 0
+        totalLatency = 0
+        fastestResponse = .greatestFiniteMagnitude
+        slowestResponse = 0
     }
 }

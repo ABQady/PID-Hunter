@@ -8,11 +8,14 @@
 import Foundation
 
 protocol SearchEngineDescriptor {
+    // MARK: - Identity
     var type: SearchEngineType { get }
     var displayName: String { get }
     var description: String { get }
     var icon: String { get }
     var supportsBenchmark: Bool { get }
+
+    // MARK: - Factory
     func makeStrategy(
         start: UInt16,
         end: UInt16
@@ -20,7 +23,23 @@ protocol SearchEngineDescriptor {
 }
 
 extension SearchEngineDescriptor {
+    @inline(__always)
     var supportsBenchmark: Bool { true }
+}
+
+private extension SearchEngineType {
+    var defaultIcon: String {
+        switch self {
+        case .sequential: return "list.number"
+        case .smart: return "brain"
+        case .adaptive: return "sparkles"
+        case .ucb: return "chart.line.uptrend.xyaxis"
+        case .thompson: return "dice"
+        case .heatMap: return "flame"
+        case .cluster: return "circle.grid.2x2"
+        case .hybrid: return "square.stack.3d.up"
+        }
+    }
 }
 
 // MARK: - Built-in Engines
@@ -62,7 +81,9 @@ struct ExperimentalAdaptiveDescriptor: SearchEngineDescriptor {
     let type: SearchEngineType
     let displayName: String
     let description: String
-    let icon: String
+    var icon: String {
+        type.defaultIcon
+    }
 
     func makeStrategy(start: UInt16, end: UInt16) -> any SearchStrategy {
         AdaptiveSearchStrategy(start: start, end: end)
