@@ -38,7 +38,8 @@ final class ModeDiscovery: ObservableObject {
         for mode in OBDMode.supportedScanModes {
             Logger.shared.info("🔎 Probing \(mode.title)...")
             do {
-                let response = try await elm.request(mode: mode)
+                let result = try await elm.request(mode: mode)
+                let response = result.response
 
                 if response.type.requestMode == mode.requestService {
                     handleSuccess(mode)

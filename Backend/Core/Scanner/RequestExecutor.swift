@@ -72,15 +72,14 @@ final class RequestExecutor {
         }
 
         do {
-            let result = try await BluetoothManager.shared.sendAndWait(
-                request,
+            let result = try await ELM327.shared.request(
+                command: request,
                 timeout: .seconds(timeout)
             )
 
-            let response = result.response
             statistics.recordSuccess(latency: result.latency)
 
-            return .success(response)
+            return .success(result.response)
 
         } catch BluetoothManager.BluetoothError.timeout {
             statistics.recordFailure()

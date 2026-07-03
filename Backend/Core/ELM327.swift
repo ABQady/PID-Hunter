@@ -12,6 +12,11 @@ final class ELM327: ObservableObject {
         case timeout
         case busy
     }
+
+    struct ELMRequestResult {
+        let response: ELMResponse
+        let latency: TimeInterval
+    }
     
     private init() {}
 
@@ -58,25 +63,48 @@ final class ELM327: ObservableObject {
         mode: OBDMode,
         pid: UInt16,
         timeout: Duration = .seconds(1)
-    ) async throws -> ELMResponse {
+    ) async throws -> ELMRequestResult {
 
         let result = try await BluetoothManager.shared.sendAndWait(
             makeCommand(mode: mode, pid: pid),
             timeout: timeout
         )
 
-        return result.response
+        return ELMRequestResult(
+            response: result.response,
+            latency: result.latency
+        )
     }
     
     func request(
         mode: OBDMode,
         timeout: Duration = .seconds(1)
-    ) async throws -> ELMResponse {
+    ) async throws -> ELMRequestResult {
 
         try await request(
             mode: mode,
             pid: UInt16(mode.defaultStartPID),
             timeout: timeout
+        )
+    }
+
+    func request(
+        command: String,
+        timeout: Duration = .seconds(1)
+    ) async throws -> ELMRequestResult {
+
+        let normalized = command
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+
+        let result = try await BluetoothManager.shared.sendAndWait(
+            normalized,
+            timeout: timeout
+        )
+
+        return ELMRequestResult(
+            response: result.response,
+            latency: result.latency
         )
     }
     
