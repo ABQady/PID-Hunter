@@ -52,12 +52,12 @@ actor Logger {
     func stream() -> AsyncStream<[LogLine]> {
         AsyncStream { continuation in
             continuations.append(continuation)
+            continuation.yield(lines)
             continuation.onTermination = { [weak self] _ in
                 Task {
                     await self?.removeContinuation(continuation)
                 }
             }
-            continuation.yield(lines)
         }
     }
 
@@ -70,12 +70,21 @@ actor Logger {
         }
     }
 
+    @inline(__always)
+    private func currentSnapshot() -> [LogLine] {
+        lines
+    }
+
     private func publish() {
-        for continuation in continuations {
-            continuation.yield(lines)
+        guard !continuations.isEmpty else {
+            return
+        }
+        let snapshotLines = currentSnapshot()
+        let snapshot = continuations
+        for continuation in snapshot {
+            continuation.yield(snapshotLines)
         }
     }
-    
     // MARK: - Logging
 
     @inline(__always)
@@ -107,8 +116,8 @@ actor Logger {
 
         lines.append(line)
         let overflow = lines.count - maxLines
-        if overflow >= 0 {
-            lines.removeFirst(min(Self.trimChunk, overflow + 1))
+        if overflow > 0 {
+            lines.removeFirst(min(Self.trimChunk, overflow))
         }
         publish()
     }

@@ -28,6 +28,7 @@ struct MacLayout: View {
     @State private var visibility: NavigationSplitViewVisibility = .detailOnly
     @State private var lastSidebarExpanded = false
     @State private var windowWidth: CGFloat = 0
+    @State private var terminalViewModel = TerminalViewModel()
     
     private func updateWindowWidth() {
 #if canImport(UIKit)
@@ -79,6 +80,7 @@ struct MacLayout: View {
                     if availableWidth >= Layout.dualPaneWidth {
                         HStack(spacing: 0) {
                             TerminalView(
+                                viewModel: terminalViewModel,
                                 selectedMode: $selectedMode,
                                 header: $header,
                                 startPID: $startPID,
@@ -99,6 +101,7 @@ struct MacLayout: View {
                     } else {
                         TabView {
                             TerminalView(
+                                viewModel: terminalViewModel,
                                 selectedMode: $selectedMode,
                                 header: $header,
                                 startPID: $startPID,
@@ -127,6 +130,12 @@ struct MacLayout: View {
                     updateWindowWidth()
                 }
             }
+        }
+        .task {
+            terminalViewModel.start()
+        }
+        .onDisappear {
+            terminalViewModel.stop()
         }
         
     }

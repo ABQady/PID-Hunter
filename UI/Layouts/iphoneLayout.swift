@@ -16,6 +16,7 @@ struct iPhoneLayout: View {
     @Binding var delay: Double
 
     @State private var selectedTab = 1
+    @State private var terminalViewModel = TerminalViewModel()
 
     var body: some View {
         GeometryReader { geometry in
@@ -23,6 +24,7 @@ struct iPhoneLayout: View {
             if isLandscape {
                 HStack(spacing: 10) {
                     TerminalView(
+                        viewModel: terminalViewModel,
                         selectedMode: $selectedMode,
                         header: $header,
                         startPID: $startPID,
@@ -50,6 +52,7 @@ struct iPhoneLayout: View {
                     .tag(0)
 
                     TerminalView(
+                        viewModel: terminalViewModel,
                         selectedMode: $selectedMode,
                         header: $header,
                         startPID: $startPID,
@@ -72,6 +75,12 @@ struct iPhoneLayout: View {
                     UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                 }
             }
+        }
+        .task {
+            terminalViewModel.start()
+        }
+        .onDisappear {
+            terminalViewModel.stop()
         }
     }
 

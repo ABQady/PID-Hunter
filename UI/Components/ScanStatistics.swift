@@ -118,6 +118,12 @@ final class ScanStatistics: ObservableObject {
         return Double(requestsSent) * 100 / Double(totalRequests)
     }
     
+    @inline(__always)
+    var progressFraction: Double {
+        guard totalRequests > 0 else { return 0 }
+        return Double(requestsSent) / Double(totalRequests)
+    }
+    
     // MARK: - Recording
 
     func begin(totalRequests: Int) {

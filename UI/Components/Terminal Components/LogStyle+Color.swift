@@ -1,34 +1,15 @@
 //
-//  LogRowView.swift
+//  LogStyle+Color.swift
 //  PID Hunter
 //
 //  Created by Ahmed Al Qady on 04/07/2026.
 //
 import SwiftUI
 
-struct LogRowView: View {
+extension LogStyle {
 
-    let line: LogLine
-
-    @Environment(\.colorScheme)
-    private var colorScheme
-
-    var body: some View {
-
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-
-            Text(line.timestamp)
-                .foregroundStyle(.secondary)
-
-            Text(line.message)
-                .foregroundStyle(color)
-        }
-        .font(.system(size: 10, design: .monospaced))
-    }
-
-    private var color: Color {
-
-        switch (line.style, colorScheme) {
+    func color(for scheme: ColorScheme) -> Color {
+        switch (self, scheme) {
 
         case (.tx, .light):
             return Color(red: 0.00, green: 0.28, blue: 0.82)
@@ -65,6 +46,5 @@ struct LogRowView: View {
         case (.debug, .dark):
             return .gray
         }
-
     }
 }

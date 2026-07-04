@@ -16,17 +16,16 @@ final class TerminalViewModel {
 
     private var refreshTask: Task<Void, Never>?
 
-    init() {
-        start()
-    }
+    // Removed init to prevent automatic listening on construction.
     
     func start() {
-        refreshTask?.cancel()
-        refreshTask = nil
-        refreshTask = Task {
+        guard refreshTask == nil else { return }
+        refreshTask = Task { @MainActor in
             for await snapshot in await Logger.shared.stream() {
-                if Task.isCancelled { break }
-                lines = snapshot
+                guard !Task.isCancelled else { break }
+                withMutation(keyPath: \.lines) {
+                    lines = snapshot
+                }
             }
         }
     }
@@ -34,47 +33,34 @@ final class TerminalViewModel {
     func stop() {
         refreshTask?.cancel()
         refreshTask = nil
+        lines.removeAll(keepingCapacity: true)
     }
 
     func clear() {
-        Task {
-            Logger.shared.clear()
-        }
+        Logger.shared.clear()
     }
 
     func info(_ text: String) {
-        Task {
-            Logger.shared.info(text)
-        }
+        Logger.shared.info(text)
     }
 
     func warning(_ text: String) {
-        Task {
-            Logger.shared.warning(text)
-        }
+        Logger.shared.warning(text)
     }
 
     func error(_ text: String) {
-        Task {
-            Logger.shared.error(text)
-        }
+        Logger.shared.error(text)
     }
 
     func success(_ text: String) {
-        Task {
-            Logger.shared.success(text)
-        }
+        Logger.shared.success(text)
     }
 
     func tx(_ text: String) {
-        Task {
-            Logger.shared.tx(text)
-        }
+        Logger.shared.tx(text)
     }
 
     func rx(_ text: String) {
-        Task {
-            Logger.shared.rx(text)
-        }
+        Logger.shared.rx(text)
     }
 }

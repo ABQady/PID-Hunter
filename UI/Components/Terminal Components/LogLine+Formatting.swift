@@ -1,5 +1,5 @@
 //
-//  LogLineDisplay.swift
+//  LogLine+Formatting.swift
 //  PID Hunter
 //
 //  Created by Ahmed Al Qady on 04/07/2026.

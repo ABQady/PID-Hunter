@@ -5,13 +5,12 @@
 //  Created by Ahmed Al Qady on 28/06/2026.
 //
 
-
 import SwiftUI
 struct TerminalView: View {
     @ObservedObject private var bt = BluetoothManager.shared
     @ObservedObject private var brute = BruteForceScanner.shared
     @ObservedObject private var stats = ScanStatistics.shared
-    @State private var viewModel = TerminalViewModel()
+    @Bindable var viewModel: TerminalViewModel
     @State private var programmaticScroll = false
     @State private var search = ""
     @State private var shouldAutoScroll = true
@@ -23,7 +22,6 @@ struct TerminalView: View {
     @State private var manualCommand = ""
     @FocusState private var commandFieldFocused: Bool
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @Environment(\.colorScheme) private var colorScheme
     private var isCompact: Bool { horizontalSizeClass == .compact }
     
     @inline(__always)
@@ -42,10 +40,12 @@ struct TerminalView: View {
         }
     }
     
-    // Progress fraction for progress bar and percentage
-    private var progressFraction: Double {
-        guard stats.totalRequests > 0 else { return 0 }
-        return min(max(Double(stats.requestsSent) / Double(stats.totalRequests), 0), 1)
+    private var formattedElapsed: String {
+        formatETA(stats.elapsed(at: .now))
+    }
+
+    private var formattedETA: String {
+        formatETA(stats.eta(at: .now))
     }
     
     @inline(__always)
@@ -56,499 +56,194 @@ struct TerminalView: View {
     }
     
     public init(
+        viewModel: TerminalViewModel,
         selectedMode: Binding<OBDMode>,
         header: Binding<String>,
         startPID: Binding<String>,
         endPID: Binding<String>
     ) {
+        self.viewModel = viewModel
         _selectedMode = selectedMode
         _header = header
         _startPID = startPID
         _endPID = endPID
     }
     
-    // MARK: - Sections
-    private var terminalTab: some View {
-        ScrollView(.vertical, showsIndicators: true) {
-            VStack(spacing: 18) {
-                // MARK: Status
-                HStack {
-                    Circle()
-                        .fill(bt.isConnected ? Color.green: Color.red)
-                        .frame(width: 12, height: 12)
-                    Text(bt.isConnected ? "Connected" : "Disconnected")
-                    Spacer()
-                    if bt.isConnected {
-                        Text("Mode: \(selectedMode)")
-                            .monospacedDigit()
-                        Spacer()
-                        Text("Header: \(header)")
-                            .font(.system(.body, design: .monospaced))
-                    }
-                    Spacer()
-                    Button {
-                        if bt.isConnected {
-                            showDisconnectConfirmation = true
-                        } else {
-                            bt.startScan()
-                        }
-                    } label: {
-                        Label(
-                            bt.isConnected ? "Disconnect" : "Scan BLE",
-                            systemImage: bt.isConnected ? "bolt.horizontal.circle.fill" : "dot.radiowaves.left.and.right"
-                        )
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(!bt.isConnected && bt.isScanning)
-                    .confirmationDialog(
-                        "Disconnect from ELM327?",
-                        isPresented: $showDisconnectConfirmation,
-                        titleVisibility: .visible
-                    ) {
-                        Button("Disconnect", role: .destructive) {
-                            bt.disconnect()
-                        }
-                        Button("Cancel", role: .cancel) { }
-                    } message: {
-                        Text("Are you sure you want to disconnect from the connected BLE adapter?")
-                    }
-                }
-                .padding()
-                .background(.thinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 18))
-                
-                // MARK: Progress
-                VStack(alignment: .leading) {
-                    Text("Progress")
-                        .font(.headline)
-                    ProgressView(value: progressFraction)
-                        .progressViewStyle(.linear)
-                        .frame(maxWidth: .infinity)
-                    HStack(alignment: .center, spacing: 4) {
-                        Spacer()
-                        Text("\(Int(progressFraction * 100))%")
-                        Spacer()
-                        HStack {
-                            Text("\(stats.requestsSent)")
-                                .bold()
-                            Text("/")
-                            Text("\(stats.totalRequests) Requests")
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        TimelineView(.periodic(from: .now, by: 1)) { context in
-                            HStack {
-                                Spacer()
-                                Text("Elapsed: \(formatETA(stats.elapsed(at: context.date)))")
-                                
-                                if stats.finishedAt != nil {
-                                    Text("Completed in \(formatETA(stats.elapsed(at: context.date))) ✅")
-                                } else if !brute.scanStatus.isScanning {
-                                    Text("ETA: --:--")
-                                } else if stats.requestsSent < 10 {
-                                    Text("ETA: Calculating...")
-                                } else {
-                                    Text("ETA: \(formatETA(stats.eta(at: context.date)))")
-                                }
-                            }
-                        }
-                        Spacer()
-                    }
-                    .font(.system(.caption, design: .monospaced))
-                }
-                .padding()
-                .background(.thinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 18))
-                if brute.hasResumePoint && !brute.scanStatus.isScanning {
-                    Text("Resume available")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                }
-                // MARK: Actions - single horizontal HStack
-                HStack(alignment: .center, spacing: 10) {
-                    Button {
-                        viewModel.clear()
-                    } label: {
-                        Label("Clear", systemImage: "trash")
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(viewModel.lines.isEmpty)
-                    
-                    Spacer()
-                    Button(role: .destructive) {
-                        guard bt.isConnected else {
-                            Task {
-                                Logger.shared.info("Connect to ELM first")}
-                            return
-                        }
-                        brute.startFresh()
-                        Task {
-                            Logger.shared.info("🗑️ Starting fresh scan")}
-                        startPIDScan()
-                    } label: {
-                        Label("Scan", systemImage: "dot.radiowaves.up.forward")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    
-                    Button(role: .destructive)
-                    {
-                        brute.stop()
-                    } label: {
-                        Label("Stop",systemImage:"stop.fill")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!brute.scanStatus.isScanning)
-                    Button {
-                        guard brute.hasResumePoint else {
-                            Task {
-                                Logger.shared.info("No resume point available")}
-                            return
-                        }
-                        startPIDScan()
-                    }
-                    label: {
-                        Label("Resume",systemImage: "arrow.clockwise.circle.fill")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(brute.scanStatus.isScanning || !brute.hasResumePoint)
-                    Spacer()
-                    Button {
-                        Task {
-                            await ECUTester.shared.run(header: cleanHeader)
-                        }
-                    } label: {
-                        Label("Test ECU", systemImage: "stethoscope")
-                    }
-                    .buttonStyle(.bordered)
-                    
-                    Button {
-                        Task {
-                            await ModeDiscovery.shared.discover()
-                        }
-                    } label: {
-                        Label("Discover Modes", systemImage: "dot.scope")
-                    }
-                    .buttonStyle(.bordered)
-                }
-                .controlSize(horizontalSizeClass == .compact ? .small : .regular)
-                .if(isCompact) { view in
-                    view.labelStyle(.iconOnly)
-                }
-                .if(isCompact) { view in
-                    view.font(.title3)
-                }
-                
-                
-                // MARK: Live Log
-                VStack(alignment: .leading) {
-                    ScrollViewReader { proxy in
-                        HStack(spacing: isCompact ? 4 : 16) {
-                            Text("Terminal")
-                                .font(isCompact ? .body.weight(.semibold) : .headline)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.8)
-                                .fixedSize(horizontal: true, vertical: false)
-                                .padding(.leading, isCompact ? -10 : 0)
-                                .layoutPriority(2)
-                            if !isCompact {
-                                Spacer()
-                            }
-                            Text(isCompact ? compactStatusTitle : bt.status.title)
-                                .font(isCompact ? .caption2 : .headline)
-                                .lineLimit(1)
-                                .allowsTightening(true)
-                                .minimumScaleFactor(0.35)
-                                .layoutPriority(10)
-                            
-                            if !isCompact {
-                                Spacer()
-                            }
-                            
-                            Text(isCompact ? "F: \(brute.scanStatus.successCount)" : "Found: \(brute.scanStatus.successCount)")
-                                .font(isCompact ? .caption2.monospacedDigit() : .headline)
-                                .fixedSize()
-                            
-                            Text(String(format: isCompact ? "%.0f%%" : "%.0f%%", brute.statistics.successRate * 100))
-                                .font(isCompact ? .caption2.monospacedDigit() : .headline)
-                                .foregroundStyle(.secondary)
-                                .fixedSize()
-                            
-                            if !isCompact {
-                                Spacer()
-                            }
-                            
-                            Text(
-                                isCompact
-                                ? String(format: "%.0fms %d/%d", brute.statistics.averageLatency * 1000, bt.txCount, bt.rxCount)
-                                : String(format: "%.0f ms • TX %d • RX %d", brute.statistics.averageLatency * 1000, bt.txCount, bt.rxCount)
-                            )
-                            .font(isCompact ? .caption2.monospacedDigit() : .headline)
-                            .foregroundStyle(.secondary)
-                            .fixedSize()
-                            
-                            if !isCompact {
-                                Spacer()
-                            }
-                            
-                            Button {
-                                shouldAutoScroll = true
-                                programmaticScroll = true
-                                
-                                if let last = viewModel.lines.last {  withAnimation(nil) {
-                                    proxy.scrollTo(last.id, anchor: .bottom)
-                                }
-                                }
-                                // Reset programmaticScroll after animation completes using Task
-                                Task { @MainActor in
-                                    try? await Task.sleep(for: .milliseconds(100))
-                                    programmaticScroll = false
-                                }
-                            } label: {
-                                if isCompact {
-                                    Image(systemName: "arrow.down.circle.fill")
-                                        .font(.title2.weight(.semibold))
-                                } else {
-                                    Text("▼ Live")
-                                }
-                            }
-                            .font(isCompact ? .caption : .body)
-                            .frame(width: isCompact ? 34 : nil, alignment: .trailing)
-                            .fixedSize()
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal)
-                        .padding()
-                        ScrollView(.vertical, showsIndicators: true) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                ForEach(viewModel.lines.suffix(isCompact ? 400 : 1200), id: \.id)
-                                { line in
-                                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                                        Text(line.timestamp)
-                                            .foregroundStyle(.secondary)
-                                        
-                                        Text(line.message)
-                                            .foregroundStyle(color(for: line.style))
-                                    }
-                                    .font(.system(size: isCompact ? 10 : 11, design: .monospaced))
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .id(line.id)
-                                }
-                            }
-                            .padding()
-                            .background(colorScheme == .dark ? Color.black.opacity(0.18) : Color(uiColor: .secondarySystemBackground))
-                            .clipShape(
-                                RoundedRectangle(
-                                    cornerRadius: 18
-                                )
-                            )
-                            .contentShape(Rectangle())
-                        }
-                        .defaultScrollAnchor(.bottom)
-                        .scrollDismissesKeyboard(.interactively)
-                        .simultaneousGesture(
-                            DragGesture()
-                                .onChanged { _ in
-                                    shouldAutoScroll = false
-                                }
-                        )
-                        .onScrollPhaseChange { _, phase in
-                            guard !programmaticScroll else { return }
-                            if phase == .interacting {
-                                shouldAutoScroll = false
-                            }
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .onChange(of: shouldAutoScroll) { _, newValue in
-                            // Removed debug print
-                        }
-                        .onChange(of: viewModel.lines.count) { _, _ in
-                            guard shouldAutoScroll,
-                                  let last = viewModel.lines.last else {
-                                return
-                            }
-                            
-                            Task { @MainActor in
-                                withAnimation(nil) {
-                                    proxy.scrollTo(last.id, anchor: .bottom)
-                                }
-                            }
-                        }
-                    }
-                    
-                    HStack(spacing: 8) {
-                        TextField("Manual command", text: $manualCommand)
-                            .textFieldStyle(.roundedBorder)
-                            .textInputAutocapitalization(.characters)
-                            .autocorrectionDisabled()
-                            .onSubmit(sendManualCommand)
-                            .focused($commandFieldFocused)
-                            .submitLabel(.send)
-                        
-                        Button("Send") {
-                            sendManualCommand()
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(
-                            manualCommand
-                                .trimmingCharacters(in: .whitespacesAndNewlines)
-                                .isEmpty
-                        )
-                    }
-                    .padding()
-                    .onTapGesture {
-                        commandFieldFocused = false
-                    }
-                }
-            }
-            .frame(maxWidth: .infinity,
-                   maxHeight: .infinity,
-                   alignment: .top)
-            .background(colorScheme == .dark ? Color.black.opacity(0.12) : Color(uiColor: .systemGray6))
-            .clipShape(RoundedRectangle(cornerRadius: 18))
-            .layoutPriority(1)
-        }
-        .frame(maxWidth: .infinity, alignment: .top)
-        .padding()
-        .contentShape(Rectangle())
-        .simultaneousGesture(
-            TapGesture().onEnded {
-                commandFieldFocused = false
-            }
-        )
-    }
-    
-    
-    @inline(__always)
-    private func color(for style: LogStyle) -> Color {
-        switch (style, colorScheme) {
-        case (.tx, .light):
-            return Color(red: 0.00, green: 0.28, blue: 0.82)
-        case (.tx, .dark):
-            return .cyan
-            
-        case (.rx, .light):
-            return Color(red: 0.00, green: 0.42, blue: 0.08)
-        case (.rx, .dark):
-            return .green
-            
-        case (.info, .light):
-            return .black
-        case (.info, .dark):
-            return .white
-            
-        case (.success, .light):
-            return Color(red: 0.00, green: 0.48, blue: 0.12)
-        case (.success, .dark):
-            return .mint
-            
-        case (.warning, .light):
-            return Color(red: 0.72, green: 0.36, blue: 0.00)
-        case (.warning, .dark):
-            return .orange
-            
-        case (.error, .light):
-            return Color(red: 0.75, green: 0.00, blue: 0.00)
-        case (.error, .dark):
-            return .red
-            
-        case (.debug, .light):
-            return Color(red: 0.22, green: 0.22, blue: 0.24)
-        case (.debug, .dark):
-            return .gray
-        }
-    }
-    
-    // MARK: - Commands
-    private func sendManualCommand() {
-        guard bt.isConnected else {
-            Task {
-                Logger.shared.info("Connect to ELM first")}
-            return
-        }
-        let normalizedCommand = manualCommand
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .uppercased()
-        guard !normalizedCommand.isEmpty else {
-            return
-        }
-        Task {
-            Logger.shared.tx(normalizedCommand)}
-        ELM327.shared.send(normalizedCommand)
-        manualCommand = ""
-    }
-    
-    // MARK: - Scan
-    private func startPIDScan()
-    {
-        guard bt.isConnected else {
-            Task {
-                Logger.shared.info("Connect to ELM first")}
-            return
-        }
-        if !brute.hasResumePoint {
-            Task {
-                Logger.shared.clear()
-            }
-        }
-        
-        let headerValue = cleanHeader
-        
-        guard headerValue.count == 6,
-              headerValue.allSatisfy({ $0.isHexDigit }) else {
-            Task {
-                Logger.shared.info("Invalid Header")}
-            return
-        }
-        brute.headers = [headerValue]
+    private func jumpToLive(proxy: ScrollViewProxy) {
+        guard let last = viewModel.lines.last else { return }
+
         shouldAutoScroll = true
         programmaticScroll = true
+
+        withAnimation(nil) {
+            proxy.scrollTo(last.id, anchor: .bottom)
+        }
+
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(100))
             programmaticScroll = false
         }
-        
-        Task {
-            let ok = await Preflight.shared.run(header: headerValue)
-            
-            guard ok else {
-                Task {
-                    Logger.shared.error("❌ Preflight Failed")}
-                return
-            }
-            
-            if selectedMode.pidDigits == 4 {
-                let startText = startPID
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                    .uppercased()
-                
-                let endText = endPID
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                    .uppercased()
-                
-                guard let start = UInt16(startText, radix: 16),
-                      let end = UInt16(endText, radix: 16) else {
-                    Task {
-                        Logger.shared.info("Invalid PID range")}
-                    return
+    }
+    
+    private var launchScan: () -> Void {
+        {
+            ScanLauncher.shared.start(
+                bt: bt,
+                brute: brute,
+                stats: stats,
+                mode: selectedMode,
+                header: header,
+                startPID: startPID,
+                endPID: endPID,
+                cleanHeader: cleanHeader
+            ) {
+                shouldAutoScroll = true
+                programmaticScroll = true
+
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(100))
+                    programmaticScroll = false
                 }
-                
-                guard start <= end else {
-                    Task {
-                        Logger.shared.info("Start PID must be <= End PID")}
-                    return
-                }
-                
-                brute.scan(
-                    mode: selectedMode,
-                    startPID: start,
-                    endPID: end
-                )
-            } else {
-                brute.scan(mode: selectedMode)
             }
         }
     }
     
+    
+    private var terminalTab: some View {
+        ScrollView(.vertical, showsIndicators: true) {
+                VStack(spacing: 18) {
+                    //MARK: Status Card
+                    StatusCard(
+                        bt: bt,
+                        selectedMode: selectedMode,
+                        header: header,
+                        showDisconnectConfirmation: $showDisconnectConfirmation,
+                        isCompact: isCompact
+                    )
+                    
+                    
+                    ProgressCard(
+                        progress: stats.progressFraction,
+                        currentRequests: stats.requestsSent,
+                        totalRequests: stats.totalRequests,
+                        elapsed: formattedElapsed,
+                        eta: formattedETA,
+                        successRate: brute.statistics.successRate,
+                        averageLatency: brute.statistics.averageLatency,
+                        isScanning: brute.scanStatus.isScanning,
+                        isCompleted: stats.requestsSent >= stats.totalRequests,
+                        hasResumePoint: brute.hasResumePoint
+                    )
+                    
+                    ActionBar(
+                        isConnected: bt.isConnected,
+                        isScanning: brute.scanStatus.isScanning,
+                        hasResumePoint: brute.hasResumePoint,
+                        hasLines: !viewModel.lines.isEmpty,
+                        isCompact: isCompact,
+                        onClear: {
+                            viewModel.clear()
+                        },
+                        onScan: launchScan,
+                        onStop: {
+                            brute.stop()
+                        },
+                        onResume: launchScan,
+                        onTestECU: {
+                            Task {
+                                await ECUTester.shared.run(header: cleanHeader)
+                            }
+                        },
+                        onDiscoverModes: {
+                            Task {
+                                await ModeDiscovery.shared.discover()
+                            }
+                        }
+                    )
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        ScrollViewReader { proxy in
+                            VStack(spacing: 8) {
+                                TerminalHeader(
+                                    title: "Terminal",
+                                    status: isCompact ? compactStatusTitle : bt.status.title,
+                                    found: brute.scanStatus.successCount,
+                                    successRate: brute.statistics.successRate,
+                                    averageLatency: brute.statistics.averageLatency,
+                                    txCount: bt.txCount,
+                                    rxCount: bt.rxCount,
+                                    isCompact: isCompact,
+                                    onJumpToLive: {
+                                        jumpToLive(proxy: proxy)
+                                    }
+                                )
+                                
+                                TerminalLog(
+                                    lines: viewModel.lines,
+                                    isCompact: isCompact
+                                )
+                                .onChange(of: viewModel.lines.count) {
+
+                                    print("TerminalView lines =", viewModel.lines.count)
+
+                                }
+                                .simultaneousGesture(
+                                    DragGesture()
+                                        .onChanged { _ in
+                                            shouldAutoScroll = false
+                                        }
+                                )
+                                .onScrollPhaseChange { _, phase in
+                                    guard !programmaticScroll else { return }
+
+                                    if phase == .interacting {
+                                        shouldAutoScroll = false
+                                    }
+                                }
+                                
+                                
+                            }
+                                .onChange(of: viewModel.lines.count) { _, _ in
+                                    guard shouldAutoScroll,
+                                          let last = viewModel.lines.last else {
+                                        return
+                                    }
+                                    Task { @MainActor in
+                                        withAnimation(nil) {
+                                            proxy.scrollTo(last.id, anchor: .bottom)
+                                        }
+                                    }
+                                }
+                        }
+                        ManualCommandBar(
+                            manualCommand: $manualCommand,
+                            commandFieldFocused: $commandFieldFocused,
+                            send: {
+                                ManualCommandSender.shared.send(
+                                    bluetoothManager: bt,
+                                    manualCommand: &manualCommand
+                                )
+                            }
+                        )
+                    }
+                }
+                .frame(maxWidth: .infinity,
+                       alignment: .top)
+                .layoutPriority(1)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .frame(maxWidth: .infinity, alignment: .top)
+            .padding()
+            .contentShape(Rectangle())
+            .simultaneousGesture(
+                TapGesture().onEnded {
+                    commandFieldFocused = false
+                }
+            )
+        }
+    
+    
+
     // MARK: - Formatting
     @inline(__always)
     private func formatETA(_ seconds: TimeInterval) -> String {
@@ -573,12 +268,6 @@ struct TerminalView: View {
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     var body: some View {
         terminalTab
-            .task {
-                viewModel.start()
-            }
-            .onDisappear {
-                viewModel.stop()
-            }
     }
 }
 
