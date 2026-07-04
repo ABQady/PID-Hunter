@@ -26,11 +26,18 @@ struct ScanStatus {
 @MainActor
 final class BruteForceScanner: ObservableObject {
     static let shared = BruteForceScanner()
+    
     @Published private(set) var results: [ScanResult] = []
     @Published var delayMs: Double = 100
     @Published private(set) var scanStatus = ScanStatus()
     @Published private(set) var statistics = SearchStatistics()
     @Published private(set) var hasResumePoint = false
+    @AppStorage("selectedSearchEngine")
+    private var selectedSearchEngine = SearchEngineType.sequential.rawValue
+
+    var searchEngine: SearchEngineType {
+        SearchEngineType(rawValue: selectedSearchEngine) ?? .sequential
+    }
     
     @AppStorage("requestTimeout")
     private var requestTimeout = 2.0
@@ -46,7 +53,10 @@ final class BruteForceScanner: ObservableObject {
     
     private var currentHeaderIndex = 0
     private var currentPID = 0
-    private var searchStrategy = SequentialSearchStrategy(start: 0, end: 0)
+    private var searchStrategy: any SearchStrategy = SequentialSearchStrategy(
+        start: 0,
+        end: 0
+    )
     
     private let requestExecutor = RequestExecutor()
     @inline(__always)
@@ -348,12 +358,19 @@ final class BruteForceScanner: ObservableObject {
     
     // MARK: - Generic Scan Implementation
     private func prepareStrategy(startPID: Int, endPID: Int, resumePID: Int) {
-        searchStrategy = SequentialSearchStrategy(
+        searchStrategy = SearchEngineFactory.make(
+            type: searchEngine,
             start: UInt16(startPID),
             end: UInt16(endPID)
         )
-        searchStrategy.seek(to: UInt16(resumePID))
         currentPID = resumePID
+        Logger.shared.info("Search Engine = \(searchEngine)")
+        Logger.shared.info(
+            "Scanner using \(searchStrategy.engineType)"
+        )
+        while let pid = searchStrategy.nextPID(), pid < UInt16(resumePID) {
+            // Advance the strategy until it reaches the resume PID.
+        }
     }
 
     private func scan(

@@ -1,6 +1,7 @@
 import SwiftUI
+
 #if os(macOS)
-import AppKit
+    import AppKit
 #endif
 
 struct ResultsView: View {
@@ -13,68 +14,84 @@ struct ResultsView: View {
     @State private var search = ""
     @State private var ecuExpanded = true
     @State private var statsExpanded = true
-    
+    @State private var searchStatsExpanded = false
+
     private var filteredResults: [ScanResult] {
         let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return brute.results }
 
         return brute.results.filter {
-            $0.request.localizedCaseInsensitiveContains(query) ||
-            $0.response.localizedCaseInsensitiveContains(query) ||
-            $0.header.localizedCaseInsensitiveContains(query) ||
-            $0.pid.localizedCaseInsensitiveContains(query)
+            $0.request.localizedCaseInsensitiveContains(query)
+                || $0.response.localizedCaseInsensitiveContains(query)
+                || $0.header.localizedCaseInsensitiveContains(query)
+                || $0.pid.localizedCaseInsensitiveContains(query)
         }
     }
     
+
     private var hasResults: Bool {
         !filteredResults.isEmpty
     }
-    
+
+    @AppStorage("selectedSearchEngine")
+    private var selectedSearchEngine = SearchEngineType.sequential.rawValue
+
+    private var showsSearchStatistics: Bool {
+        SearchEngineType(rawValue: selectedSearchEngine) != .sequential
+    }
+
     // MARK: - Results View
     private var resultsView: some View {
+        
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 16, pinnedViews: [.sectionHeaders]) {
+            LazyVStack(
+                alignment: .leading,
+                spacing: 16,
+                pinnedViews: [.sectionHeaders]
+            ) {
                 // MARK: - ECU Information
                 DisclosureGroup("ECU Information", isExpanded: $ecuExpanded) {
-                    
+
                     Divider()
-                    
+
                     LabeledContent("Connection Status") {
                         Text(ecu.status)
                             .foregroundStyle(
                                 ecu.status == "Connected"
-                                ? .green
-                                : .secondary
+                                    ? .green
+                                    : .secondary
                             )
                     }
-                    
+
                     LabeledContent("ECU Name") {
                         Text(ecu.ecuName)
                     }
-                    
+
                     LabeledContent("ELM Version") {
                         Text(ecu.elmVersion)
                     }
-                    
+
                     LabeledContent("Protocol Used") {
                         Text(ecu.protocolName)
                     }
-                    
+
                     LabeledContent("Current Header") {
                         Text(ecu.header)
                     }
-                    
+
                     if let date = ecu.lastConnected {
                         LabeledContent("Connected") {
-                            Text(date.formatted(
-                                date: .omitted,
-                                time: .standard
-                            ))
+                            Text(
+                                date.formatted(
+                                    date: .omitted,
+                                    time: .standard
+                                )
+                            )
                         }
                     }
-                    
+
                     Divider()
-                    
+
                     LabeledContent("Supported Services") {
                         if ecu.services.services.isEmpty {
                             Text("-")
@@ -87,9 +104,15 @@ struct ResultsView: View {
                                 alignment: .leading,
                                 spacing: 8
                             ) {
-                                ForEach(ecu.services.services, id: \.self) { service in
+                                ForEach(ecu.services.services, id: \.self) {
+                                    service in
                                     Text(service)
-                                        .font(.system(.caption, design: .monospaced).bold())
+                                        .font(
+                                            .system(
+                                                .caption,
+                                                design: .monospaced
+                                            ).bold()
+                                        )
                                         .foregroundStyle(.green)
                                         .padding(.horizontal, 10)
                                         .padding(.vertical, 5)
@@ -103,7 +126,7 @@ struct ResultsView: View {
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        
+
                         if !discovery.supportedModes.isEmpty {
 
                             Divider()
@@ -122,7 +145,12 @@ struct ResultsView: View {
                             ) {
                                 ForEach(discovery.supportedModes) { mode in
                                     Text(mode.rawValue)
-                                        .font(.system(.caption, design: .monospaced).bold())
+                                        .font(
+                                            .system(
+                                                .caption,
+                                                design: .monospaced
+                                            ).bold()
+                                        )
                                         .foregroundStyle(.blue)
                                         .padding(.horizontal, 10)
                                         .padding(.vertical, 5)
@@ -142,26 +170,35 @@ struct ResultsView: View {
                 .padding()
                 .background(.thinMaterial)
                 .clipShape(RoundedRectangle(cornerRadius: 18))
-                
-                
+
                 // MARK: - Statistics Section
                 // MARK: - Scan Statistics
                 Divider()
-                
+                let searchStats = brute.statistics
+
                 DisclosureGroup("Scan Statistics", isExpanded: $statsExpanded) {
-                    
                     Divider()
-                    
                     HStack {
-                        statistic(title: "Requests", value: "\(stats.requestsSent)")
+                        statistic(
+                            title: "Requests",
+                            value: "\(stats.requestsSent)"
+                        )
+                        Spacer()
+                        statistic(
+                            title: "Hits",
+                            //value: "\(brute.scanStatus.successCount)"
+                            value: "\(stats.positiveResponses)"
+                        )
 
                         Spacer()
 
-                        statistic(title: "Hits", value: "\(brute.scanStatus.successCount)")
-
-                        Spacer()
-
-                        statistic(title: "Hit Rate", value: String(format: "%.1f%%", stats.positiveResponseRate))
+                        statistic(
+                            title: "Hit Rate",
+                            value: String(
+                                format: "%.1f%%",
+                                stats.positiveResponseRate
+                            )
+                        )
                     }
 
                     HStack {
@@ -169,13 +206,16 @@ struct ResultsView: View {
 
                         Spacer()
 
-                        statistic(title: "Bus Errors", value: "\(stats.busErrors)")
+                        statistic(
+                            title: "Bus Errors",
+                            value: "\(stats.busErrors)"
+                        )
 
                         Spacer()
 
                         statistic(
-                            title: "Latency",
-                            value: String(format: "%.0f ms", brute.statistics.averageLatency * 1000)
+                            title: "Timeouts",
+                            value: "\(stats.timeouts)"
                         )
                     }
 
@@ -195,23 +235,108 @@ struct ResultsView: View {
                         Spacer()
 
                         statistic(
-                            title: "Success",
-                            value: String(format: "%.1f%%", brute.statistics.successRate * 100)
+                            title: "Failures",
+                            value: String(
+                                format: "%.1f%%",
+                                stats.failureRate
+                            )
                         )
                     }
-                    
+
                 }
                 .font(.headline)
                 .padding()
                 .background(.thinMaterial)
-                .clipShape(
-                    RoundedRectangle(cornerRadius: 18)
-                )
-                
+                .clipShape(RoundedRectangle(cornerRadius: 18))
+
+                if showsSearchStatistics {
+                    DisclosureGroup(
+                        "Search Statistics",
+                        isExpanded: $searchStatsExpanded
+                    ) {
+                        Divider()
+                        HStack {
+                            statistic(
+                                title: "Requests",
+                                value: "\(searchStats.requestsSent)"
+                            )
+
+                            Spacer()
+
+                            statistic(
+                                title: "Successes",
+                                value: "\(searchStats.successfulResponses)"
+                            )
+
+                            Spacer()
+
+                            statistic(
+                                title: "Failures",
+                                value: "\(searchStats.failedResponses)"
+                            )
+                        }
+                        HStack {
+                            statistic(
+                                title: "Discoveries",
+                                value: "\(searchStats.discoveredPIDs)"
+                            )
+
+                            Spacer()
+
+                            statistic(
+                                title: "Success %",
+                                value: String(
+                                    format: "%.1f%%",
+                                    searchStats.successRate * 100
+                                )
+                            )
+
+                            Spacer()
+
+                            statistic(
+                                title: "Avg",
+                                value: String(
+                                    format: "%.0f ms",
+                                    searchStats.averageLatency * 1000
+                                )
+                            )
+                        }
+
+                        HStack {
+                            statistic(
+                                title: "Fastest",
+                                value: String(
+                                    format: "%.0f ms",
+                                    searchStats.fastestSuccessfulResponse
+                                        * 1000
+                                )
+                            )
+
+                            Spacer()
+
+                            statistic(
+                                title: "Slowest",
+                                value: String(
+                                    format: "%.0f ms",
+                                    searchStats.slowestResponse * 1000
+                                )
+                            )
+
+                            Spacer()
+
+                            statistic(title: "", value: "")
+                        }
+                    }
+                    .font(.headline)
+                    .padding()
+                    .background(.thinMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: 18))
+                }
+
                 // MARK: - PID Results
                 Section {
                     if !hasResults {
-                        
+
                         ContentUnavailableView {
                             Label(
                                 "No PID Results",
@@ -227,10 +352,11 @@ struct ResultsView: View {
                         .frame(maxWidth: .infinity)
                         .frame(minHeight: 250)
                         .clipShape(RoundedRectangle(cornerRadius: 18))
-                        
+
                     } else {
                         LazyVStack(spacing: 12) {
-                            ForEach(Array(filteredResults.reversed())) { result in
+                            ForEach(Array(filteredResults.reversed())) {
+                                result in
                                 PIDResultCard(result: result)
                             }
                         }
@@ -241,27 +367,31 @@ struct ResultsView: View {
                         HStack {
                             Text("PID Results")
                                 .font(.headline)
-                            
+
                             Spacer()
-                            
+
                             Text("\(brute.scanStatus.successCount)")
                                 .foregroundStyle(.secondary)
-                            
+
                             Spacer()
-                            
+
                             Button("Copy All") {
                                 guard hasResults else { return }
-                                let text = filteredResults
+                                let text =
+                                    filteredResults
                                     .map { "\($0.request) -> \($0.response)" }
                                     .joined(separator: "\n")
-                                
-#if os(macOS)
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(text, forType: .string)
-#endif
+
+                                #if os(macOS)
+                                    NSPasteboard.general.clearContents()
+                                    NSPasteboard.general.setString(
+                                        text,
+                                        forType: .string
+                                    )
+                                #endif
                             }
                         }
-                        
+
                         TextField("Search PID...", text: $search)
                             .textFieldStyle(.roundedBorder)
                     }
@@ -269,18 +399,23 @@ struct ResultsView: View {
                     .background(.regularMaterial)
                     .clipShape(RoundedRectangle(cornerRadius: 18))
                 }
-                
+
             }
             .padding()
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
     }
-    
+
     // MARK: - Result Helpers
     @inline(__always)
     private func formattedElapsed() -> String {
         Duration.seconds(stats.elapsed(at: .now))
-            .formatted(.units(allowed: [.hours, .minutes, .seconds], width: .abbreviated))
+            .formatted(
+                .units(
+                    allowed: [.hours, .minutes, .seconds],
+                    width: .abbreviated
+                )
+            )
     }
 
     @inline(__always)
@@ -289,22 +424,27 @@ struct ResultsView: View {
         guard eta > 0 else { return "--" }
 
         return Duration.seconds(eta)
-            .formatted(.units(allowed: [.hours, .minutes, .seconds], width: .abbreviated))
+            .formatted(
+                .units(
+                    allowed: [.hours, .minutes, .seconds],
+                    width: .abbreviated
+                )
+            )
     }
-    
+
     // MARK: - Helpers
     @ViewBuilder
     private func statistic(
         title: String,
         value: String
     ) -> some View {
-        
+
         VStack {
             Text(value)
                 .font(.title2.bold())
                 .monospacedDigit()
                 .multilineTextAlignment(.center)
-            
+
             Text(title)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -312,7 +452,7 @@ struct ResultsView: View {
         }
         .frame(maxWidth: .infinity)
     }
-    
+
     var body: some View {
         
         resultsView

@@ -51,6 +51,7 @@ struct SequentialSearchEngineDescriptor: SearchEngineDescriptor {
 
     func makeStrategy(start: UInt16, end: UInt16) -> any SearchStrategy {
         SequentialSearchStrategy(start: start, end: end)
+        
     }
 }
 

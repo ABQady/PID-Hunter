@@ -98,11 +98,17 @@ enum SearchEngineFactory {
             preconditionFailure("No SearchEngine registered for \(type)")
         }
 
-        return makeStrategy(
+        let strategy = makeStrategy(
             descriptor: descriptor,
             type: type,
             start: start,
             end: end
         )
+
+        Logger.shared.info(
+            "Factory created \(strategy.engineType)"
+        )
+
+        return strategy
     }
 }

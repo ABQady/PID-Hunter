@@ -9,8 +9,6 @@ import Foundation
 
 /// Defines how the scanner chooses the next PID and learns from scan results.
 protocol SearchStrategy {
-    associatedtype PID = UInt16
-
     // MARK: - Identity
 
     /// Identifies the concrete search engine for telemetry and analytics.
@@ -23,7 +21,7 @@ protocol SearchStrategy {
     // MARK: - PID Selection
 
     /// Returns the next PID to scan, or nil when the strategy is exhausted.
-    mutating func nextPID() -> PID?
+    mutating func nextPID() -> UInt16?
 
     /// Indicates whether the strategy has exhausted its search space.
     var isExhausted: Bool { get }
@@ -34,7 +32,7 @@ protocol SearchStrategy {
     /// payload quality, transport metadata and timing statistics
     /// without changing this protocol.
     mutating func registerResult(
-        pid: PID,
+        pid: UInt16,
         result: SearchResult,
         latency: Double
     )
@@ -44,6 +42,6 @@ protocol SearchStrategy {
     /// Repositions the search cursor without resetting any learned knowledge.
     /// Implementations should preserve scoring, telemetry and adaptive state,
     /// changing only the next PID that will be produced.
-    mutating func seek(to pid: PID)
+    mutating func seek(to pid: UInt16)
 
 }
