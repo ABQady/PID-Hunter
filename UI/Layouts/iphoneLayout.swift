@@ -18,45 +18,61 @@ struct iPhoneLayout: View {
     @State private var selectedTab = 1
 
     var body: some View {
+        GeometryReader { geometry in
+            let isLandscape = geometry.size.width > geometry.size.height
+            if isLandscape {
+                HStack(spacing: 10) {
+                    TerminalView(
+                        selectedMode: $selectedMode,
+                        header: $header,
+                        startPID: $startPID,
+                        endPID: $endPID
+                    )
+                    .frame(maxWidth: .infinity)
 
-        TabView(selection: $selectedTab) {
-
-            SettingsView(
-                header: $header,
-                selectedMode: $selectedMode,
-                startPID: $startPID,
-                endPID: $endPID,
-                delay: $delay
-            )
-            .tabItem {
-                Label("Settings", systemImage: "gearshape")
-            }
-            .tag(0)
-
-            TerminalView(
-                selectedMode: $selectedMode,
-                header: $header,
-                startPID: $startPID,
-                endPID: $endPID
-            )
-            .tabItem {
-                Label("Terminal", systemImage: "terminal")
-            }
-            .tag(1)
-
-            ResultsView()
-                .tabItem {
-                    Label("Results", systemImage: "list.bullet.rectangle")
+                    ResultsView()
+                        .frame(width: min(geometry.size.width * 0.38, 360))
                 }
-                .tag(2)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.horizontal, 8)
+            } else {
+                TabView(selection: $selectedTab) {
+                    SettingsView(
+                        header: $header,
+                        selectedMode: $selectedMode,
+                        startPID: $startPID,
+                        endPID: $endPID,
+                        delay: $delay
+                    )
+                    .tabItem {
+                        Label("Settings", systemImage: "gearshape")
+                    }
+                    .tag(0)
 
-        }
-        .ignoresSafeArea(.keyboard, edges: .bottom)
-        .scrollDismissesKeyboard(.interactively)
-        .onTapGesture {
-            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-        }
+                    TerminalView(
+                        selectedMode: $selectedMode,
+                        header: $header,
+                        startPID: $startPID,
+                        endPID: $endPID
+                    )
+                    .tabItem {
+                        Label("Terminal", systemImage: "terminal")
+                    }
+                    .tag(1)
 
+                    ResultsView()
+                        .tabItem {
+                            Label("Results", systemImage: "list.bullet.rectangle")
+                        }
+                        .tag(2)
+                }
+                .ignoresSafeArea(.keyboard, edges: .bottom)
+                .scrollDismissesKeyboard(.interactively)
+                .onTapGesture {
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                }
+            }
+        }
     }
 
 }

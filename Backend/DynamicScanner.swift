@@ -92,7 +92,7 @@ final class DynamicScanner: ObservableObject {
                     } catch BluetoothManager.BluetoothError.timeout {
                         // Ignore timeout and continue scanning.
                     } catch {
-                        Logger.shared.debug("DynamicScanner request failed: \(error.localizedDescription)")
+                        await Logger.shared.debug("DynamicScanner request failed: \(error.localizedDescription)")
                     }
                 }
             }

@@ -21,14 +21,14 @@ final class ELMResponseAssembler {
         lastChunkTime = Date()
     }
 
-    func append(_ chunk: String) -> [ELMResponse] {
+    func append(_ chunk: String) async -> [ELMResponse] {
         let now = Date()
         if !buffer.isEmpty &&
             now.timeIntervalSince(lastChunkTime) > timeout {
 
-            Logger.shared.debug("Assembler timeout")
-            Logger.shared.debug("Discarded buffer (\(buffer.count) bytes)")
-            Logger.shared.debug(buffer)
+            await Logger.shared.debug("Assembler timeout")
+            await Logger.shared.debug("Discarded buffer (\(buffer.count) bytes)")
+            await Logger.shared.debug(buffer)
             buffer.removeAll(keepingCapacity: true)
         }
 
@@ -36,8 +36,8 @@ final class ELMResponseAssembler {
         buffer += chunk
 
         guard buffer.count <= maxBufferSize else {
-            Logger.shared.debug("Assembler buffer overflow")
-            Logger.shared.debug("Discarded buffer (\(buffer.count) bytes)")
+            await Logger.shared.debug("Assembler buffer overflow")
+            await Logger.shared.debug("Discarded buffer (\(buffer.count) bytes)")
             buffer.removeAll(keepingCapacity: true)
             return []
         }
@@ -62,17 +62,17 @@ final class ELMResponseAssembler {
             
             switch parsed.type {
             case .unknown:
-                Logger.shared.debug("Assembler discarded unknown response: \(trimmed)")
+                await Logger.shared.debug("Assembler discarded unknown response: \(trimmed)")
 
             default:
-                Logger.shared.debug(
+                await Logger.shared.debug(
                     "Assembler accepted \(parsed.type): \(trimmed)"
                 )
                 responses.append(parsed)
             }
        }
         if !responses.isEmpty {
-            Logger.shared.debug(
+            await Logger.shared.debug(
                 "Assembler completed \(responses.count) response(s)"
             )
         }

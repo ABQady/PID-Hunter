@@ -2,131 +2,228 @@
 // Logger.swift
 //
 import Foundation
-import SwiftUI
 
 private enum LogLevel {
     case user
     case debug
 }
 
-struct LogLine: Identifiable {
-    let id = UUID()
-    let text: String
-    let color: Color
+enum LogStyle {
+    case tx
+    case rx
+    case info
+    case success
+    case warning
+    case error
+    case debug
 }
 
-@MainActor
-final class Logger: ObservableObject {
-    static let shared = Logger()
+struct LogLine: Identifiable {
+    let id: Int64
+    let text: String
+    let style: LogStyle
+}
 
-    @Published var lines: [LogLine] = []
-    @AppStorage("enableDebugLogging")
-    private var enableDebugLogging = false
+actor Logger {
+    static let shared = Logger()
+    private var nextID: Int64 = 0
+
+    private var lines: [LogLine] = []
+    private static let trimChunk = 256
     private let maxLines = 5000
     private static let logFilename = "rawTraffic.log"
 
-    // MARK: - Helpers
-
-    @inline(__always)
-    private func stamp() -> String {
-        formatter.string(
-            from: Date()
-        )
-    }
-
-    private let formatter: DateFormatter = {
+    private let timestampFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "HH:mm:ss.SSS"
         return f
     }()
+    
+    private var enableDebugLogging: Bool {
+        UserDefaults.standard.bool(forKey: "enableDebugLogging")
+    }
+    
+    private init() {
+        lines.reserveCapacity(maxLines)
+    }
 
-    private init() {}
+    private var continuations: [AsyncStream<[LogLine]>.Continuation] = []
 
+    func stream() -> AsyncStream<[LogLine]> {
+        AsyncStream { continuation in
+            continuations.append(continuation)
+            continuation.onTermination = { [weak self] _ in
+                Task {
+                    await self?.removeContinuation(continuation)
+                }
+            }
+            continuation.yield(lines)
+        }
+    }
+
+    private func removeContinuation(
+        _ continuation: AsyncStream<[LogLine]>.Continuation
+    ) {
+        continuations.removeAll {
+            ObjectIdentifier($0 as AnyObject) ==
+            ObjectIdentifier(continuation as AnyObject)
+        }
+    }
+
+    private func publish() {
+        for continuation in continuations {
+            continuation.yield(lines)
+        }
+    }
+    
     // MARK: - Logging
 
+    @inline(__always)
+    private func makeLogLine(text: String, style: LogStyle) -> LogLine {
+        defer { nextID &+= 1 }
+        return LogLine(
+            id: nextID,
+            text: text,
+            style: style
+        )
+    }
+
+    @inline(__always)
     private func append(
         _ text: String,
-        color: Color,
+        style: LogStyle,
         level: LogLevel = .user
     ) {
         guard level == .user || enableDebugLogging else {
             return
         }
         if text.isEmpty { return }
+        let timestamp = timestampFormatter.string(from: .now)
         console(text)
-        let line = LogLine(
-            text: text,
-            color: color
+        let line = makeLogLine(
+            text: "\(timestamp) \(text)",
+            style: style
         )
 
         lines.append(line)
-        if lines.count > maxLines {
-            lines.removeFirst(lines.count - maxLines)
+        let overflow = lines.count - maxLines
+        if overflow >= 0 {
+            lines.removeFirst(min(Self.trimChunk, overflow + 1))
         }
+        publish()
     }
 
     // MARK: - Public API
 
-    func tx(
+    func txImpl(
         _ command: String
     ) {
         append(
-            "\(stamp()) >> \(command)", color: .blue, level: .debug)
+            ">> \(command)", style: .tx, level: .debug)
     }
-    func rx(
+    func rxImpl(
         _ response: String
     ) {
         append(
-            "\(stamp()) << \(response)",color: .green, level: .debug)
+            "<< \(response)", style: .rx, level: .debug)
     }
-    func info(
+    func infoImpl(
         _ text: String
     ) {
-        append(
-            "\(stamp()) [INFO] \(text)",color: .primary, level: .user)
+        append("[INFO] \(text)", style: .info, level: .user)
     }
-    func success(_ text: String) {
-        append("\(stamp()) ✅ \(text)", color: .mint, level: .user)
-    }
-
-    func warning(_ text: String) {
-        append("\(stamp()) ⚠️ \(text)", color: .orange, level: .user)
+    func successImpl(_ text: String) {
+        append("✅ \(text)", style: .success, level: .user)
     }
 
-    func error(_ text: String) {
-        append("\(stamp()) ❌ \(text)", color: .red, level: .user)
+    func warningImpl(_ text: String) {
+        append("⚠️ \(text)", style: .warning, level: .user)
     }
 
-    func debug(_ text: String) {
-        append("\(stamp()) [DEBUG] \(text)",
-               color: .secondary,
+    func errorImpl(_ text: String) {
+        append("❌ \(text)", style: .error, level: .user)
+    }
+
+    func debugImpl(_ text: String) {
+        append("[DEBUG] \(text)",
+               style: .debug,
                level: .debug)
     }
 
-    func console(_ text: String) {
-        guard enableDebugLogging else { return }
+    @inline(__always)
+    nonisolated func console(_ text: String) {
         print(text)
     }
 
     // MARK: - Maintenance
 
-    func clear() {
+    func snapshot() -> [LogLine] {
+        Array(lines)
+    }
+
+    func clearImpl() {
+        guard !lines.isEmpty else { return }
         lines.removeAll(keepingCapacity: true)
+        publish()
     }
     func saveLog() throws -> URL {
         let filename = Self.logFilename
-
-        let url = FileManager.default
-            .temporaryDirectory
-            .appendingPathComponent(filename)
-        let text = lines.lazy
-            .map(\.text)
-            .joined(separator: "\r\n")
-        try text.write(
-            to: url,
-            atomically: true,
-            encoding: .utf8
-        )
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+        var output = String()
+        output.reserveCapacity(lines.count * 48)
+        for line in lines {
+            output.append(line.text)
+            output.append("\n")
+        }
+        try output.write(to: url, atomically: true, encoding: .utf8)
         return url
+    }
+    
+    nonisolated func error(_ text: String) {
+        Task {
+            await self.errorImpl(text)
+        }
+    }
+
+    nonisolated func info(_ text: String) {
+        Task {
+            await self.infoImpl(text)
+        }
+    }
+
+    nonisolated func debug(_ text: String) {
+        Task {
+            await self.debugImpl(text)
+        }
+    }
+
+    nonisolated func warning(_ text: String) {
+        Task {
+            await self.warningImpl(text)
+        }
+    }
+
+    nonisolated func success(_ text: String) {
+        Task {
+            await self.successImpl(text)
+        }
+    }
+
+    nonisolated func tx(_ text: String) {
+        Task {
+            await self.txImpl(text)
+        }
+    }
+
+    nonisolated func rx(_ text: String) {
+        Task {
+            await self.rxImpl(text)
+        }
+    }
+
+    nonisolated func clear() {
+        Task {
+            await self.clearImpl()
+        }
     }
 }

@@ -94,7 +94,7 @@ final class RequestExecutor {
         timeout: Double
     ) async -> RequestResult {
 
-        Logger.shared.debug("Executing request: \(request)")
+        await Logger.shared.debug("Executing request: \(request)")
 
         guard BluetoothManager.shared.isConnected else {
             return .connectionLost
@@ -120,11 +120,11 @@ final class RequestExecutor {
             )
 
         } catch BluetoothManager.BluetoothError.timeout {
-            Logger.shared.debug("Request timed out: \(request)")
+            await Logger.shared.debug("Request timed out: \(request)")
             return .timeout
 
         } catch {
-            Logger.shared.error("Request failed: \(error.localizedDescription)")
+            await Logger.shared.error("Request failed: \(error.localizedDescription)")
             return .connectionLost
         }
     }

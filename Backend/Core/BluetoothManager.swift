@@ -628,7 +628,7 @@ extension BluetoothManager:
 
             let chunk = String(data: value, encoding: .utf8) ?? "<non-utf8>"
 
-            let responses = ELMResponseAssembler.shared.append(chunk)
+            let responses = await ELMResponseAssembler.shared.append(chunk)
             guard !responses.isEmpty else {
                 Logger.shared.debug("RX Chunk (\(value.count) bytes)")
                 return
