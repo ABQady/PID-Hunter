@@ -15,6 +15,7 @@ struct SearchKnowledgeBase {
         case negative
         case noData
         case timeout
+        case unknown
     }
 
     struct RegionKnowledge {
@@ -23,6 +24,7 @@ struct SearchKnowledgeBase {
         var negatives = 0
         var noData = 0
         var timeouts = 0
+        var unknowns = 0
         var averageLatency: Double = 0
         var samples = 0
     }
@@ -54,6 +56,8 @@ struct SearchKnowledgeBase {
             return -3
         case .timeout:
             return -1
+        case .unknown:
+            return 0
         }
     }
 
@@ -75,6 +79,8 @@ struct SearchKnowledgeBase {
             knowledge.noData += 1
         case .timeout:
             knowledge.timeouts += 1
+        case .unknown:
+            knowledge.unknowns += 1
         }
 
         regions[pid] = knowledge

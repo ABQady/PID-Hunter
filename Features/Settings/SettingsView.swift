@@ -84,13 +84,17 @@ struct SettingsView: View {
     }
 
     private func exportLog() {
-        do {
-            let url = try Logger.shared.saveLog()
-            #if os(iOS)
-            exportedFile = ExportedFile(url: url)
-            #endif
-        } catch {
-            print(error)
+        Task {
+            do {
+                let url = try await Logger.shared.saveLog()
+#if os(iOS)
+                await MainActor.run {
+                    exportedFile = ExportedFile(url: url)
+                }
+#endif
+            } catch {
+                print(error)
+            }
         }
     }
 

@@ -26,18 +26,19 @@ final class ELMResponseAssembler {
         if !buffer.isEmpty &&
             now.timeIntervalSince(lastChunkTime) > timeout {
 
-            await Logger.shared.debug("Assembler timeout")
-            await Logger.shared.debug("Discarded buffer (\(buffer.count) bytes)")
-            await Logger.shared.debug(buffer)
+            Logger.shared.debug("Assembler timeout")
+            Logger.shared.debug("Discarded buffer (\(buffer.count) bytes)")
+            Logger.shared.debug(buffer)
             buffer.removeAll(keepingCapacity: true)
         }
 
         lastChunkTime = now
         buffer += chunk
+        Logger.shared.debug("Assembler RX chunk (\(chunk.count) bytes): \(chunk.debugDescription)")
 
         guard buffer.count <= maxBufferSize else {
-            await Logger.shared.debug("Assembler buffer overflow")
-            await Logger.shared.debug("Discarded buffer (\(buffer.count) bytes)")
+            Logger.shared.debug("Assembler buffer overflow")
+            Logger.shared.debug("Discarded buffer (\(buffer.count) bytes)")
             buffer.removeAll(keepingCapacity: true)
             return []
         }
@@ -52,27 +53,32 @@ final class ELMResponseAssembler {
 
             let trimmed = response
                 .replacingOccurrences(of: ">", with: "")
+                .replacingOccurrences(of: "\0", with: "")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
 
             guard !trimmed.isEmpty else {
                 continue
             }
 
+            Logger.shared.debug("Assembler complete response: \(trimmed.debugDescription)")
             let parsed = ELMResponseParser.parse(trimmed)
             
             switch parsed.type {
             case .unknown:
-                await Logger.shared.debug("Assembler discarded unknown response: \(trimmed)")
-
+                Logger.shared.debug("Assembler ignored non-ECU text: \(trimmed)")
+                continue
+            case .unknownFrame:
+                Logger.shared.warning("Assembler accepted UNKNOWN ECU frame: \(trimmed)")
+                responses.append(parsed)
             default:
-                await Logger.shared.debug(
+                Logger.shared.debug(
                     "Assembler accepted \(parsed.type): \(trimmed)"
                 )
                 responses.append(parsed)
             }
        }
         if !responses.isEmpty {
-            await Logger.shared.debug(
+            Logger.shared.debug(
                 "Assembler completed \(responses.count) response(s)"
             )
         }

@@ -139,27 +139,35 @@ struct SmartSearchStrategy: SearchStrategy {
         result: SearchResult,
         latency: Double
     ) {
-        guard case .positive = result else {
-            _ = latency
-            return
-        }
+        switch result {
 
-        let radius = radius(for: pid)
-        let effectiveRadius = effectiveRadius(
-            for: pid,
-            baseRadius: radius
-        )
+        case .positive:
 
-        lastPositivePID = pid
-        positiveHitCount += 1
+            let radius = radius(for: pid)
+            let effectiveRadius = effectiveRadius(
+                for: pid,
+                baseRadius: radius
+            )
 
-        _ = latency // Reserved for future latency-aware expansion.
+            lastPositivePID = pid
+            positiveHitCount += 1
 
-        for neighbor in prioritizedNeighbors(
-            around: pid,
-            radius: effectiveRadius
-        ) {
-            enqueue(neighbor)
+            for neighbor in prioritizedNeighbors(
+                around: pid,
+                radius: effectiveRadius
+            ) {
+                enqueue(neighbor)
+            }
+
+        case .negative,
+             .noData,
+             .timeout:
+
+            positiveHitCount = max(0, positiveHitCount - 1)
+
+        case .unknown:
+
+            break
         }
     }
 

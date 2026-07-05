@@ -24,6 +24,7 @@ enum SearchResult {
     case noData
     case negative(ELMResponse)
     case timeout
+    case unknown(ELMResponse)
 }
 
 struct ResponseClassifier {
@@ -35,11 +36,26 @@ struct ResponseClassifier {
             return .noData
         }
 
-        if text.contains("7F") {
-            return .negative(response)
-        }
+        switch response.type {
 
-        return .positive(response)
+        case .atResponse:
+            return .positive(response)
+
+        case .negative:
+            return .negative(response)
+
+        case .mode01,
+             .mode21,
+             .mode22:
+            return .positive(response)
+
+        case .unknown,
+             .unknownFrame:
+            return .unknown(response)
+
+        default:
+            return .unknown(response)
+        }
     }
 }
 
@@ -94,7 +110,7 @@ final class RequestExecutor {
         timeout: Double
     ) async -> RequestResult {
 
-        await Logger.shared.debug("Executing request: \(request)")
+        Logger.shared.debug("Executing request: \(request)")
 
         guard BluetoothManager.shared.isConnected else {
             return .connectionLost
@@ -107,6 +123,7 @@ final class RequestExecutor {
             )
 
             let searchResult = classifier.classify(result.response)
+            Logger.shared.debug("Response classified as: \(searchResult)")
 
             recordTelemetry(
                 context: context,
@@ -114,17 +131,18 @@ final class RequestExecutor {
                 classification: searchResult
             )
 
+            Logger.shared.debug("Request succeeded: \(request) | latency=\(result.latency)s")
             return .success(
                 response: result.response,
                 latency: result.latency
             )
 
         } catch BluetoothManager.BluetoothError.timeout {
-            await Logger.shared.debug("Request timed out: \(request)")
+            Logger.shared.debug("Request timed out: \(request)")
             return .timeout
 
         } catch {
-            await Logger.shared.error("Request failed: \(error.localizedDescription)")
+            Logger.shared.error("Request failed: \(error.localizedDescription)")
             return .connectionLost
         }
     }

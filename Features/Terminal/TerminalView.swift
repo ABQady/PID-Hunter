@@ -182,11 +182,6 @@ struct TerminalView: View {
                                     lines: viewModel.lines,
                                     isCompact: isCompact
                                 )
-                                .onChange(of: viewModel.lines.count) {
-
-                                    print("TerminalView lines =", viewModel.lines.count)
-
-                                }
                                 .simultaneousGesture(
                                     DragGesture()
                                         .onChanged { _ in

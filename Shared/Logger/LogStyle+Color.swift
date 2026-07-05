@@ -45,6 +45,9 @@ extension LogStyle {
             return Color(red: 0.22, green: 0.22, blue: 0.24)
         case (.debug, .dark):
             return .gray
+
+        @unknown default:
+            return scheme == .dark ? .white : .black
         }
     }
 }

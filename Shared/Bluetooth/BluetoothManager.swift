@@ -218,6 +218,7 @@ final class BluetoothManager: NSObject, ObservableObject {
         guard pendingRequest == nil else {
             throw BluetoothError.busy
         }
+        ELMResponseAssembler.shared.clear()
 
         return try await withCheckedThrowingContinuation { continuation in
             Logger.shared.debug("📌 Registering continuation")
@@ -278,8 +279,12 @@ final class BluetoothManager: NSObject, ObservableObject {
     private func initializeELM() async {
         status = .initializingELM
 
-        try? send("ATZ")
-        try? await Task.sleep(for: .milliseconds(1500))
+        do {
+            _ = try await sendAndWait("ATZ", timeout: .seconds(3))
+        } catch {
+            Logger.shared.error("ATZ failed: \(error)")
+            return
+        }
         guard isConnected else {
             status = .disconnected
             return
@@ -293,7 +298,7 @@ final class BluetoothManager: NSObject, ObservableObject {
 
         status = .settingProtocol
         guard await runInitializationCommand("ATSP5") else { return }
-
+        try? await Task.sleep(for: .milliseconds(1500))
         status = .checkingProtocol
         guard await runInitializationCommand("ATDP") else { return }
         guard await runInitializationCommand("ATI") else { return }
@@ -518,14 +523,14 @@ extension BluetoothManager:
 
             if !retriedProtocol {
                 retriedProtocol = true
-                try? self.send("ATZ")
-                try? await Task.sleep(for: .milliseconds(1500))
+                _ = try? await sendAndWait("ATZ", timeout: .seconds(3))
 
                 guard self.isConnected else {
                     return
                 }
 
-                try? self.send("ATSP5")
+                _ = try? await sendAndWait("ATSP5", timeout: .seconds(2))
+                retriedProtocol = false
             }
         }
     }
@@ -603,11 +608,11 @@ extension BluetoothManager:
         Logger.shared.debug("Completing pending request \(pending.id)")
         pending.timeoutTask?.cancel()
 
-        defer {
-            pendingRequest = nil
-        }
-
+        pendingRequest = nil
+        ELMResponseAssembler.shared.clear()
+        
         pending.continuation.resume(returning: (response, latency))
+
         Logger.shared.debug("🟢 Continuation RESUMED: \(response.type)")
     }
 
@@ -650,7 +655,6 @@ extension BluetoothManager:
 
                 // removed guard response.type != .unknown block
 
-                analyzeResponse(response)
 
                 // Do not complete a pending request on informational or unparsed
                 // responses. Some ELM327 adapters prepend BUS INIT / SEARCHING
@@ -668,12 +672,14 @@ extension BluetoothManager:
                     }
                 }
 
-                guard response.type.canResumeContinuation || response.type == .unknown else {
+                guard response.type.canResumeContinuation else {
                     Logger.shared.warning("Ignoring response type: \(response.type)")
                     continue
                 }
-
+                
+                Logger.shared.debug("Attempting to complete pending request with response type: \(response.type)")
                 completePendingRequest(with: response, latency: latency)
+                analyzeResponse(response)
             }
         }
     }
@@ -725,7 +731,9 @@ extension ELMResponseType {
              .negative,
              .noData,
              .atResponse,
-             .unknown:
+             .unknown,
+             .unknownFrame,
+             .unableToConnect:
             return true
         default:
             return false

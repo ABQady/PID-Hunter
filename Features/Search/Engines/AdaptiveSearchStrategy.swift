@@ -22,10 +22,16 @@ struct AdaptiveSearchStrategy: SearchStrategy {
     @inline(__always)
     private func outcome(for result: SearchResult) -> SearchKnowledgeBase.Outcome {
         switch result {
-        case .positive: return .positive
-        case .negative: return .negative
-        case .noData:   return .noData
-        case .timeout:  return .timeout
+        case .positive:
+            return .positive
+        case .negative:
+            return .negative
+        case .noData:
+            return .noData
+        case .timeout:
+            return .timeout
+        case .unknown:
+            return .unknown
         }
     }
 

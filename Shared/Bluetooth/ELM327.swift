@@ -35,9 +35,10 @@ final class ELM327: ObservableObject {
         guard !normalized.isEmpty else { return }
 
         do {
+            Logger.shared.debug("TX -> \(normalized)")
             try BluetoothManager.shared.send(normalized)
         } catch {
-            Logger.shared.error("ELM327.send failed: \(normalized)")
+            Logger.shared.error("ELM327.send failed: \(normalized) | \(error.localizedDescription)")
         }
     }
 
@@ -49,6 +50,7 @@ final class ELM327: ObservableObject {
         guard currentHeader != normalized else { return }
 
         do {
+            Logger.shared.debug("TX -> ATSH\(normalized)")
             try BluetoothManager.shared.send("ATSH\(normalized)")
             currentHeader = normalized
             Logger.shared.info("Header -> \(normalized)")
@@ -100,6 +102,7 @@ final class ELM327: ObservableObject {
 
         let normalized = normalize(command)
 
+        Logger.shared.debug("TX(wait) -> \(normalized)")
         let result = try await BluetoothManager.shared.sendAndWait(
             normalized,
             timeout: timeout

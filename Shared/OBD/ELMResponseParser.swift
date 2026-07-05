@@ -28,6 +28,7 @@ enum ELMResponseType {
     case searching
     case atResponse
     case unknown
+    case unknownFrame
 
     var requestMode: UInt8? {
         switch self {
@@ -63,7 +64,10 @@ enum ELMResponseParser {
     static func parse(_ text: String) -> ELMResponse {
 
         let upper = text.uppercased()
-        let compact = upper.replacingOccurrences(of: " ", with: "")
+        let compact = upper
+            .replacingOccurrences(of: " ", with: "")
+            .replacingOccurrences(of: "\r", with: "")
+            .replacingOccurrences(of: "\n", with: "")
         // Strip informational ELM prefixes that can precede a valid ECU frame.
         var sanitized = upper
         for marker in informationalMarkers {
@@ -86,7 +90,31 @@ enum ELMResponseParser {
             .map(String.init)
         tokens.removeAll { $0.isEmpty }
         
+        tokens = tokens.flatMap { token in
+            let cleaned = token.trimmingCharacters(in: .whitespaces)
+
+            guard cleaned.count > 2,
+                  cleaned.count.isMultiple(of: 2),
+                  cleaned.allSatisfy({ $0.isHexDigit })
+            else {
+                return [cleaned]
+            }
+
+            return cleaned.chunked(into: 2)
+        }
+        
         if tokens.isEmpty {
+            if upper.contains("OK") || upper.contains("ELM") || upper.hasPrefix("AT") {
+                Logger.shared.debug("Parser → atResponse (empty token fallback)")
+                return ELMResponse(
+                    raw: text,
+                    type: .atResponse,
+                    header: nil,
+                    service: nil,
+                    pid: nil,
+                    payload: []
+                )
+            }
             return ELMResponse(
                 raw: text,
                 type: .unknown,
@@ -96,7 +124,11 @@ enum ELMResponseParser {
                 payload: []
             )
         }
-
+        
+        while let first = tokens.first,
+              first.hasPrefix("AT") {
+            tokens.removeFirst()
+        }
         var header: String?
         
         if tokens.count >= 4,
@@ -104,7 +136,7 @@ enum ELMResponseParser {
            UInt8(tokens[0], radix: 16) != nil,
            UInt8(tokens[1], radix: 16) != nil,
            UInt8(tokens[2], radix: 16) != nil,
-           ecuServiceTokens.contains(tokens[3].uppercased()) {
+           ecuServiceTokens.contains(tokens[3]) {
 
             header = "\(tokens[0].uppercased()) \(tokens[1].uppercased()) \(tokens[2].uppercased())"
             tokens.removeFirst(3)
@@ -131,8 +163,19 @@ enum ELMResponseParser {
                 type = .mode22
             case "7F":
                 type = .negative
-                payload = tokens.dropFirst(index + 1).compactMap { UInt8($0, radix: 16) }
-                break
+                let negativeResponse = ELMResponse(
+                    raw: text,
+                    type: .negative,
+                    header: header,
+                    service: nil,
+                    pid: nil,
+                    payload: tokens.dropFirst(index + 1).compactMap { UInt8($0, radix: 16) }
+                )
+                Logger.shared.debug(
+                    "Parser → negative | Header=\(header ?? "-")"
+                )
+
+                return negativeResponse
             default:
                 continue
             }
@@ -152,19 +195,50 @@ enum ELMResponseParser {
             payload = tokens
                 .dropFirst(index + 1 + pidLength)
                 .compactMap { UInt8($0, radix: 16) }
-            break
+            
+            Logger.shared.debug(
+                "Parser → \(type) | Header=\(header ?? "-") | Service=\(service.map { String(format: "%02X", $0) } ?? "-") | PID=\(pid.map { String(format: "%04X", $0) } ?? "-")"
+            )
+
+            return ELMResponse(
+                raw: text,
+                type: type,
+                header: header,
+                service: service,
+                pid: pid,
+                payload: payload
+            )
         }
         
+        let hasHeader =
+            header != nil ||
+            (tokens.count >= 3 &&
+             tokens[0].allSatisfy(\.isHexDigit) &&
+             tokens[1].allSatisfy(\.isHexDigit) &&
+             tokens[2].allSatisfy(\.isHexDigit))
+
+        type = hasHeader ? .unknownFrame : .unknown
+        
         if type == .unknown {
-            if compact == "OK"
-                || compact.hasPrefix("ELM")
-                || compact.hasPrefix("ISO")
-                || compact.hasPrefix("KWP")
-                || compact.hasPrefix("CAN")
-                || compact.hasPrefix("J1850") {
+            let lines = upper
+                .split(whereSeparator: \.isNewline)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
 
+            let hasATCommandEcho = lines.contains {
+                $0.hasPrefix("AT") && $0.count > 2
+            }
+
+            let hasATReply = compact.contains("OK")
+                || upper.contains("ELM327")
+                || upper.contains("ELM")
+                || upper.contains("ISO")
+                || upper.contains("KWP")
+                || upper.contains("CAN")
+                || upper.contains("J1850")
+
+            if hasATCommandEcho || hasATReply {
                 type = .atResponse
-
             } else if upper.contains("SEARCHING") {
                 type = .searching
             }
@@ -175,6 +249,7 @@ enum ELMResponseParser {
             pid = nil
         }
         
+        Logger.shared.debug("Parser → \(type) | Header=\(header ?? "-") | Service=\(service.map { String(format: "%02X", $0) } ?? "-") | PID=\(pid.map { String(format: "%04X", $0) } ?? "-")")
         return ELMResponse(
             raw: text,
             type: type,

@@ -68,9 +68,6 @@ struct TerminalLog: View {
         }
         .defaultScrollAnchor(.bottom)
         .scrollDismissesKeyboard(.interactively)
-        .onChange(of: lines.count) {
-            print("TerminalLog lines =", lines.count)
-        }
         .frame(maxWidth: .infinity)
         .frame(minHeight: terminalHeight.min,
                maxHeight: terminalHeight.max)
