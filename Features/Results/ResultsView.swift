@@ -92,78 +92,78 @@ struct ResultsView: View {
 
                     Divider()
 
-                    LabeledContent("Supported Services") {
-                        if ecu.services.services.isEmpty {
-                            Text("-")
-                                .foregroundStyle(.secondary)
-                        } else {
-                            LazyVGrid(
-                                columns: [
-                                    GridItem(.adaptive(minimum: 50))
-                                ],
-                                alignment: .leading,
-                                spacing: 8
-                            ) {
-                                ForEach(ecu.services.services, id: \.self) {
-                                    service in
-                                    Text(service)
-                                        .font(
-                                            .system(
-                                                .caption,
-                                                design: .monospaced
-                                            ).bold()
-                                        )
-                                        .foregroundStyle(.green)
-                                        .padding(.horizontal, 10)
-                                        .padding(.vertical, 5)
-                                        .background(.green.opacity(0.15))
-                                        .overlay {
-                                            Capsule()
-                                                .stroke(.green.opacity(0.35))
-                                        }
-                                        .clipShape(Capsule())
-                                }
+//                    LabeledContent("Supported Services") {
+//                        if ecu.services.services.isEmpty {
+//                            Text("-")
+//                                .foregroundStyle(.secondary)
+//                        } else {
+//                            LazyVGrid(
+//                                columns: [
+//                                    GridItem(.adaptive(minimum: 80))
+//                                ],
+//                                alignment: .leading,
+//                                spacing: 8
+//                            ) {
+//                                ForEach(ecu.services.services, id: \.self) {
+//                                    service in
+//                                    Text(service)
+//                                        .font(
+//                                            .system(
+//                                                .caption,
+//                                                design: .monospaced
+//                                            ).bold()
+//                                        )
+//                                        .foregroundStyle(.green)
+//                                        .padding(.horizontal, 10)
+//                                        .padding(.vertical, 5)
+//                                        .background(.green.opacity(0.15))
+//                                        .overlay {
+//                                            Capsule()
+//                                                .stroke(.green.opacity(0.35))
+//                                        }
+//                                        .clipShape(Capsule())
+//                                }
+//                            }
+//                            .frame(maxWidth: .infinity, alignment: .leading)
+//                        }
+//                    }
+                    if !discovery.supportedModes.isEmpty {
+
+                        Divider()
+                            .padding(.vertical, 8)
+
+                        Text("Supported Modes")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        LazyVGrid(
+                            columns: [
+                                GridItem(.adaptive(minimum: 80))
+                            ],
+                            alignment: .leading,
+                            spacing: 8
+                        ) {
+                            ForEach(discovery.supportedModes.sorted {$0.rawValue < $1.rawValue} )
+                            { mode in
+                                Text("\(mode.rawValue) • \(mode.title)")
+                                    .font(
+                                        .system(
+                                            .caption,
+                                            design: .monospaced
+                                        ).bold()
+                                    )
+                                    .foregroundStyle(.blue)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 5)
+                                    .background(.blue.opacity(0.15))
+                                    .overlay {
+                                        Capsule()
+                                            .stroke(.blue.opacity(0.35))
+                                    }
+                                    .clipShape(Capsule())
                             }
-                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
-
-                        if !discovery.supportedModes.isEmpty {
-
-                            Divider()
-                                .padding(.vertical, 8)
-
-                            Text("Discovered Modes")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-
-                            LazyVGrid(
-                                columns: [
-                                    GridItem(.adaptive(minimum: 50))
-                                ],
-                                alignment: .leading,
-                                spacing: 8
-                            ) {
-                                ForEach(discovery.supportedModes) { mode in
-                                    Text(mode.rawValue)
-                                        .font(
-                                            .system(
-                                                .caption,
-                                                design: .monospaced
-                                            ).bold()
-                                        )
-                                        .foregroundStyle(.blue)
-                                        .padding(.horizontal, 10)
-                                        .padding(.vertical, 5)
-                                        .background(.blue.opacity(0.15))
-                                        .overlay {
-                                            Capsule()
-                                                .stroke(.blue.opacity(0.35))
-                                        }
-                                        .clipShape(Capsule())
-                                }
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
                 .font(.headline)

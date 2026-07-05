@@ -6,16 +6,11 @@
 //
 
 import SwiftUI
+import Combine
 
 struct ProgressCard: View {
 
-    let progress: Double
-
-    let currentRequests: Int
-    let totalRequests: Int
-
-    let elapsed: String
-    let eta: String
+    @ObservedObject var stats: ScanStatistics
 
     let successRate: Double
     let averageLatency: Double
@@ -24,6 +19,23 @@ struct ProgressCard: View {
     let isCompleted: Bool
     let hasResumePoint: Bool
 
+    private var progress: Double { stats.progressFraction }
+    private var currentRequests: Int { stats.requestsSent }
+    private var totalRequests: Int { stats.totalRequests }
+
+    @inline(__always)
+    private func formatETA(_ seconds: TimeInterval) -> String {
+        guard seconds > 0 else { return "--:--" }
+        let totalSeconds = max(0, Int(seconds.rounded(.down)))
+        let hours = totalSeconds / 3600
+        let minutes = (totalSeconds % 3600) / 60
+        let secs = totalSeconds % 60
+        if hours > 0 {
+            return String(format: "%02d:%02d:%02d", hours, minutes, secs)
+        }
+        return String(format: "%02d:%02d", minutes, secs)
+    }
+    
     var body: some View {
 
         VStack(alignment: .leading) {
@@ -34,6 +46,8 @@ struct ProgressCard: View {
                 .frame(maxWidth: .infinity)
                 ViewThatFits(in: .horizontal) {
                     TimelineView(.periodic(from: .now, by: 1)) { _ in
+                        let elapsed = formatETA(stats.elapsed(at: .now))
+                        let eta = formatETA(stats.eta(at: .now))
                         HStack(spacing: 4) {
                             Text("Elapsed: \(elapsed)")
                             if isCompleted {
@@ -52,7 +66,8 @@ struct ProgressCard: View {
                         Text("\(Int(progress * 100))% • \(currentRequests)/\(totalRequests)")
 
                         TimelineView(.periodic(from: .now, by: 1)) { _ in
-
+                            let elapsed = formatETA(stats.elapsed(at: .now))
+                            let eta = formatETA(stats.eta(at: .now))
                             VStack(alignment: .leading, spacing: 2) {
 
                                 Text("Elapsed: \(elapsed)")

@@ -150,8 +150,4 @@ final class RequestExecutor {
     func classify(_ response: ELMResponse) -> SearchResult {
         classifier.classify(response)
     }
-
-    func resetStatistics() {
-        ScanStatistics.shared.reset()
-    }
 }

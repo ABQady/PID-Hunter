@@ -40,14 +40,6 @@ struct TerminalView: View {
         }
     }
     
-    private var formattedElapsed: String {
-        formatETA(stats.elapsed(at: .now))
-    }
-
-    private var formattedETA: String {
-        formatETA(stats.eta(at: .now))
-    }
-    
     @inline(__always)
     private var cleanHeader: String {
         header
@@ -123,15 +115,11 @@ struct TerminalView: View {
                     
                     
                     ProgressCard(
-                        progress: stats.progressFraction,
-                        currentRequests: stats.requestsSent,
-                        totalRequests: stats.totalRequests,
-                        elapsed: formattedElapsed,
-                        eta: formattedETA,
+                        stats: stats,
                         successRate: brute.statistics.successRate,
                         averageLatency: brute.statistics.averageLatency,
                         isScanning: brute.scanStatus.isScanning,
-                        isCompleted: stats.requestsSent >= stats.totalRequests,
+                        isCompleted: stats.finishedAt != nil,
                         hasResumePoint: brute.hasResumePoint
                     )
                     
@@ -239,27 +227,6 @@ struct TerminalView: View {
     
     
 
-    // MARK: - Formatting
-    @inline(__always)
-    private func formatETA(_ seconds: TimeInterval) -> String {
-        
-        guard seconds > 0 else {
-            return "--:--"
-        }
-        
-        let totalSeconds = max(0, Int(seconds.rounded(.down)))
-        
-        let hours = totalSeconds / 3600
-        let minutes = (totalSeconds % 3600) / 60
-        let secs = totalSeconds % 60
-        
-        if hours > 0 {
-            return String(format: "%02d:%02d:%02d", hours, minutes, secs)
-        }
-        
-        return String(format: "%02d:%02d", minutes, secs)
-    }
-    
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     var body: some View {
         terminalTab

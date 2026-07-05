@@ -123,6 +123,11 @@ final class ScanStatistics: ObservableObject {
         guard totalRequests > 0 else { return 0 }
         return Double(requestsSent) / Double(totalRequests)
     }
+
+    @inline(__always)
+    var isCompleted: Bool {
+        finishedAt != nil
+    }
     
     // MARK: - Recording
 

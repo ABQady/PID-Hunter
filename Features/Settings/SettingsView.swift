@@ -13,6 +13,20 @@ struct SettingsView: View {
     @ObservedObject private var brute = BruteForceScanner.shared
     @AppStorage("enableDebugLogging")
     private var enableDebugLogging = false
+    
+    @ObservedObject private var modeDiscovery = ModeDiscovery.shared
+
+    @AppStorage("forceModeSelection")
+    private var forceModeSelection = false
+    private var availableModes: [OBDMode] {
+        if forceModeSelection {
+            return OBDMode.discoveryModes
+        }
+        if !modeDiscovery.supportedModes.isEmpty {
+            return modeDiscovery.supportedModes
+        }
+        return OBDMode.supportedScanModes
+    }
 
     @AppStorage("requestTimeout")
     private var requestTimeout = 2.0
@@ -122,22 +136,32 @@ struct SettingsView: View {
                         }
                         .pickerStyle(.menu)
                     }
-                    Text("OBD Mode")
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
 
-                    Picker("Mode", selection: $selectedMode) {
-                        ForEach(OBDMode.supportedScanModes) { mode in
-                            Text(mode.rawValue)
-                                .help(mode.title)
-                                .tag(mode)
+                        Text("OBD Mode")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+
+                        Picker("Mode", selection: $selectedMode) {
+                            ForEach(availableModes) { mode in
+                                Text("\(mode.title)")
+                                    .tag(mode)
+                            }
                         }
+                        .pickerStyle(.menu)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .multilineTextAlignment(.trailing)
                     }
-                    .pickerStyle(.segmented)
 
-                    Label(selectedMode.title, systemImage: "info.circle")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Toggle(isOn: $forceModeSelection) {
+                        Label(
+                            "Force Mode (Expert)",
+                            systemImage: "exclamationmark.triangle.fill"
+                        )
+                    }
+                    .disabled(modeDiscovery.isRunning)
+                    .tint(.orange)
+                    Divider()
 
                     if selectedMode.pidDigits == 4 {
                         Text("PID Range")
@@ -165,6 +189,7 @@ struct SettingsView: View {
                                     .autocorrectionDisabled()
                             }
                         }
+                        Divider()
                     }
                     Text("Request Delay: \(Int(delay)) ms")
                         .font(.title3)
@@ -285,41 +310,6 @@ struct SettingsView: View {
                     }
 
                     Divider()
-
-//                    Toggle(isOn: $useResponseLatency) {
-//
-//                        VStack(alignment: .leading) {
-//
-//                            Label(
-//                                "Use Response Latency",
-//                                systemImage: "timer"
-//                            )
-//
-//                            Text("Allow adaptive engines to prioritize fast ECU responses.")
-//                                .font(.caption)
-//                                .foregroundStyle(.secondary)
-//
-//                        }
-//                    }
-//
-//                    Divider()
-//
-//                    Toggle(isOn: $rememberDiscoveries) {
-//
-//                        VStack(alignment: .leading) {
-//
-//                            Label(
-//                                "Remember Previous Discoveries",
-//                                systemImage: "brain.head.profile"
-//                            )
-//
-//                            Text("Reuse discovered PIDs and learned patterns between scans.")
-//                                .font(.caption)
-//                                .foregroundStyle(.secondary)
-//
-//                        }
-//                    }
-
                 }
                 .padding()
                 .background(.thinMaterial)
@@ -327,55 +317,55 @@ struct SettingsView: View {
                     RoundedRectangle(cornerRadius: 18)
                 )
                 
-                //MARK: Statistics
-                
-                VStack(alignment: .leading, spacing: 12) {
-
-                    Text("Search Statistics")
-                        .font(.headline)
-
-                    HStack {
-
-                        statistic(
-                            title: "Requests",
-                            value: "\(brute.statistics.requestsSent)"
-                        )
-
-                        Spacer()
-
-                        statistic(
-                            title: "Success",
-                            value: String(
-                                format: "%.1f%%",
-                                brute.statistics.successRate * 100
-                            )
-                        )
-
-                    }
-
-                    HStack {
-                        statistic(
-                            title: "Latency",
-                            value: String(
-                                format: "%.0f ms",
-                                brute.statistics.averageLatency * 1000
-                            )
-                        )
-
-                        Spacer()
-                        statistic(
-                            title: "Hits",
-                            value: "\(brute.scanStatus.successCount)"
-                        )
-
-                    }
-
-                }
-                .padding()
-                .background(.thinMaterial)
-                .clipShape(
-                    RoundedRectangle(cornerRadius: 18)
-                )
+//                //MARK: Statistics
+//                
+//                VStack(alignment: .leading, spacing: 12) {
+//
+//                    Text("Search Statistics")
+//                        .font(.headline)
+//
+//                    HStack {
+//
+//                        statistic(
+//                            title: "Requests",
+//                            value: "\(brute.statistics.requestsSent)"
+//                        )
+//
+//                        Spacer()
+//
+//                        statistic(
+//                            title: "Success",
+//                            value: String(
+//                                format: "%.1f%%",
+//                                brute.statistics.successRate * 100
+//                            )
+//                        )
+//
+//                    }
+//
+//                    HStack {
+//                        statistic(
+//                            title: "Latency",
+//                            value: String(
+//                                format: "%.0f ms",
+//                                brute.statistics.averageLatency * 1000
+//                            )
+//                        )
+//
+//                        Spacer()
+//                        statistic(
+//                            title: "Hits",
+//                            value: "\(brute.scanStatus.successCount)"
+//                        )
+//
+//                    }
+//
+//                }
+//                .padding()
+//                .background(.thinMaterial)
+//                .clipShape(
+//                    RoundedRectangle(cornerRadius: 18)
+//                )
                 
                 /////////////////////////// MARK: Export
                 HStack(alignment: .center) {
@@ -400,6 +390,15 @@ struct SettingsView: View {
                 .background(.thinMaterial)
                 .clipShape(RoundedRectangle(cornerRadius: 18)
                 )
+            }
+            .onChange(of: modeDiscovery.supportedModes) { _, modes in
+                guard !forceModeSelection else { return }
+
+                guard let first = availableModes.first else { return }
+
+                if !availableModes.contains(selectedMode) {
+                    selectedMode = first
+                }
             }
             .padding()
         }

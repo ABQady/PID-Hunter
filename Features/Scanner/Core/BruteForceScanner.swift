@@ -94,8 +94,8 @@ final class BruteForceScanner: ObservableObject {
     
     private func beginScan() {
         shouldStop = false
-        requestExecutor.resetStatistics()
         statistics.reset()
+        refreshResumeAvailability()
         scanStatus.isScanning = true
         scanStatus.progress = 0
         scanStatus.currentRequest = ""
@@ -127,13 +127,14 @@ final class BruteForceScanner: ObservableObject {
         currentPID = defaults.object(forKey: "resumePID") as? Int ?? 0
 
         let stats = ScanStatistics.shared
-        requestExecutor.resetStatistics()
-        // Remove assignments to stats.requestsSent and stats.responses
         stats.positiveResponses = defaults.object(forKey: "resumePositiveResponses") as? Int ?? 0
         stats.negativeResponses = defaults.object(forKey: "resumeNegativeResponses") as? Int ?? 0
         stats.timeouts = defaults.object(forKey: "resumeTimeouts") as? Int ?? 0
         stats.startedAt = defaults.object(forKey: "resumeStartedAt") as? Date
         stats.finishedAt = nil
+
+        // Restore totalRequests if already known
+        // (no reset of ScanStatistics here)
 
         refreshResumeAvailability()
     }
@@ -184,7 +185,6 @@ final class BruteForceScanner: ObservableObject {
         UserDefaults.standard.removeObject(forKey: "savedResults")
         Logger.shared.clear()
         ScanStatistics.shared.reset()
-        requestExecutor.resetStatistics()
         clearResumePoint()
     }
     
@@ -269,6 +269,7 @@ final class BruteForceScanner: ObservableObject {
     private func updateProgress(done: Int, total: Int) {
         saveResumePoint()
         scanStatus.progress = Double(done) / Double(total)
+        stats.totalRequests = total
     }
 
     private func makeRequest(mode: OBDMode, pid: String) -> String {
@@ -353,6 +354,7 @@ final class BruteForceScanner: ObservableObject {
     
     func stop() {
         shouldStop = true
+        scanStatus.currentRequest = "Stopping..."
         stats.complete()
     }
     
@@ -522,6 +524,11 @@ final class BruteForceScanner: ObservableObject {
             }
             done += 1
             updateProgress(done: done, total: total)
+            
+            if shouldStop {
+                scanStatus.currentRequest = ""
+                return
+            }
         }
     }
 
