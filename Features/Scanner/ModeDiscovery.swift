@@ -10,6 +10,15 @@ import Foundation
 @MainActor
 final class ModeDiscovery: ObservableObject {
 
+    struct DiscoveryResult {
+        let mode: OBDMode
+        let response: ELMResponse?
+        let latency: Double
+        let success: Bool
+    }
+    
+    @Published private(set) var discoveryLog: [DiscoveryResult] = []
+    
     static let shared = ModeDiscovery()
 
     @Published private(set) var supportedModes: [OBDMode] = []
@@ -28,14 +37,46 @@ final class ModeDiscovery: ObservableObject {
         Logger.shared.info("🔎 Probing \(mode.title)...")
 
         do {
-            let result = try await elm.request(mode: mode)
+            let result = try await elm.request(command: mode.discoveryCommand)
             let response = result.response
+            let latency = result.latency
 
-            if response.type.requestMode == mode.requestService {
+            let requestMode = mode.requestService
+            let responseMode = response.type.requestMode
+            Logger.shared.debug(
+                """
+                Mode Discovery
+                  Request : \(String(format: "%02X", requestMode))
+                  Response: \(responseMode.map { String(format: "%02X", $0) } ?? "--")
+                  Type    : \(response.type)
+                  Raw     : \(response.raw)
+                """
+            )
+            discoveryLog.append(
+                DiscoveryResult(
+                    mode: mode,
+                    response: response,
+                    latency: latency,
+                    success: response.type == .negative ||
+                             response.type.requestMode == mode.requestService
+                )
+            )
+            
+            if response.type == .negative {
+
+                Logger.shared.warning(
+                    "⚠️ \(mode.title) Negative Response (Supported)"
+                )
+
+                handleSuccess(mode)
+                return
+            }
+
+            if responseMode == requestMode {
                 handleSuccess(mode)
             } else {
                 Logger.shared.warning(
-                    "Unexpected response for \(mode.rawValue): \(response.raw)"
+                    "Unexpected response for \(mode.title)"
                 )
                 handleFailure(mode)
             }
@@ -52,6 +93,9 @@ final class ModeDiscovery: ObservableObject {
 
     func discover() async {
 
+        supportedModes.removeAll()
+        discoveryLog.removeAll()
+        
         guard !isRunning else {
             return
         }
@@ -66,7 +110,7 @@ final class ModeDiscovery: ObservableObject {
 
         Logger.shared.info("🔎 Starting mode discovery")
 
-        for mode in OBDMode.supportedScanModes {
+        for mode in OBDMode.discoveryModes {
             await probe(mode)
         }
         finishDiscovery()
@@ -79,6 +123,7 @@ final class ModeDiscovery: ObservableObject {
         }
 
         supportedModes.append(mode)
+        // هيتسجل من probe() لما نقرر نخزن الـ response
 
         Logger.shared.success("✅ \(mode.title) Supported")
     }

@@ -118,4 +118,45 @@ enum OBDMode: String, CaseIterable, Identifiable {
     var requestService: UInt8 {
         UInt8(rawValue, radix: 16) ?? 0
     }
+    
+    static let discoveryModes: [OBDMode] = [
+        .mode01,
+        .mode02,
+        .mode03,
+        .mode04,
+        .mode05,
+        .mode06,
+        .mode07,
+        .mode08,
+        .mode09,
+        .mode0A,
+        .mode21,
+        .mode22,
+        .mode23
+    ]
+    
+    var discoveryCommand: String {
+        switch self {
+
+        case .mode01,
+             .mode02,
+             .mode05,
+             .mode06,
+             .mode08,
+             .mode09:
+            return rawValue + "00"
+
+        case .mode21,
+             .mode22,
+             .mode23:
+            return rawValue + "0000"
+
+        case .mode03,
+             .mode04,
+             .mode07,
+             .mode0A:
+            return rawValue
+        }
+    }
 }
+

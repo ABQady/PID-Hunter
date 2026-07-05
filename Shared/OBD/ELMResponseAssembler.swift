@@ -62,13 +62,19 @@ final class ELMResponseAssembler {
 
             Logger.shared.debug("Assembler complete response: \(trimmed.debugDescription)")
             let parsed = ELMResponseParser.parse(trimmed)
-            
+            let header = parsed.header ?? "-"
+            let service = parsed.service.map { String(format: "%02X", $0) } ?? "-"
+            let pid = parsed.pid.map { String(format: "%04X", $0) } ?? "-"
+            let payload = parsed.payload.map { String(format: "%02X", $0) }.joined(separator: " ")
+            Logger.shared.debug(
+                "Assembler parsed → type=\(parsed.type) | header=\(header) | service=\(service) | pid=\(pid) | payload=[\(payload)]"
+            )
             switch parsed.type {
             case .unknown:
                 Logger.shared.debug("Assembler ignored non-ECU text: \(trimmed)")
                 continue
             case .unknownFrame:
-                Logger.shared.warning("Assembler accepted UNKNOWN ECU frame: \(trimmed)")
+                Logger.shared.debug("Assembler accepted UNKNOWN ECU frame: \(trimmed)")
                 responses.append(parsed)
             default:
                 Logger.shared.debug(
