@@ -23,6 +23,10 @@ final class CSVExporter {
             .temporaryDirectory
             .appendingPathComponent(filename)
 
+        if FileManager.default.fileExists(atPath: url.path) {
+            try? FileManager.default.removeItem(at: url)
+        }
+
         try csv.write(
             to: url,
             atomically: true,
@@ -37,16 +41,21 @@ final class CSVExporter {
         _ results: [ScanResult]
     ) throws -> URL {
         
-        var csv =
-        "Header,Mode,PID,Request,Response\n"
+        let sortedResults = results.sorted {
+            ($0.header, $0.mode, $0.pid) < ($1.header, $1.mode, $1.pid)
+        }
         
-        for row in results {
+        var csv =
+        "Header,Mode,PID,Request,Response,ResponseLength\n"
+        
+        for row in sortedResults {
             csv += [
                 csvField(row.header),
                 csvField(row.mode),
                 csvField(row.pid),
                 csvField(row.request),
-                csvField(row.response)
+                csvField(row.response),
+                csvField(String(row.response.count))
             ].joined(separator: ",") + "\n"
         }
         

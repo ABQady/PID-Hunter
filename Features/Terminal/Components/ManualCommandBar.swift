@@ -14,25 +14,27 @@ struct ManualCommandBar: View {
 
     let send: () -> Void
 
+    private var trimmedCommand: String {
+        manualCommand.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     var body: some View {
         HStack(spacing: 8) {
             TextField("Manual command", text: $manualCommand)
                 .textFieldStyle(.roundedBorder)
                 .textInputAutocapitalization(.characters)
                 .autocorrectionDisabled()
+                .keyboardType(.asciiCapable)
                 .onSubmit(send)
                 .focused($commandFieldFocused)
                 .submitLabel(.send)
 
             Button("Send") {
+                manualCommand = trimmedCommand
                 send()
             }
             .buttonStyle(.borderedProminent)
-            .disabled(
-                manualCommand
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                    .isEmpty
-            )
+            .disabled(trimmedCommand.isEmpty)
         }
         .padding()
         .onTapGesture {
@@ -40,4 +42,3 @@ struct ManualCommandBar: View {
         }
     }
 }
-

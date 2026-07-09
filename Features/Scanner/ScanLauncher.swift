@@ -25,33 +25,34 @@ final class ScanLauncher {
         onPrepareUI: @escaping () -> Void
     ){
         guard bt.isConnected else {
-            Task {
-                Logger.shared.info("Connect to ELM first")}
+            Logger.shared.info("Connect to ELM first")
             return
         }
         if !brute.hasResumePoint {
-            Task {
-                Logger.shared.clear()
-            }
+            Logger.shared.clear()
         }
         
         let headerValue = cleanHeader
         
         guard headerValue.count == 6,
               headerValue.allSatisfy({ $0.isHexDigit }) else {
-            Task {
-                Logger.shared.info("Invalid Header")}
+            Logger.shared.info("Invalid Header")
             return
         }
         brute.headers = [headerValue]
         onPrepareUI()
         
+        if !brute.hasResumePoint {
+            brute.startFresh()
+        }
+        
         Task {
             let ok = await Preflight.shared.run(header: headerValue)
             
+            guard !Task.isCancelled else { return }
+            
             guard ok else {
-                Task {
-                    Logger.shared.error("❌ Preflight Failed")}
+                Logger.shared.error("❌ Preflight Failed")
                 return
             }
             
@@ -66,23 +67,23 @@ final class ScanLauncher {
                 
                 guard let start = UInt16(startText, radix: 16),
                       let end = UInt16(endText, radix: 16) else {
-                    Task {
-                        Logger.shared.info("Invalid PID range")}
+                    Logger.shared.info("Invalid PID range")
                     return
                 }
                 
                 guard start <= end else {
-                    Task {
-                        Logger.shared.info("Start PID must be <= End PID")}
+                    Logger.shared.info("Start PID must be <= End PID")
                     return
                 }
                 
+                guard !Task.isCancelled else { return }
                 brute.scan(
                     mode: mode,
                     startPID: start,
                     endPID: end
                 )
             } else {
+                guard !Task.isCancelled else { return }
                 brute.scan(mode: mode)
             }
         }

@@ -47,9 +47,10 @@ final class ScanStatistics: ObservableObject {
     
     // MARK: - Timing
 
+    /// Starts a new scan session and always resets the elapsed-time origin.
+    /// Resume operations should preserve timing by avoiding this method.
     func start() {
-        guard startedAt == nil else { return }
-
+        // A fresh scan must always establish a new timing origin.
         startedAt = .now
         finishedAt = nil
     }

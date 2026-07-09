@@ -103,6 +103,7 @@ final class BluetoothManager: NSObject, ObservableObject {
             writeCharacteristic = nil
             notifyCharacteristic = nil
             elmInitialized = false
+            retriedProtocol = false
             
             discoveredDevices.removeAll()
             isScanning = true
@@ -154,6 +155,7 @@ final class BluetoothManager: NSObject, ObservableObject {
         )
         status = .disconnected
         ELMResponseAssembler.shared.clear()
+        clearPendingRequest(resumingWith: BluetoothError.disconnected)
         ECUInfo.shared.clear()
 
         clearPendingRequest(resumingWith: BluetoothError.disconnected)
@@ -555,6 +557,7 @@ extension BluetoothManager:
 
         case .busError:
             handleBusError()
+            clearPendingRequest(resumingWith: BluetoothError.disconnected)
 
         case .unableToConnect:
             status = .unableToConnect

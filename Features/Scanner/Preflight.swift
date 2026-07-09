@@ -46,7 +46,7 @@ final class Preflight {
 
         Logger.shared.info("========== PREFLIGHT ==========")
 
-        guard BluetoothManager.shared.isConnected else {
+        guard ensureConnected() else {
             Logger.shared.error("❌ Bluetooth: Not Connected")
             return false
         }
@@ -66,6 +66,11 @@ final class Preflight {
         Logger.shared.success("✅ RX Found")
 
         let normalizedHeader = normalizeHeader(header)
+
+        guard !Task.isCancelled else {
+            Logger.shared.warning("⚠️ Preflight Cancelled")
+            return false
+        }
 
         guard normalizedHeader.count == 6,
               normalizedHeader.allSatisfy(\.isHexDigit) else {
@@ -108,6 +113,10 @@ final class Preflight {
             )
 
             try await Task.sleep(for: Timing.headerSettle)
+            guard !Task.isCancelled else {
+                Logger.shared.warning("⚠️ Preflight Cancelled")
+                return false
+            }
 
             Logger.shared.info("Header: \(normalizedHeader)")
 
@@ -125,6 +134,10 @@ final class Preflight {
         }
 
         for attempt in 1...maxECURetries {
+
+            guard ensureConnected() else {
+                return false
+            }
 
             do {
 
@@ -164,6 +177,10 @@ final class Preflight {
                     )
 
                     try? await Task.sleep(for: Timing.retryDelay)
+                    guard !Task.isCancelled else {
+                        Logger.shared.warning("⚠️ Preflight Cancelled")
+                        return false
+                    }
                     continue
                 }
 
@@ -178,6 +195,10 @@ final class Preflight {
                     )
 
                     try? await Task.sleep(for: Timing.retryDelay)
+                    guard !Task.isCancelled else {
+                        Logger.shared.warning("⚠️ Preflight Cancelled")
+                        return false
+                    }
                     continue
                 }
 

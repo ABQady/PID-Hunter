@@ -31,6 +31,12 @@ final class ModeDiscovery: ObservableObject {
         Logger.shared.success(
             "🏁 Mode discovery finished (\(supportedModes.count) supported)"
         )
+        Logger.shared.info(
+            "Supported Modes: " +
+            supportedModes
+                .map(\.rawValue)
+                .joined(separator: ", ")
+        )
     }
 
     private func probe(_ mode: OBDMode) async {
@@ -42,44 +48,46 @@ final class ModeDiscovery: ObservableObject {
             let latency = result.latency
 
             let requestMode = mode.requestService
-            let responseMode = response.type.requestMode
+
             Logger.shared.debug(
                 """
                 Mode Discovery
                   Request : \(String(format: "%02X", requestMode))
-                  Response: \(responseMode.map { String(format: "%02X", $0) } ?? "--")
+                  Response: \(response.service.map { String(format: "%02X", $0) } ?? "--")
                   Type    : \(response.type)
                   Raw     : \(response.raw)
                 """
             )
+            
+            let supported = isSupportedResponse(response, for: mode)
+
             discoveryLog.append(
                 DiscoveryResult(
                     mode: mode,
                     response: response,
                     latency: latency,
-                    success: response.type == .negative ||
-                             response.type.requestMode == mode.requestService
+                    success: supported
                 )
             )
-            
-            if response.type == .negative {
-
-                Logger.shared.warning(
-                    "⚠️ \(mode.title) Negative Response (Supported)"
-                )
-
-                handleSuccess(mode)
-                return
-            }
-
-            if responseMode == requestMode {
+            if supported {
+                if response.type == .negative {
+                    Logger.shared.warning(
+                        "⚠️ \(mode.title) Negative Response (Supported)"
+                    )
+                }
                 handleSuccess(mode)
             } else {
                 Logger.shared.warning(
-                    "Unexpected response for \(mode.title)"
+                    """
+                    ❌ \(mode.title) Unsupported
+                    Request Service : \(String(format: "%02X", requestMode))
+                    Parsed Service  : \(response.service.map { String(format: "%02X", $0) } ?? "--")
+                    Parsed Type     : \(response.type)
+                    """
                 )
                 handleFailure(mode)
             }
+            
         } catch BluetoothManager.BluetoothError.timeout {
             Logger.shared.warning("⏰ \(mode.rawValue) Timeout")
             handleFailure(mode)
@@ -87,6 +95,27 @@ final class ModeDiscovery: ObservableObject {
             Logger.shared.error("❌ \(mode.rawValue): \(error.localizedDescription)")
             handleFailure(mode)
         }
+    }
+
+    private func isSupportedResponse(
+        _ response: ELMResponse,
+        for mode: OBDMode
+    ) -> Bool {
+
+        // Positive response parsed by the parser.
+        if response.type != .negative,
+           let service = response.service,
+           service == mode.requestService {
+            return true
+        }
+
+        // Negative response proving the ECU understood the request.
+        guard response.type == .negative,
+              let service = response.service else {
+            return false
+        }
+
+        return service == mode.requestService
     }
 
     private init() { }
@@ -101,7 +130,7 @@ final class ModeDiscovery: ObservableObject {
         }
 
         isRunning = true
-        supportedModes.removeAll()
+
         Logger.shared.info("────────────")
 
         defer {
@@ -134,5 +163,6 @@ final class ModeDiscovery: ObservableObject {
 
     func reset() {
         supportedModes.removeAll(keepingCapacity: true)
+        discoveryLog.removeAll(keepingCapacity: true)
     }
 }

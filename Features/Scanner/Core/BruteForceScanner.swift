@@ -95,6 +95,8 @@ final class BruteForceScanner: ObservableObject {
     private func beginScan() {
         shouldStop = false
         statistics.reset()
+        // Fresh scans start from zero discoveries. Resume restores this in loadResults().
+        scanStatus.successCount = hasResumePoint ? results.count : 0
         refreshResumeAvailability()
         scanStatus.isScanning = true
         scanStatus.progress = 0
@@ -160,6 +162,9 @@ final class BruteForceScanner: ObservableObject {
         }
 
         results = saved
+        results.sort {
+            ($0.header, $0.request) < ($1.header, $1.request)
+        }
         seen = Set(saved.map { "\($0.header)|\($0.request)|\($0.response)" })
         scanStatus.successCount = saved.count
         let total = ScanStatistics.shared.totalRequests
@@ -184,6 +189,7 @@ final class BruteForceScanner: ObservableObject {
 
         UserDefaults.standard.removeObject(forKey: "savedResults")
         Logger.shared.clear()
+        statistics.reset()
         ScanStatistics.shared.reset()
         clearResumePoint()
     }
@@ -402,6 +408,8 @@ final class BruteForceScanner: ObservableObject {
         } else {
             loadResults()
         }
+        // Synchronize the UI counter with the actual in-memory results.
+        scanStatus.successCount = results.count
 
         let count = endPID - startPID + 1
         let total = headers.count * count
@@ -566,7 +574,14 @@ final class BruteForceScanner: ObservableObject {
             return false
         }
 
-        let key = "\(header)|\(request)|\(response)"
+        let result = ScanResult(
+            header: header,
+            mode: mode,
+            pid: pid,
+            request: request,
+            response: response
+        )
+        let key = result.id
 
         guard !seen.contains(key) else {
             return false
@@ -574,15 +589,7 @@ final class BruteForceScanner: ObservableObject {
 
         seen.insert(key)
 
-        results.append(
-            ScanResult(
-                header: header,
-                mode: mode,
-                pid: pid,
-                request: request,
-                response: response
-            )
-        )
+        results.append(result)
         results.sort { ($0.header, $0.request) < ($1.header, $1.request) }
 
         scanStatus.successCount += 1

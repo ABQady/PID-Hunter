@@ -32,6 +32,7 @@ struct ActionBar: View {
                 .buttonStyle(.bordered)
                 .disabled(!hasLines)
                 Spacer()
+                // Scan and Resume are mutually exclusive to avoid accidentally starting a fresh scan over a resumable session.
                 Button(role: .destructive) {
                     onScan()
                 } label: {
@@ -39,7 +40,7 @@ struct ActionBar: View {
                           systemImage: "dot.radiowaves.up.forward")
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(!isConnected || isScanning)
+                .disabled(!isConnected || isScanning || hasResumePoint)
                 
                 Button(role: .destructive)
                 {
@@ -49,6 +50,7 @@ struct ActionBar: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(!isScanning)
+                // Scan and Resume are mutually exclusive to avoid accidentally starting a fresh scan over a resumable session.
                 Button {
                     onResume()
                 }
@@ -56,7 +58,7 @@ struct ActionBar: View {
                     Label("Resume",systemImage: "arrow.clockwise.circle.fill")
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(isScanning || !hasResumePoint)
+                .disabled(!isConnected || isScanning || !hasResumePoint)
                 Spacer()
                 Button {
                     onTestECU()

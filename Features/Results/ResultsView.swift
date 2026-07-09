@@ -39,6 +39,10 @@ struct ResultsView: View {
     private var showsSearchStatistics: Bool {
         SearchEngineType(rawValue: selectedSearchEngine) != .sequential
     }
+    
+    private var searchStats: SearchStatistics {
+        brute.statistics
+    }
 
     // MARK: - Results View
     private var resultsView: some View {
@@ -143,8 +147,10 @@ struct ResultsView: View {
                             alignment: .leading,
                             spacing: 8
                         ) {
-                            ForEach(discovery.supportedModes.sorted {$0.rawValue < $1.rawValue} )
-                            { mode in
+                            ForEach(
+                                discovery.supportedModes
+                                    .sorted(by: { $0.requestService < $1.requestService })
+                            ) { mode in
                                 Text("\(mode.rawValue) • \(mode.title)")
                                     .font(
                                         .system(
@@ -174,8 +180,9 @@ struct ResultsView: View {
                 // MARK: - Statistics Section
                 // MARK: - Scan Statistics
                 Divider()
-                let searchStats = brute.statistics
-
+                
+                // Scan Statistics describe the current scan session
+                // (requests, responses, timing and transport health).
                 DisclosureGroup("Scan Statistics", isExpanded: $statsExpanded) {
                     Divider()
                     HStack {
@@ -250,6 +257,8 @@ struct ResultsView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 18))
 
                 if showsSearchStatistics {
+                    // Search Statistics describe the search engine's performance
+                    // (discoveries, success rate and latency).
                     DisclosureGroup(
                         "Search Statistics",
                         isExpanded: $searchStatsExpanded
@@ -370,8 +379,13 @@ struct ResultsView: View {
 
                             Spacer()
 
-                            Text("\(brute.scanStatus.successCount)")
-                                .foregroundStyle(.secondary)
+                            Label(
+                                "\(brute.scanStatus.successCount)",
+                                systemImage: "checkmark.circle.fill"
+                            )
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .help("Unique PID discoveries")
 
                             Spacer()
 

@@ -51,7 +51,14 @@ enum ELMResponseType {
 enum ELMResponseParser {
 
     private static let ecuServiceTokens: Set<String> = [
-        "41", "61", "62", "7F"
+        "41",
+        "43",
+        "47",
+        "49",
+        "61",
+        "62",
+        "63",
+        "7F"
     ]
 
     private static let informationalMarkers = [
@@ -154,33 +161,68 @@ enum ELMResponseParser {
         }
         
         for (index, token) in tokens.enumerated() {
-            switch token {
-            case "41":
-                type = .mode01
-            case "61":
-                type = .mode21
-            case "62":
-                type = .mode22
-            case "7F":
-                type = .negative
-                let negativeResponse = ELMResponse(
+            // ISO 14230 / ISO 15765 Negative Response
+            if token == "7F" {
+
+                guard tokens.indices.contains(index + 2),
+                      let requestedService = UInt8(tokens[index + 1], radix: 16)
+                else {
+                    continue
+                }
+
+                Logger.shared.debug(
+                    "Parser → negative | Header=\(header ?? "-") | Service=\(String(format: "%02X", requestedService))"
+                )
+
+                return ELMResponse(
                     raw: text,
                     type: .negative,
                     header: header,
-                    service: nil,
+                    service: requestedService,
                     pid: nil,
-                    payload: tokens.dropFirst(index + 1).compactMap { UInt8($0, radix: 16) }
+                    payload: tokens
+                        .dropFirst(index + 2)
+                        .compactMap { UInt8($0, radix: 16) }
                 )
-                Logger.shared.debug(
-                    "Parser → negative | Header=\(header ?? "-")"
-                )
-
-                return negativeResponse
-            default:
+            }
+            
+            guard let responseService = UInt8(token, radix: 16),
+                  responseService >= 0x40,
+                  responseService != 0x7F else {
                 continue
             }
-            service = type.requestMode
-            let pidLength = type.pidBytes
+
+            let requestService = responseService - 0x40
+            service = requestService
+
+            switch requestService {
+
+            case 0x01:
+                type = .mode01
+
+            case 0x21:
+                type = .mode21
+
+            case 0x22:
+                type = .mode22
+
+            default:
+                // Positive ECU response for a service we don't have
+                // a dedicated parser for yet (03,07,09,23...)
+                type = .unknownFrame
+            }
+            
+            let pidLength: Int
+
+            switch requestService {
+            case 0x22:
+                pidLength = 2
+            case 0x01, 0x21:
+                pidLength = 1
+            default:
+                pidLength = 0
+            }
+            
             if pidLength == 1 {
                 if tokens.indices.contains(index + 1) {
                     pid = UInt16(tokens[index + 1], radix: 16)
@@ -231,7 +273,7 @@ enum ELMResponseParser {
 
             let hasATReply = compact.contains("OK")
                 || upper.contains("ELM327")
-                || upper.contains("ELM")
+                || upper.hasPrefix("ELM")
                 || upper.contains("ISO")
                 || upper.contains("KWP")
                 || upper.contains("CAN")
@@ -242,11 +284,6 @@ enum ELMResponseParser {
             } else if upper.contains("SEARCHING") {
                 type = .searching
             }
-        }
-        
-        if type == .negative {
-            service = nil
-            pid = nil
         }
         
         Logger.shared.debug("Parser → \(type) | Header=\(header ?? "-") | Service=\(service.map { String(format: "%02X", $0) } ?? "-") | PID=\(pid.map { String(format: "%04X", $0) } ?? "-")")
@@ -274,7 +311,11 @@ extension String {
 
     func chunked(into size: Int) -> [String] {
 
-        stride(from: 0, to: count, by: size).map {
+        guard size > 0 else {
+            return []
+        }
+
+        return stride(from: 0, to: count, by: size).map {
 
             let start = index(startIndex, offsetBy: $0)
             let end = index(start, offsetBy: size, limitedBy: endIndex) ?? endIndex
