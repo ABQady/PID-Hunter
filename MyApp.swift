@@ -5,6 +5,7 @@ struct PIDHunterApp: App {
         WindowGroup {
             //ContentView()
             SplashScreen()
+                .environment(BikeProfileManager.shared)
         }
     }
 }

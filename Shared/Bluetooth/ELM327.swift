@@ -154,25 +154,86 @@ final class ELM327: ObservableObject {
     // MARK: - ECU Identification
     func identifyECU() {
         Task {
-            let identificationCommands: [String] = [
-                "ATI",
-                "AT@1",
-                "AT@2",
-                "ATDP",
-                "ATDPN",
-                "0902",
-                "0904",
-                "0906",
-                "090A"
+            let identificationCommands: [(command: String, description: String)] = [
+                ("ATI",   "ELM Version"),
+                ("AT@1",  "Device Description"),
+                ("AT@2",  "Device Identifier"),
+                ("ATDP",  "Protocol"),
+                ("ATDPN", "Protocol Number"),
+                ("0902",  "VIN"),
+                ("0904",  "Calibration ID"),
+                ("0906",  "CVN"),
+                ("090A",  "ECU Name")
             ]
-            for command in identificationCommands {
+            for item in identificationCommands {
                 guard BluetoothManager.shared.isConnected else {
                     Logger.shared.warning("ECU identification aborted: disconnected")
                     return
                 }
 
-                send(command)
-                try? await Task.sleep(for: .milliseconds(1000))
+                Logger.shared.info("🔎 Reading \(item.description)...")
+
+                do {
+                    let result = try await request(
+                        command: item.command,
+                        timeout: .seconds(2)
+                    )
+
+                    Logger.shared.verbose(
+                        "ECU ID → \(item.command) = \(result.response.raw)"
+                    )
+
+                    switch item.command {
+
+                    case "ATI":
+                        ECUInfo.shared.elmVersion = result.response.raw
+                            .replacingOccurrences(of: "ATI", with: "")
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+                    case "ATDP":
+                        ECUInfo.shared.protocolName = result.response.raw
+                            .replacingOccurrences(of: "ATDP", with: "")
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+                    case "AT@1":
+                        ECUInfo.shared.ecuName = result.response.raw
+                            .replacingOccurrences(of: "AT@1", with: "")
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+                    case "AT@2":
+                        ECUInfo.shared.ecuIdentifier = result.response.raw
+                            .replacingOccurrences(of: "AT@2", with: "")
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+                    case "0902":
+                        if case .positive = result.response.type {
+                            ECUInfo.shared.ecuIdentifier = result.response.raw
+                        }
+
+                    case "0904":
+                        if case .positive = result.response.type {
+                            ECUInfo.shared.calibrationIdentifier = result.response.raw
+                        }
+
+                    case "090A":
+                        if case .positive = result.response.type {
+                            ECUInfo.shared.ecuName = result.response.raw
+                        }
+
+                    default:
+                        break
+                    }
+
+                    Logger.shared.info(
+                        "📘 Fingerprint → Header=\(ECUInfo.shared.header) | Protocol=\(ECUInfo.shared.protocolName)"
+                    )
+                } catch {
+                    Logger.shared.verbose(
+                        "ECU ID → \(item.command) failed"
+                    )
+                }
+
+                try? await Task.sleep(for: .milliseconds(300))
             }
         }
     }

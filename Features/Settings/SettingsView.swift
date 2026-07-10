@@ -91,7 +91,7 @@ struct SettingsView: View {
 
     private func exportCSV() {
         do {
-            let url = try CSVExporter.export(brute.results)
+            let url = try Exporter.export(brute.results)
             #if os(iOS)
             exportedFile = ExportedFile(url: url)
             #endif
@@ -119,11 +119,12 @@ struct SettingsView: View {
         ScrollView {
             
             VStack(spacing: 18) {
-                
+
+                BikeProfileCard()
                 // MARK: Configuration
                 VStack(alignment: .leading, spacing: 12) {
                     
-                    Text("Configuration")
+                    Text("Scan Configuration")
                         .font(.headline)
                     HStack(alignment: .center){
                         Text("Header")

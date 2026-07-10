@@ -83,17 +83,11 @@ final class ScanLauncher {
             brute.startFresh()
         }
         
-        Task {
-            Logger.shared.info("Running preflight using header \(headerValue)")
-            let ok = await Preflight.shared.run(header: headerValue)
-            
-            guard !Task.isCancelled else { return }
-            
-            guard ok else {
-                Logger.shared.error("❌ Preflight Failed")
+        Task { @MainActor in
+            guard await prepareSession(header: headerValue) else {
                 return
             }
-            
+
             let strategy = ScanStrategyFactory.strategy(for: mode)
             Logger.shared.info("Launching \(mode.rawValue) using \(type(of: strategy))")
             await strategy.start(
@@ -102,6 +96,38 @@ final class ScanLauncher {
                 context: context
             )
         }
+    }
+    
+    @MainActor
+    private func prepareSession(
+        header: String
+    ) async -> Bool {
+
+        Logger.shared.info("Running preflight using header \(header)")
+
+        let ok = await Preflight.shared.run(header: header)
+
+        guard !Task.isCancelled else {
+            return false
+        }
+
+        guard ok else {
+            Logger.shared.error("❌ Preflight Failed")
+            return false
+        }
+
+        let fingerprint = ECUInfo.shared.fingerprint
+
+        guard let profile = BikeProfileManager.shared.load(for: fingerprint) else {
+            Logger.shared.error("❌ Failed to prepare Bike Profile")
+            return false
+        }
+
+        Logger.shared.info("🆔 Fingerprint: \(fingerprint.id)")
+        Logger.shared.info("📘 Bike Profile Ready")
+        Logger.shared.info("Known Requests: \(profile.discoveries.count)")
+
+        return true
     }
     
     func startPIDScan(

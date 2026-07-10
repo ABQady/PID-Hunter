@@ -111,11 +111,15 @@ final class BruteForceScanner: ObservableObject {
         ELM327.shared.setHeader(context.header)
         try? await Task.sleep(for: .milliseconds(50))
 
-        stats.begin(totalRequests: mode.runtimeRequests.count)
+        let requests = BikeProfileManager.shared.buildQueue(
+            for: mode
+        )
+
+        stats.begin(totalRequests: requests.count)
 
         var completed = 0
 
-        for request in mode.runtimeRequests {
+        for request in requests {
             if shouldStop { break }
 
             await scanSingleRequest(
@@ -125,7 +129,7 @@ final class BruteForceScanner: ObservableObject {
             )
 
             completed += 1
-            updateProgress(done: completed, total: mode.runtimeRequests.count)
+            updateProgress(done: completed, total: requests.count)
         }
     }
 
@@ -160,10 +164,10 @@ final class BruteForceScanner: ObservableObject {
                 response,
                 classification: classification,
                 latency: latency,
-                header: context.header,
                 mode: mode,
                 request: request,
                 pid: 0,
+                header: context.header,
                 consecutiveTimeouts: &consecutiveTimeouts
             )
             await applyDelay()
@@ -228,7 +232,9 @@ final class BruteForceScanner: ObservableObject {
     private func finishScan(completed: Bool) {
         scanStatus.isScanning = false
         scanStatus.currentRequest = ""
-
+        
+        RequestOutcomeProcessor.shared.flushProfile()
+        
         Logger.shared.info(
             "Requests: \(statistics.requestsSent), Success: \(statistics.successfulResponses), Failures: \(statistics.failedResponses)"
         )
@@ -358,20 +364,18 @@ final class BruteForceScanner: ObservableObject {
         _ response: ELMResponse,
         classification: SearchResult,
         latency: Double,
-        header: String,
         mode: OBDMode,
         request: String,
         pid: UInt16,
+        header: String,
         consecutiveTimeouts: inout Int
     ) {
         let outcome = RequestOutcomeProcessor.shared.handleSuccess(
             response: response,
             classification: classification,
             latency: latency,
-            header: header,
             mode: mode,
             request: request,
-            pid: pid,
             consecutiveTimeouts: &consecutiveTimeouts
         )
 
@@ -384,6 +388,11 @@ final class BruteForceScanner: ObservableObject {
             result: classification,
             latency: latency
         )
+        
+        guard processing.profileUpdated else {
+            Logger.shared.warning("Bike Profile update skipped")
+            return
+        }
 
         guard processing.shouldPersist else {
             return
@@ -612,10 +621,10 @@ final class BruteForceScanner: ObservableObject {
                     response,
                     classification: classification,
                     latency: latency,
-                    header: header,
                     mode: configuration.mode,
                     request: req,
                     pid: nextPID,
+                    header: header,
                     consecutiveTimeouts: &consecutiveTimeouts
                 )
                 await applyDelay()
@@ -717,6 +726,7 @@ final class BruteForceScanner: ObservableObject {
         Logger.shared.success("✅ Stored response \(request) -> \(response.raw)")
         // Persist only after the in-memory model and published UI state are synchronized.
         persistence.saveResults(session.results)
+
         return true
     }
     

@@ -31,6 +31,8 @@ final class ECUInfo: ObservableObject {
     @Published var ecuName = "Unknown"
     @Published var elmVersion = "-"
     @Published var protocolName = "-"
+    @Published var ecuIdentifier = ""
+    @Published var calibrationIdentifier = ""
     @Published var header = "-"
     @Published var status = "-"
     @Published var services = SupportedServices()
@@ -42,6 +44,8 @@ final class ECUInfo: ObservableObject {
         ecuName = "Unknown"
         elmVersion = "-"
         protocolName = "-"
+        ecuIdentifier = ""
+        calibrationIdentifier = ""
         header = "-"
         status = "-"
         services.removeAll()
@@ -57,5 +61,26 @@ final class ECUInfo: ObservableObject {
         let value = String(format: "%02X", service)
 
         services.insert(value)
+    }
+
+    private func normalized(_ value: String) -> String? {
+        let trimmed = value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    var fingerprint: BikeFingerprint {
+        BikeFingerprint(
+            header: header,
+            protocolName: protocolName,
+            ecuIdentifier: normalized(ecuIdentifier),
+            calibrationIdentifier: normalized(calibrationIdentifier)
+        )
+    }
+    
+    var hasFingerprint: Bool {
+        normalized(protocolName) != nil &&
+        normalized(header) != nil
     }
 }

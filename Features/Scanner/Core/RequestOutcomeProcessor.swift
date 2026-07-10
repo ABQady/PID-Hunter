@@ -10,6 +10,7 @@ import Foundation
 /// Represents the result of processing a successful scan response.
 struct ScanProcessingResult {
     let shouldPersist: Bool
+    let profileUpdated: Bool
 }
 
 /// Represents the result of processing a timeout event during scanning.
@@ -23,6 +24,7 @@ enum RequestOutcome {
     case timeout(TimeoutProcessingResult)
 }
 
+@MainActor
 final class RequestOutcomeProcessor {
 
     static let shared = RequestOutcomeProcessor()
@@ -36,18 +38,27 @@ final class RequestOutcomeProcessor {
         response: ELMResponse,
         classification: SearchResult,
         latency: TimeInterval,
-        header: String,
         mode: OBDMode,
         request: String,
-        pid: UInt16,
         consecutiveTimeouts: inout Int
     ) -> RequestOutcome {
 
         consecutiveTimeouts = 0
+        let shouldPersist = classification.shouldPersist
+        BikeProfileManager.shared.record(
+            mode: mode,
+            request: request,
+            response: response,
+            classification: classification
+        )
 
+        Logger.shared.verbose(
+            "📦 Outcome → \(classification) | Persist=\(shouldPersist) | \(request) | \(Int(latency * 1000)) ms"
+        )
         return .success(
             ScanProcessingResult(
-                shouldPersist: classification.shouldPersist
+                shouldPersist: shouldPersist,
+                profileUpdated: true
             )
         )
     }
@@ -68,5 +79,8 @@ final class RequestOutcomeProcessor {
                 shouldAbortScan: consecutiveTimeouts >= maxConsecutiveTimeouts
             )
         )
+    }
+    func flushProfile() {
+        BikeProfileManager.shared.flush()
     }
 }

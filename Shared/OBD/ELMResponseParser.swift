@@ -284,6 +284,61 @@ extension ELMResponse {
         return false
     }
 }
+extension ELMResponse {
+
+    private func asciiPayload(
+        droppingLeadingBytes count: Int = 0
+    ) -> String? {
+
+        guard payload.count > count else {
+            return nil
+        }
+
+        let bytes = payload
+            .dropFirst(count)
+            .filter { $0 >= 0x20 && $0 <= 0x7E }
+
+        guard !bytes.isEmpty else {
+            return nil
+        }
+
+        return String(bytes: bytes, encoding: .ascii)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var asciiString: String? {
+        asciiPayload()
+    }
+
+    var vin: String? {
+        guard service == 0x09,
+              pid == 0x02 else {
+            return nil
+        }
+
+        // Temporary decoder.
+        // Many ECUs prepend a frame index before the VIN characters.
+        return asciiPayload(droppingLeadingBytes: 1) ?? asciiPayload()
+    }
+
+    var calibrationID: String? {
+        guard service == 0x09,
+              pid == 0x04 else {
+            return nil
+        }
+
+        return asciiPayload(droppingLeadingBytes: 1) ?? asciiPayload()
+    }
+
+    var ecuName: String? {
+        guard service == 0x09,
+              pid == 0x0A else {
+            return nil
+        }
+
+        return asciiPayload(droppingLeadingBytes: 1) ?? asciiPayload()
+    }
+}
 extension String {
 
     func chunked(into size: Int) -> [String] {

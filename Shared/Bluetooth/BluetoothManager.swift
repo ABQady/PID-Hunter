@@ -18,8 +18,10 @@ final class BluetoothManager: NSObject, ObservableObject {
     @Published var detectedRX = ""
     @Published var detectedService = ""
     @Published var status: ECUStatus = .disconnected
+
     @Published var txCount = 0
     @Published var rxCount = 0
+
 
     // MARK: BLE
     private var central: CBCentralManager!
@@ -155,7 +157,6 @@ final class BluetoothManager: NSObject, ObservableObject {
         )
         status = .disconnected
         ELMResponseAssembler.shared.clear()
-        clearPendingRequest(resumingWith: BluetoothError.disconnected)
         ECUInfo.shared.clear()
 
         clearPendingRequest(resumingWith: BluetoothError.disconnected)
@@ -254,73 +255,23 @@ final class BluetoothManager: NSObject, ObservableObject {
             }
         }
     }
-    @inline(__always)
-    private func ensureConnected() -> Bool {
-        guard isConnected else {
-            status = .disconnected
-            return false
-        }
-        return true
-    }
-
-    @discardableResult
-    private func runInitializationCommand(
-        _ command: String,
-        timeout: Duration = .seconds(2)
-    ) async -> Bool {
-        do {
-            _ = try await sendAndWait(command, timeout: timeout)
-            return ensureConnected()
-        } catch {
-            Logger.shared.error("Initialization command failed: \(command): \(error)")
-            return false
-        }
-    }
-
     @MainActor
     private func initializeELM() async {
         status = .initializingELM
 
-        do {
-            _ = try await sendAndWait("ATZ", timeout: .seconds(3))
-        } catch {
-            Logger.shared.error("ATZ failed: \(error)")
-            return
-        }
-        guard isConnected else {
-            status = .disconnected
+        guard await ELM327.shared.initializeELM() else {
+            Logger.shared.error("ELM initialization failed")
             return
         }
 
-        guard await runInitializationCommand("ATE0") else { return }
-        guard await runInitializationCommand("ATL0") else { return }
-        guard await runInitializationCommand("ATS0") else { return }
-        guard await runInitializationCommand("ATH1") else { return }
-        ECUInfo.shared.header = ELM327.shared.currentHeader
-
-        status = .settingProtocol
-        guard await runInitializationCommand("ATSP5") else { return }
-        try? await Task.sleep(for: .milliseconds(1500))
-        status = .checkingProtocol
-        guard await runInitializationCommand("ATDP") else { return }
-        guard await runInitializationCommand("ATI") else { return }
-
-        status = .testingECU
-        do {
-            let result = try await sendAndWait("0100", timeout: .seconds(2))
-            Logger.shared.success("ECU Test Response: \(result.response.raw)")
-        } catch {
-            Logger.shared.error("ECU test failed: \(error)")
-            return
-        }
-
-        Logger.shared.success("ELM initialization finished")
-
-        guard ensureConnected() else { return }
         status = .connected
 
+        ECUInfo.shared.header = ELM327.shared.currentHeader
         ECUInfo.shared.status = "Connected"
         ECUInfo.shared.lastConnected = Date()
+        ELM327.shared.identifyECU()
+
+        Logger.shared.success("ELM initialization finished")
     }
     
     @MainActor
@@ -596,6 +547,18 @@ extension BluetoothManager:
             upper.contains("J1850") {
             ECUInfo.shared.protocolName = response.raw
         }
+
+        if let vin = response.vin {
+            ECUInfo.shared.ecuIdentifier = vin
+        }
+
+        if let calibration = response.calibrationID {
+            ECUInfo.shared.calibrationIdentifier = calibration
+        }
+
+        if let ecuName = response.ecuName {
+            ECUInfo.shared.ecuName = ecuName
+        }
     }
 
     private func logResponse(_ raw: String) {
@@ -652,6 +615,8 @@ extension BluetoothManager:
             for response in responses {
                 let raw = response.raw
 
+                updateECUInfo(from: response)
+
                 Logger.shared.verbose("""
 🔵 RX COMPLETE
 RAW      = \(raw)
@@ -660,15 +625,12 @@ SERVICE  = \(response.service.map { String(format: "%02X", $0) } ?? "-")
 PID      = \(response.pid.map { String(format: "%04X", $0) } ?? "-")
 PAYLOAD  = \(response.payload.map { String(format: "%02X", $0) }.joined(separator: " "))
 """)
-                
-
-                updateECUInfo(from: response)
 
                 Logger.shared.verbose("RX Complete (\(responses.count) response(s))")
                 logResponse(raw)
 
                 rxCount += 1
-                if !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                if !raw.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).isEmpty {
                     lastResponse = raw
                 }
 
@@ -695,7 +657,7 @@ PAYLOAD  = \(response.payload.map { String(format: "%02X", $0) }.joined(separato
                     Logger.shared.warning("Ignoring response type: \(response.type)")
                     continue
                 }
-                
+
                 Logger.shared.verbose("Attempting to complete pending request with response type: \(response.type)")
                 completePendingRequest(with: response, latency: latency)
                 analyzeResponse(response)
