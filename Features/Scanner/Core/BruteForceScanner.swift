@@ -96,14 +96,15 @@ final class BruteForceScanner: ObservableObject {
         beginScan()
 
         defer {
-            if !shouldStop {
+            if shouldStop {
+                finishScan(completed: false)
+            } else {
                 stats.complete()
                 finishScan(completed: true)
             }
         }
 
         guard await ensureConnection(header: context.header) else {
-            finishScan(completed: false)
             return
         }
 
@@ -126,10 +127,6 @@ final class BruteForceScanner: ObservableObject {
             completed += 1
             updateProgress(done: completed, total: mode.runtimeRequests.count)
         }
-
-        if shouldStop {
-            finishScan(completed: false)
-        }
     }
 
     private func scanSingleRequest(
@@ -140,9 +137,6 @@ final class BruteForceScanner: ObservableObject {
         guard await ensureConnection(header: context.header) else {
             return
         }
-
-        ELM327.shared.setHeader(context.header)
-        try? await Task.sleep(for: .milliseconds(50))
 
         scanStatus.currentRequest = request
 
@@ -404,7 +398,8 @@ final class BruteForceScanner: ObservableObject {
             mode: mode.rawValue,
             pid: pid == 0 ? "" : pidString,
             request: request,
-            response: response.raw
+            response: response,
+            classification: classification
         ) {
             statistics.recordDiscovery()
         }
@@ -536,7 +531,15 @@ final class BruteForceScanner: ObservableObject {
     private func executePIDScan(
         configuration: ScanConfiguration
     ) async {
-        
+        defer {
+            if shouldStop {
+                finishScan(completed: false)
+            } else {
+                stats.complete()
+                finishScan(completed: true)
+            }
+        }
+
         beginScan()
         
         restoreScanState(configuration: configuration)
@@ -549,11 +552,8 @@ final class BruteForceScanner: ObservableObject {
 
         ELM327.shared.setHeader(configuration.header)
         try? await Task.sleep(for: .milliseconds(50))
-        
 
         var progress = prepareStatistics(configuration: configuration)
-
-
         var consecutiveTimeouts = 0
 
         await scanHeader(
@@ -565,12 +565,8 @@ final class BruteForceScanner: ObservableObject {
         )
 
         if shouldStop {
-            finishScan(completed: false)
             return
         }
-
-        stats.complete()
-        finishScan(completed: true)
     }
 
     
@@ -686,31 +682,13 @@ final class BruteForceScanner: ObservableObject {
         mode: String,
         pid: String,
         request: String,
-        response: String
+        response: ELMResponse,
+        classification: SearchResult
     ) -> Bool {
-        let parsed = ELMResponseParser.parse(response)
-
-        let isSupportedResponse: Bool
-
-        switch parsed.type {
-        case .positive:
-            isSupportedResponse = true
-        case .negative,
-             .noData,
-             .busError,
-             .unknown,
-             .atResponse,
-             .searching,
-             .stopped,
-             .unableToConnect:
-            isSupportedResponse = false
-        }
-
-        guard isSupportedResponse else {
+        guard !response.raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return false
         }
-
-        guard !response.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        guard classification.shouldPersist else {
             return false
         }
 
@@ -719,7 +697,7 @@ final class BruteForceScanner: ObservableObject {
             mode: mode,
             pid: pid,
             request: request,
-            response: response
+            response: response.raw
         )
         let key = result.id
 
@@ -728,16 +706,15 @@ final class BruteForceScanner: ObservableObject {
         }
 
         session.seen.insert(key)
-
         session.results.append(result)
-        session.results.sort {
-            ($0.header, $0.mode, $0.request) <
-            ($1.header, $1.mode, $1.request)
-        }
+        //        session.results.sort {
+        //            ($0.header, $0.mode, $0.request) <
+        //            ($1.header, $1.mode, $1.request)
+        //        }
         results = session.results
 
         scanStatus.successCount = session.results.count
-        Logger.shared.success("✅ Found PID \(request) -> \(response)")
+        Logger.shared.success("✅ Stored response \(request) -> \(response.raw)")
         // Persist only after the in-memory model and published UI state are synchronized.
         persistence.saveResults(session.results)
         return true

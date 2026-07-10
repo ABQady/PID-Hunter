@@ -26,7 +26,25 @@ final class ELM327: ObservableObject {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .uppercased()
     }
-
+    
+    @discardableResult
+    func initializeELM(
+    ) async -> Bool{
+        do {
+            _ = try await BluetoothManager.shared.sendAndWait("ATZ", timeout: .seconds(2))
+            _ = try await BluetoothManager.shared.sendAndWait("ATE0", timeout: .seconds(1))
+            _ = try await BluetoothManager.shared.sendAndWait("ATL0", timeout: .seconds(1))
+            _ = try await BluetoothManager.shared.sendAndWait("ATS0", timeout: .seconds(1))
+            _ = try await BluetoothManager.shared.sendAndWait("ATH1", timeout: .seconds(1))
+            _ = try await BluetoothManager.shared.sendAndWait("ATSP5", timeout: .seconds(2))
+            _ = try await BluetoothManager.shared.sendAndWait("ATDP", timeout: .seconds(2))
+            return true
+        } catch {
+            Logger.shared.error("❌ Failed to initialize ELM: \(error.localizedDescription)")
+            return false
+        }
+    }
+    
     
     // MARK: - Send
     func send(_ command: String) {

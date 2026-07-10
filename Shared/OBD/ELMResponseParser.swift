@@ -37,17 +37,6 @@ enum ELMResponseType {
 
 enum ELMResponseParser {
 
-    private static let ecuServiceTokens: Set<String> = [
-        "41",
-        "43",
-        "47",
-        "49",
-        "61",
-        "62",
-        "63",
-        "7F"
-    ]
-
     private static let informationalMarkers = [
         "BUS INIT:",
         "BUS INIT",
@@ -99,7 +88,7 @@ enum ELMResponseParser {
         
         if tokens.isEmpty {
             if upper.contains("OK") || upper.contains("ELM") || upper.hasPrefix("AT") {
-                Logger.shared.debug("Parser → atResponse (empty token fallback)")
+                Logger.shared.verbose("Parser → atResponse (empty token fallback)")
                 return ELMResponse(
                     raw: text,
                     type: .atResponse,
@@ -125,24 +114,56 @@ enum ELMResponseParser {
         
         if tokens.count >= 4,
            tokens[0].count == 2,
-           UInt8(tokens[0], radix: 16) != nil,
-           UInt8(tokens[1], radix: 16) != nil,
-           UInt8(tokens[2], radix: 16) != nil,
-           ecuServiceTokens.contains(tokens[3]) {
-
+           tokens[1].count == 2,
+           tokens[2].count == 2,
+           let _ = UInt8(tokens[0], radix: 16),
+           let _ = UInt8(tokens[1], radix: 16),
+           let _ = UInt8(tokens[2], radix: 16),
+           let serviceByte = UInt8(tokens[3], radix: 16),
+           serviceByte == 0x7F || serviceByte >= 0x40
+        {
             header = "\(tokens[0].uppercased()) \(tokens[1].uppercased()) \(tokens[2].uppercased())"
             tokens.removeFirst(3)
         }
+        
         var payload: [UInt8] = []
         
         if upper.contains("NO DATA") {
             type = .noData
+            return ELMResponse(
+                    raw: text,
+                    type: type,
+                    header: header,
+                    pid: nil,
+                    payload: []
+                )
         } else if upper.contains("UNABLE TO CONNECT") {
             type = .unableToConnect
+            return ELMResponse(
+                    raw: text,
+                    type: type,
+                    header: header,
+                    pid: nil,
+                    payload: []
+                )
         } else if upper.contains("BUS ERROR") {
             type = .busError
+            return ELMResponse(
+                    raw: text,
+                    type: type,
+                    header: header,
+                    pid: nil,
+                    payload: []
+                )
         } else if upper.contains("STOPPED") {
             type = .stopped
+            return ELMResponse(
+                    raw: text,
+                    type: type,
+                    header: header,
+                    pid: nil,
+                    payload: []
+                )
         }
         
         for (index, token) in tokens.enumerated() {
@@ -155,7 +176,7 @@ enum ELMResponseParser {
                     continue
                 }
 
-                Logger.shared.debug(
+                Logger.shared.verbose(
                     "Parser → negative | Header=\(header ?? "-") | Service=\(String(format: "%02X", requestedService))"
                 )
 
@@ -207,7 +228,7 @@ enum ELMResponseParser {
                 .dropFirst(index + 1 + pidLength)
                 .compactMap { UInt8($0, radix: 16) }
             
-            Logger.shared.debug(
+            Logger.shared.verbose(
                 "Parser → \(type) | Header=\(header ?? "-") | Service=\(service.map { String(format: "%02X", $0) } ?? "-") | PID=\(pid.map { String(format: "%04X", $0) } ?? "-")"
             )
 
@@ -220,42 +241,32 @@ enum ELMResponseParser {
             )
         }
         
-        type = .unknown
-        
-        if case .unknown = type {
-            let lines = upper
-                .split(whereSeparator: \.isNewline)
-                .map { $0.trimmingCharacters(in: .whitespaces) }
-                .filter { !$0.isEmpty }
+        let lines = upper
+            .split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
 
-            let hasATCommandEcho = lines.contains {
-                $0.hasPrefix("AT") && $0.count > 2
-            }
+        let hasATCommandEcho = lines.contains {
+            $0.hasPrefix("AT") && $0.count > 2
+        }
 
-            let hasATReply = compact.contains("OK")
-                || upper.contains("ELM327")
-                || upper.hasPrefix("ELM")
-                || upper.contains("ISO")
-                || upper.contains("KWP")
-                || upper.contains("CAN")
-                || upper.contains("J1850")
+        let hasATReply = compact.contains("OK")
+            || upper.contains("ELM327")
+            || upper.hasPrefix("ELM")
+            || upper.contains("ISO")
+            || upper.contains("KWP")
+            || upper.contains("CAN")
+            || upper.contains("J1850")
 
-            if hasATCommandEcho || hasATReply {
-                type = .atResponse
-            } else if upper.contains("SEARCHING") {
-                type = .searching
-            }
+        if hasATCommandEcho || hasATReply {
+            type = .atResponse
+        } else if upper.contains("SEARCHING") {
+            type = .searching
+        } else {
+            type = .unknown
         }
         
-        Logger.shared.debug("Parser → \(type) | Header=\(header ?? "-") | Service=\(service.map { String(format: "%02X", $0) } ?? "-") | PID=\(pid.map { String(format: "%04X", $0) } ?? "-")")
-        // Use pattern matching to set service for final ELMResponse
-        let _: UInt8? = {
-            switch type {
-            case .positive(let s): return s
-            case .negative(let s): return s
-            default: return nil
-            }
-        }()
+        Logger.shared.verbose("Parser → \(type) | Header=\(header ?? "-") | Service=\(service.map { String(format: "%02X", $0) } ?? "-") | PID=\(pid.map { String(format: "%04X", $0) } ?? "-")")
         return ELMResponse(
             raw: text,
             type: type,

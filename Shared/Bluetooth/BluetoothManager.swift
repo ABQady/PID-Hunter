@@ -185,8 +185,8 @@ final class BluetoothManager: NSObject, ObservableObject {
         Logger.shared.console("TX Props = \(tx.properties)")
         Logger.shared.console(">> \(command)")
         Logger.shared.tx(command)
-        Logger.shared.debug("TX UUID = \(tx.uuid.uuidString)")
-        Logger.shared.debug("TX Props = \(tx.properties)")
+        Logger.shared.verbose("TX UUID = \(tx.uuid.uuidString)")
+        Logger.shared.verbose("TX Props = \(tx.properties)")
         lastSendTime = Date()
         let type: CBCharacteristicWriteType =
         tx.properties.contains(.write)
@@ -197,7 +197,7 @@ final class BluetoothManager: NSObject, ObservableObject {
             String(format: "%02X", $0)
         }.joined(separator: " ")
         
-        Logger.shared.debug("TX HEX = \(hex)")
+        Logger.shared.verbose("TX HEX = \(hex)")
         
         status = .waitingResponse
         peripheral.writeValue(
@@ -223,7 +223,7 @@ final class BluetoothManager: NSObject, ObservableObject {
         ELMResponseAssembler.shared.clear()
 
         return try await withCheckedThrowingContinuation { continuation in
-            Logger.shared.debug("📌 Registering continuation")
+            Logger.shared.verbose("📌 Registering continuation")
             let requestID = UUID()
             // Assign pendingRequest BEFORE sending command, with timeoutTask nil
             pendingRequest = PendingRequest(
@@ -245,7 +245,7 @@ final class BluetoothManager: NSObject, ObservableObject {
             pendingRequest?.timeoutTask = timeoutTask
             do {
                 try send(command)
-                Logger.shared.debug("📤 Command sent successfully")
+                Logger.shared.verbose("📤 Command sent successfully")
             } catch {
                 timeoutTask.cancel()
                 clearPendingRequest()
@@ -496,9 +496,9 @@ extension BluetoothManager:
                 Logger.shared.console("CHAR    : \(c.uuid.uuidString)")
                 Logger.shared.console("PROPS   : \(c.properties)")
                 
-                Logger.shared.debug("SERVICE: \(service.uuid.uuidString)")
-                Logger.shared.debug("CHAR: \(c.uuid.uuidString)")
-                Logger.shared.debug("PROPS: \(c.properties)")
+                Logger.shared.verbose("SERVICE: \(service.uuid.uuidString)")
+                Logger.shared.verbose("CHAR: \(c.uuid.uuidString)")
+                Logger.shared.verbose("PROPS: \(c.properties)")
                 
                 // RX
                 if c.uuid.uuidString.uppercased() == "FFF1" {
@@ -607,16 +607,16 @@ extension BluetoothManager:
 
         Logger.shared.console("<< TEXT: \(raw)")
         Logger.shared.console("<< HEX : \(hex)")
-        Logger.shared.debug("RX HEX = \(hex)")
+        Logger.shared.verbose("RX HEX = \(hex)")
     }
 
     private func completePendingRequest(with response: ELMResponse, latency: TimeInterval) {
         guard let pending = pendingRequest else {
-            Logger.shared.debug("No pending request. Dropping response.")
+            Logger.shared.verbose("No pending request. Dropping response.")
             return
         }
 
-        Logger.shared.debug("Completing pending request \(pending.id)")
+        Logger.shared.verbose("Completing pending request \(pending.id)")
         pending.timeoutTask?.cancel()
 
         pendingRequest = nil
@@ -624,7 +624,7 @@ extension BluetoothManager:
         
         pending.continuation.resume(returning: (response, latency))
 
-        Logger.shared.debug("🟢 Continuation RESUMED: \(response.type)")
+        Logger.shared.verbose("🟢 Continuation RESUMED: \(response.type)")
     }
 
     // MARK: didUpdateValueFor
@@ -646,17 +646,25 @@ extension BluetoothManager:
 
             let responses = await ELMResponseAssembler.shared.append(chunk)
             guard !responses.isEmpty else {
-                Logger.shared.debug("RX Chunk (\(value.count) bytes)")
+                Logger.shared.verbose("RX Chunk (\(value.count) bytes)")
                 return
             }
             for response in responses {
-                Logger.shared.debug("🔵 ENTER didUpdateValueFor loop")
-                Logger.shared.debug("🔵 Parsed type = \(response.type)")
                 let raw = response.raw
+
+                Logger.shared.verbose("""
+🔵 RX COMPLETE
+RAW      = \(raw)
+TYPE     = \(response.type)
+SERVICE  = \(response.service.map { String(format: "%02X", $0) } ?? "-")
+PID      = \(response.pid.map { String(format: "%04X", $0) } ?? "-")
+PAYLOAD  = \(response.payload.map { String(format: "%02X", $0) }.joined(separator: " "))
+""")
+                
 
                 updateECUInfo(from: response)
 
-                Logger.shared.debug("RX Complete (\(responses.count) response(s))")
+                Logger.shared.verbose("RX Complete (\(responses.count) response(s))")
                 logResponse(raw)
 
                 rxCount += 1
@@ -678,7 +686,7 @@ extension BluetoothManager:
                         compact.contains($0)
                     }
                     if !containsFrame {
-                        Logger.shared.debug("Ignoring transient response: \(response.raw)")
+                        Logger.shared.verbose("Ignoring transient response: \(response.raw)")
                         continue
                     }
                 }
@@ -688,7 +696,7 @@ extension BluetoothManager:
                     continue
                 }
                 
-                Logger.shared.debug("Attempting to complete pending request with response type: \(response.type)")
+                Logger.shared.verbose("Attempting to complete pending request with response type: \(response.type)")
                 completePendingRequest(with: response, latency: latency)
                 analyzeResponse(response)
             }
@@ -706,7 +714,7 @@ extension BluetoothManager:
                 return
             }
 
-            Logger.shared.debug(
+            Logger.shared.verbose(
                 "Notify \(characteristic.uuid.uuidString): \(characteristic.isNotifying)"
             )
 

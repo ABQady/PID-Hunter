@@ -19,24 +19,11 @@ final class ECUTester {
         return true
     }
 
-    @discardableResult
-    private func initializeELM() async -> Bool {
-        guard await runCommand("ATZ", timeout: .seconds(2)) else { return false }
-        guard await runCommand("ATE0", timeout: .seconds(1)) else { return false }
-        guard await runCommand("ATL0", timeout: .seconds(1)) else { return false }
-        guard await runCommand("ATS0", timeout: .seconds(1)) else { return false }
-        guard await runCommand("ATH1", timeout: .seconds(1)) else { return false }
-        guard await runCommand("ATSP5", timeout: .seconds(2)) else { return false }
-        guard await runCommand("ATDP", timeout: .seconds(2)) else { return false }
-
-        return true
-    }
 
     func run(header: String) async {
         Logger.shared.info("===== ECU TEST START =====")
 
-        guard await initializeELM() else {
-            Logger.shared.error("ELM initialization failed")
+        guard await ELM327.shared.initializeELM() else {            Logger.shared.error("ELM initialization failed")
             Logger.shared.info("===== ECU TEST END =====")
             return
         }

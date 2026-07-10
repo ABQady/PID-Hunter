@@ -8,6 +8,11 @@ private enum LogLevel {
     case debug
 }
 
+enum DebugVerbosity: Int {
+    case normal = 1
+    case verbose = 2
+}
+
 enum LogStyle {
     case tx
     case rx
@@ -41,6 +46,12 @@ actor Logger {
     
     private var enableDebugLogging: Bool {
         UserDefaults.standard.bool(forKey: "enableDebugLogging")
+    }
+
+    private var debugVerbosity: DebugVerbosity {
+        DebugVerbosity(
+            rawValue: UserDefaults.standard.integer(forKey: "debugVerbosity")
+        ) ?? .normal
     }
     
     private init() {
@@ -101,9 +112,14 @@ actor Logger {
     private func append(
         _ text: String,
         style: LogStyle,
-        level: LogLevel = .user
+        level: LogLevel = .user,
+        verboseOnly: Bool = false
     ) {
         guard level == .user || enableDebugLogging else {
+            return
+        }
+        if verboseOnly,
+           debugVerbosity != .verbose {
             return
         }
         if text.isEmpty { return }
@@ -159,6 +175,15 @@ actor Logger {
                level: .debug)
     }
 
+    func verboseImpl(_ text: String) {
+        append(
+            "[DEBUG] \(text)",
+            style: .debug,
+            level: .debug,
+            verboseOnly: true
+        )
+    }
+
     @inline(__always)
     nonisolated func console(_ text: String) {
         print(text)
@@ -203,6 +228,12 @@ actor Logger {
     nonisolated func debug(_ text: String) {
         Task {
             await self.debugImpl(text)
+        }
+    }
+
+    nonisolated func verbose(_ text: String) {
+        Task {
+            await self.verboseImpl(text)
         }
     }
 

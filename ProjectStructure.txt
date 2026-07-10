@@ -55,9 +55,18 @@
 │   ├── Scanner
 │   │   ├── Core
 │   │   │   ├── BruteForceScanner.swift
-│   │   │   └── RequestExecutor.swift
+│   │   │   ├── PIDScanContext.swift
+│   │   │   ├── PIDScanEngine.swift
+│   │   │   ├── RequestExecutor.swift
+│   │   │   └── RequestOutcomeProcessor.swift
+│   │   ├── FixedCommandStrategy.swift
+│   │   ├── InfoTypeStrategy.swift
+│   │   ├── ModeDiscovery.swift
+│   │   ├── PIDScanStrategy.swift
 │   │   ├── Preflight.swift
-│   │   └── ScanLauncher.swift
+│   │   ├── ScanLauncher.swift
+│   │   ├── ScanPersistence.swift
+│   │   └── ScanStrategy.swift
 │   ├── Search
 │   │   ├── Core
 │   │   │   ├── SearchConfiguration.swift
@@ -81,12 +90,6 @@
 │   ├── Settings
 │   │   └── SettingsView.swift
 │   ├── SplashScreen.swift
-│   ├── Telemetry
-│   │   ├── PIDRange.swift
-│   │   ├── PIDStatistics.swift
-│   │   ├── RequestTelemetry.swift
-│   │   ├── TelemetryAnalyzer.swift
-│   │   └── TelemetryStore.swift
 │   └── Terminal
 │       ├── Components
 │       │   ├── ActionBar.swift
@@ -95,9 +98,9 @@
 │       │   ├── ProgressCard.swift
 │       │   ├── StatusCard.swift
 │       │   ├── TerminalHeader.swift
-│       │   ├── TerminalLog.swift
-│       │   └── TerminalViewModel.swift
-│       └── TerminalView.swift
+│       │   └── TerminalLog.swift
+│       ├── TerminalView.swift
+│       └── TerminalViewModel.swift
 ├── Layout
 │   ├── ContentView.swift
 │   ├── iphoneLayout.swift
@@ -123,12 +126,17 @@
 │   │   ├── ELMResponseAssembler.swift
 │   │   ├── ELMResponseParser.swift
 │   │   ├── ManualCommandSender.swift
-│   │   ├── ModeDiscovery.swift
 │   │   └── OBDMode.swift
-│   └── ShareSheet.swift
+│   ├── ShareSheet.swift
+│   └── Telemetry
+│       ├── PIDRange.swift
+│       ├── PIDStatistics.swift
+│       ├── RequestTelemetry.swift
+│       ├── TelemetryAnalyzer.swift
+│       └── TelemetryStore.swift
 └── Z.Old
     ├── DynamicScanner.swift
     ├── MyContentView.swift
     └── TabView.swift
 
-36 directories, 96 files
+36 directories, 104 files

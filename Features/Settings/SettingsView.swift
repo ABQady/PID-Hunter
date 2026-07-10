@@ -13,6 +13,9 @@ struct SettingsView: View {
     @ObservedObject private var brute = BruteForceScanner.shared
     @AppStorage("enableDebugLogging")
     private var enableDebugLogging = false
+
+    @AppStorage("debugVerbosity")
+    private var debugVerbosity = DebugVerbosity.normal.rawValue
     
     @ObservedObject private var modeDiscovery = ModeDiscovery.shared
 
@@ -258,6 +261,26 @@ struct SettingsView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .padding(.leading, 28)
+                        }
+                    }
+
+                    if enableDebugLogging {
+                        Divider()
+
+                        HStack {
+                            Text("Debug Level")
+                                .font(.title3)
+                                .foregroundStyle(.secondary)
+
+                            Spacer()
+
+                            Picker("Debug Level", selection: $debugVerbosity) {
+                                Text("Normal")
+                                    .tag(DebugVerbosity.normal.rawValue)
+                                Text("Verbose")
+                                    .tag(DebugVerbosity.verbose.rawValue)
+                            }
+                            .pickerStyle(.menu)
                         }
                     }
                 }

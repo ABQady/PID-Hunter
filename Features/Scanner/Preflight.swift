@@ -78,26 +78,8 @@ final class Preflight {
             return false
         }
 
-        do {
-            let protocolResult = try await BluetoothManager.shared.sendAndWait(
-                "ATDP",
-                timeout: Timing.protocolTimeout
-            )
-
-            let protocolText = protocolResult.response.raw.uppercased()
-
-            if protocolText.contains("?") {
-                Logger.shared.warning("⚠️ Unable to identify protocol")
-            } else {
-                Logger.shared.info("Protocol: \(protocolResult.response.raw)")
-            }
-
-        } catch BluetoothManager.BluetoothError.timeout {
-            Logger.shared.error("❌ ELM327 Timeout")
-            return false
-
-        } catch {
-            Logger.shared.error("❌ Failed to communicate with ELM327")
+        guard await ELM327.shared.initializeELM() else {
+            Logger.shared.error("❌ Failed to initialize ELM")
             return false
         }
 

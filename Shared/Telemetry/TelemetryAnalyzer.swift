@@ -65,9 +65,36 @@ final class TelemetryAnalyzer {
         PIDStatistics(
             pid: samples.first!.pid,
             requestCount: samples.count,
+            responseCount: samples.filter {
+                switch $0.classification {
+                case .positive, .negative, .noData:
+                    return true
+                default:
+                    return false
+                }
+            }.count,
+            positiveCount: samples.filter {
+                if case .positive = $0.classification { return true }
+                return false
+            }.count,
+            negativeCount: samples.filter {
+                if case .negative = $0.classification { return true }
+                return false
+            }.count,
+            noDataCount: samples.filter {
+                if case .noData = $0.classification { return true }
+                return false
+            }.count,
+            timeoutCount: samples.filter {
+                if case .timeout = $0.classification { return true }
+                return false
+            }.count,
+            transportErrorCount: samples.filter {
+                if case .adapter = $0.classification { return true }
+                return false
+            }.count,
             averageLatency: averageLatency(for: samples),
             medianLatency: medianLatency(for: samples),
-            successRate: successRate(for: samples),
             firstSeen: samples.map(\.timestamp).min()!,
             lastSeen: samples.map(\.timestamp).max()!
         )

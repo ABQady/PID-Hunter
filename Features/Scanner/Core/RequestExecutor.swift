@@ -102,7 +102,7 @@ final class RequestExecutor {
         timeout: Double
     ) async -> RequestResult {
 
-        Logger.shared.debug("Executing request: \(request)")
+        Logger.shared.debug("Request → \(request)")
 
         guard BluetoothManager.shared.isConnected else {
             return .connectionLost
@@ -115,16 +115,22 @@ final class RequestExecutor {
             )
 
             let searchResult = classifier.classify(result.response)
-            Logger.shared.debug(
-                "Classification: \(String(describing: searchResult))"
-            )
+            Logger.shared.verbose("""
+Request Classification
+REQUEST = \(request)
+TYPE    = \(result.response.type)
+RESULT  = \(searchResult)
+LATENCY = \(String(format: "%.3f", result.latency)) s
+""")
             recordTelemetry(
                 context: context,
                 result: result,
                 classification: searchResult
             )
 
-            Logger.shared.debug("Request succeeded: \(request) | latency=\(result.latency)s")
+            Logger.shared.debug(
+                "Completed → \(request) (\(String(format: "%.3f", result.latency)) s)"
+            )
             return .success(
                 response: result.response,
                 classification: searchResult,
@@ -132,7 +138,7 @@ final class RequestExecutor {
             )
 
         } catch BluetoothManager.BluetoothError.timeout {
-            Logger.shared.debug("Request timed out: \(request)")
+            Logger.shared.debug("Timeout → \(request)")
             return .timeout
 
         } catch {
