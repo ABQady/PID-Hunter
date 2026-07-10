@@ -24,13 +24,21 @@ struct AdaptiveSearchStrategy: SearchStrategy {
         switch result {
         case .positive:
             return .positive
+
         case .negative:
             return .negative
+
         case .noData:
             return .noData
+
         case .timeout:
             return .timeout
-        case .unknown:
+
+        case .unknown,
+             .adapter:
+            return .unknown
+        // If SearchResult gains more cases, map any others to .unknown for exhaustiveness.
+        @unknown default:
             return .unknown
         }
     }

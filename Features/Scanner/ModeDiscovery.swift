@@ -70,7 +70,7 @@ final class ModeDiscovery: ObservableObject {
                 )
             )
             if supported {
-                if response.type == .negative {
+                if case .negative = response.type {
                     Logger.shared.warning(
                         "⚠️ \(mode.title) Negative Response (Supported)"
                     )
@@ -103,14 +103,15 @@ final class ModeDiscovery: ObservableObject {
     ) -> Bool {
 
         // Positive response parsed by the parser.
-        if response.type != .negative,
-           let service = response.service,
-           service == mode.requestService {
+        if case .negative = response.type {
+            // fall through to negative-response handling
+        } else if let service = response.service,
+                  service == mode.requestService {
             return true
         }
 
         // Negative response proving the ECU understood the request.
-        guard response.type == .negative,
+        guard case .negative = response.type,
               let service = response.service else {
             return false
         }

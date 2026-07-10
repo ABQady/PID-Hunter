@@ -19,6 +19,8 @@ struct ProgressCard: View {
     let isCompleted: Bool
     let hasResumePoint: Bool
 
+    let currentMode: OBDMode
+
     private var progress: Double { stats.progressFraction }
     private var currentRequests: Int { stats.requestsSent }
     private var totalRequests: Int { stats.totalRequests }
@@ -39,8 +41,17 @@ struct ProgressCard: View {
     var body: some View {
 
         VStack(alignment: .leading) {
+            HStack {
                 Text("Progress")
                     .font(.headline)
+
+                Spacer()
+
+                Text("Mode: \(currentMode.rawValue)")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
             ProgressView(value: progress)
                 .progressViewStyle(.linear)
                 .frame(maxWidth: .infinity)

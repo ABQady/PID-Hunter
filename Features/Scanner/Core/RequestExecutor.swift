@@ -11,6 +11,7 @@ import Foundation
 enum RequestResult {
     case success(
         response: ELMResponse,
+        classification: SearchResult,
         latency: TimeInterval
     )
     case timeout
@@ -25,35 +26,32 @@ enum SearchResult {
     case negative(ELMResponse)
     case timeout
     case unknown(ELMResponse)
+    case adapter(ELMResponse)
 }
 
 struct ResponseClassifier {
 
     func classify(_ response: ELMResponse) -> SearchResult {
-        let text = response.raw.uppercased()
-
-        if text.contains("NO DATA") {
-            return .noData
-        }
-
+        
         switch response.type {
 
-        case .atResponse:
+        case .positive:
             return .positive(response)
 
         case .negative:
             return .negative(response)
 
-        case .mode01,
-             .mode21,
-             .mode22:
-            return .positive(response)
+        case .noData:
+            return .noData
 
-        case .unknown,
-             .unknownFrame:
-            return .unknown(response)
+        case .atResponse,
+             .searching,
+             .stopped:
+            return .adapter(response)
 
-        default:
+        case .busError,
+             .unableToConnect,
+             .unknown:
             return .unknown(response)
         }
     }
@@ -71,12 +69,6 @@ struct RequestContext {
 
 @MainActor
 final class RequestExecutor {
-
-    // TODO:
-    // - Inject an OBDTransport implementation.
-    // - Record SearchStatistics automatically.
-    // - Support retry policies.
-    // - Support request tracing.
 
     private let classifier = ResponseClassifier()
     private let transport = ELM327.shared
@@ -123,8 +115,9 @@ final class RequestExecutor {
             )
 
             let searchResult = classifier.classify(result.response)
-            Logger.shared.debug("Response classified as: \(searchResult)")
-
+            Logger.shared.debug(
+                "Classification: \(String(describing: searchResult))"
+            )
             recordTelemetry(
                 context: context,
                 result: result,
@@ -134,6 +127,7 @@ final class RequestExecutor {
             Logger.shared.debug("Request succeeded: \(request) | latency=\(result.latency)s")
             return .success(
                 response: result.response,
+                classification: searchResult,
                 latency: result.latency
             )
 
@@ -146,8 +140,24 @@ final class RequestExecutor {
             return .connectionLost
         }
     }
+}
+extension SearchResult {
 
-    func classify(_ response: ELMResponse) -> SearchResult {
-        classifier.classify(response)
+    var shouldPersist: Bool {
+        switch self {
+        case .positive:
+            return true
+        default:
+            return false
+        }
+    }
+
+    var isPositive: Bool {
+        switch self {
+        case .positive:
+            return true
+        default:
+            return false
+        }
     }
 }

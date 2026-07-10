@@ -165,7 +165,8 @@ struct SmartSearchStrategy: SearchStrategy {
 
             positiveHitCount = max(0, positiveHitCount - 1)
 
-        case .unknown:
+        case .unknown,
+             .adapter:
 
             break
         }

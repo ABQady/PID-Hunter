@@ -10,17 +10,20 @@ struct ELMResponse {
     let raw: String
     let type: ELMResponseType
     let header: String?
-    let service: UInt8?
+    var service: UInt8? {
+        switch type {
+        case .positive(let service), .negative(let service):
+            return service
+        default:
+            return nil
+        }
+    }
     let pid: UInt16?
     let payload: [UInt8]
 }
 
-enum ELMResponseType {
 
-    case mode01
-    case mode21
-    case mode22
-    case negative
+enum ELMResponseType {
     case noData
     case stopped
     case busError
@@ -28,24 +31,8 @@ enum ELMResponseType {
     case searching
     case atResponse
     case unknown
-    case unknownFrame
-
-    var requestMode: UInt8? {
-        switch self {
-        case .mode01: return 0x01
-        case .mode21: return 0x21
-        case .mode22: return 0x22
-        default: return nil
-        }
-    }
-
-    var pidBytes: Int {
-        switch self {
-        case .mode22: return 2
-        case .mode01, .mode21: return 1
-        default: return 0
-        }
-    }
+    case positive(service: UInt8)
+    case negative(service: UInt8)
 }
 
 enum ELMResponseParser {
@@ -117,7 +104,6 @@ enum ELMResponseParser {
                     raw: text,
                     type: .atResponse,
                     header: nil,
-                    service: nil,
                     pid: nil,
                     payload: []
                 )
@@ -126,7 +112,6 @@ enum ELMResponseParser {
                 raw: text,
                 type: .unknown,
                 header: nil,
-                service: nil,
                 pid: nil,
                 payload: []
             )
@@ -176,9 +161,8 @@ enum ELMResponseParser {
 
                 return ELMResponse(
                     raw: text,
-                    type: .negative,
+                    type: .negative(service: requestedService),
                     header: header,
-                    service: requestedService,
                     pid: nil,
                     payload: tokens
                         .dropFirst(index + 2)
@@ -195,22 +179,7 @@ enum ELMResponseParser {
             let requestService = responseService - 0x40
             service = requestService
 
-            switch requestService {
-
-            case 0x01:
-                type = .mode01
-
-            case 0x21:
-                type = .mode21
-
-            case 0x22:
-                type = .mode22
-
-            default:
-                // Positive ECU response for a service we don't have
-                // a dedicated parser for yet (03,07,09,23...)
-                type = .unknownFrame
-            }
+            type = .positive(service: requestService)
             
             let pidLength: Int
 
@@ -246,22 +215,14 @@ enum ELMResponseParser {
                 raw: text,
                 type: type,
                 header: header,
-                service: service,
                 pid: pid,
                 payload: payload
             )
         }
         
-        let hasHeader =
-            header != nil ||
-            (tokens.count >= 3 &&
-             tokens[0].allSatisfy(\.isHexDigit) &&
-             tokens[1].allSatisfy(\.isHexDigit) &&
-             tokens[2].allSatisfy(\.isHexDigit))
-
-        type = hasHeader ? .unknownFrame : .unknown
+        type = .unknown
         
-        if type == .unknown {
+        if case .unknown = type {
             let lines = upper
                 .split(whereSeparator: \.isNewline)
                 .map { $0.trimmingCharacters(in: .whitespaces) }
@@ -287,11 +248,18 @@ enum ELMResponseParser {
         }
         
         Logger.shared.debug("Parser → \(type) | Header=\(header ?? "-") | Service=\(service.map { String(format: "%02X", $0) } ?? "-") | PID=\(pid.map { String(format: "%04X", $0) } ?? "-")")
+        // Use pattern matching to set service for final ELMResponse
+        let _: UInt8? = {
+            switch type {
+            case .positive(let s): return s
+            case .negative(let s): return s
+            default: return nil
+            }
+        }()
         return ELMResponse(
             raw: text,
             type: type,
             header: header,
-            service: service,
             pid: pid,
             payload: payload
         )
@@ -299,12 +267,10 @@ enum ELMResponseParser {
 }
 extension ELMResponse {
     var isSuspicious: Bool {
-        switch type {
-        case .mode01, .mode21, .mode22:
+        if case .positive = type {
             return payload.isEmpty
-        default:
-            return false
         }
+        return false
     }
 }
 extension String {

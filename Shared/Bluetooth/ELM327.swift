@@ -88,9 +88,16 @@ final class ELM327: ObservableObject {
         timeout: Duration = .seconds(1)
     ) async throws -> ELMRequestResult {
 
-        try await request(
+        guard let firstPID = mode.pidRange?.lowerBound else {
+            return try await request(
+                command: mode.runtimeRequests.first ?? mode.rawValue,
+                timeout: timeout
+            )
+        }
+
+        return try await request(
             mode: mode,
-            pid: UInt16(mode.defaultStartPID),
+            pid: UInt16(firstPID),
             timeout: timeout
         )
     }
@@ -119,12 +126,11 @@ final class ELM327: ObservableObject {
         mode: OBDMode,
         pid: UInt16
     ) -> String {
-
-        mode.rawValue +
-        String(
-            format: "%0\(mode.pidDigits)X",
-            pid
-        )
+        let width = mode.scanCapability.pidWidth
+        if width > 0 {
+            return mode.rawValue + String(format: "%0\(width)X", pid)
+        }
+        return mode.rawValue
     }
 
     // MARK: - ECU Identification

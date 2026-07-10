@@ -6,6 +6,36 @@
 
 import Foundation
 
+enum RequestFormat {
+    case pid8
+    case pid16
+    case singleCommand
+    case infoSequence
+}
+
+/// ScanCapability describes the request format used for a given OBD mode.
+enum ScanCapability {
+    case pid8
+    case pid16
+    case fixedCommand
+    case infoType
+    
+    var pidWidth: Int {
+        switch self {
+        case .pid8: return 2
+        case .pid16: return 4
+        case .fixedCommand, .infoType: return 0
+        }
+    }
+}
+
+/// ScanStrategyType describes the execution algorithm used for scanning.
+enum ScanStrategyType {
+    case pid
+    case fixedCommand
+    case infoType
+}
+
 enum OBDMode: String, CaseIterable, Identifiable {
 
     case mode01 = "01"
@@ -23,16 +53,6 @@ enum OBDMode: String, CaseIterable, Identifiable {
     case mode22 = "22"
     case mode23 = "23"
 
-    static let supportedScanModes: [OBDMode] = [
-        .mode01,
-        .mode21,
-        .mode22
-    ]
-
-    private static let extendedPIDModes: Set<OBDMode> = [
-        .mode22,
-        .mode23
-    ]
 
     var id: String {
         rawValue
@@ -82,20 +102,73 @@ enum OBDMode: String, CaseIterable, Identifiable {
         }
     }
 
-    var supportsBruteForce: Bool {
-        Self.supportedScanModes.contains(self)
+    var scanCapability: ScanCapability {
+        switch self {
+        case .mode01:
+            return .pid8
+
+        case .mode21, .mode22, .mode23:
+            return .pid16
+
+        case .mode09:
+            return .infoType
+
+        case .mode02,
+             .mode03,
+             .mode04,
+             .mode05,
+             .mode06,
+             .mode07,
+             .mode08,
+             .mode0A:
+            return .fixedCommand
+        }
     }
 
-    var pidDigits: Int {
-        Self.extendedPIDModes.contains(self) ? 4 : 2
+    @inline(__always)
+    var supportsPIDRange: Bool {
+        switch scanCapability {
+        case .pid8, .pid16:
+            return true
+        case .fixedCommand, .infoType:
+            return false
+        }
     }
 
-    var defaultStartPID: Int {
-        Self.extendedPIDModes.contains(self) ? 0x0000 : 0x00
+    /// The scan strategy describes the execution algorithm for scanning this mode.
+    var scanStrategy: ScanStrategyType {
+        switch scanCapability {
+        case .pid8, .pid16:
+            return .pid
+        case .fixedCommand:
+            return .fixedCommand
+        case .infoType:
+            return .infoType
+        }
     }
 
-    var defaultEndPID: Int {
-        Self.extendedPIDModes.contains(self) ? 0xFFFF : 0xFF
+    var requestFormat: RequestFormat {
+        switch scanCapability {
+        case .pid8:
+            return .pid8
+        case .pid16:
+            return .pid16
+        case .fixedCommand:
+            return .singleCommand
+        case .infoType:
+            return .infoSequence
+        }
+    }
+
+    var pidRange: ClosedRange<Int>? {
+        switch scanCapability {
+        case .pid8:
+            return 0x00...0xFF
+        case .pid16:
+            return 0x0000...0xFFFF
+        case .fixedCommand, .infoType:
+            return nil
+        }
     }
 
     @inline(__always)
@@ -135,6 +208,7 @@ enum OBDMode: String, CaseIterable, Identifiable {
         .mode23
     ]
     
+    /// Initial command used by Mode Discovery to determine whether this service is supported.
     var discoveryCommand: String {
         switch self {
 
@@ -158,5 +232,24 @@ enum OBDMode: String, CaseIterable, Identifiable {
             return rawValue
         }
     }
-}
 
+    var runtimeRequests: [String] {
+        switch requestFormat {
+        case .pid8, .pid16:
+            return [discoveryCommand]
+
+        case .singleCommand:
+            return [rawValue]
+
+        case .infoSequence:
+            return [
+                rawValue + "00",
+                rawValue + "02",
+                rawValue + "04",
+                rawValue + "06",
+                rawValue + "08",
+                rawValue + "0A"
+            ]
+        }
+    }
+}

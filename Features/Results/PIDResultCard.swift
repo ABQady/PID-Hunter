@@ -19,7 +19,16 @@ struct PIDResultCard: View {
             return max(tokens.count - 2, 0)
         }
 
-        let headerBytes = mode.pidDigits == 4 ? 3 : 2
+        let headerBytes: Int
+
+        switch mode.scanCapability {
+        case .pid16:
+            headerBytes = 3
+        case .pid8:
+            headerBytes = 2
+        case .fixedCommand, .infoType:
+            headerBytes = 2
+        }
         return max(tokens.count - headerBytes, 0)
     }
 

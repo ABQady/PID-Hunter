@@ -16,8 +16,15 @@ struct ContentView: View {
     @State private var delay = 100.0
 
     private func applyModeDefaults(_ mode: OBDMode) {
-        startPID = String(format: "%0\(mode.pidDigits)X", mode.defaultStartPID)
-        endPID = String(format: "%0\(mode.pidDigits)X", mode.defaultEndPID)
+        let width = mode.scanCapability.pidWidth
+
+        if width > 0, let range = mode.pidRange {
+            startPID = String(format: "%0\(width)X", range.lowerBound)
+            endPID = String(format: "%0\(width)X", range.upperBound)
+        } else {
+            startPID = ""
+            endPID = ""
+        }
     }
 
     var body: some View {

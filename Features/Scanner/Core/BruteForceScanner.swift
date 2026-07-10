@@ -23,6 +23,22 @@ struct ScanStatus {
     var isScanning = false
 }
 
+struct ScanConfiguration {
+    let mode: OBDMode
+    let pidWidth: Int
+    let startPID: Int
+    let endPID: Int
+    let header: String
+}
+
+@MainActor
+final class ScanSession {
+    var results: [ScanResult] = []
+    var seen = Set<String>()
+    var currentPID = 0
+    var searchStrategy: any SearchStrategy = SequentialSearchStrategy(start: 0, end: 0)
+}
+
 @MainActor
 final class BruteForceScanner: ObservableObject {
     static let shared = BruteForceScanner()
@@ -31,7 +47,7 @@ final class BruteForceScanner: ObservableObject {
     @Published var delayMs: Double = 100
     @Published private(set) var scanStatus = ScanStatus()
     @Published private(set) var statistics = SearchStatistics()
-    @Published private(set) var hasResumePoint = false
+
     @AppStorage("selectedSearchEngine")
     private var selectedSearchEngine = SearchEngineType.sequential.rawValue
 
@@ -49,14 +65,7 @@ final class BruteForceScanner: ObservableObject {
     private var maxConsecutiveTimeouts = 15
     
     private var shouldStop = false
-    private var seen = Set<String>()
-    
-    private var currentHeaderIndex = 0
-    private var currentPID = 0
-    private var searchStrategy: any SearchStrategy = SequentialSearchStrategy(
-        start: 0,
-        end: 0
-    )
+    private let session = ScanSession()
     
     private let requestExecutor = RequestExecutor()
     @inline(__always)
@@ -69,35 +78,154 @@ final class BruteForceScanner: ObservableObject {
         try? await Task.sleep(for: .milliseconds(Int(delayMs)))
     }
     
+    private let persistence = ScanPersistence.shared
+
+    var hasResumePoint: Bool {
+        persistence.hasResumePoint
+    }
     
-    private func saveResumePoint(force: Bool = false) {
-        if !force && (currentPID % 10 != 0) {
+    private func scanRuntimeRequests(
+        mode: OBDMode,
+        context: ScanLauncher.ScanContext
+    ) async {
+        guard !scanStatus.isScanning else {
+            Logger.shared.warning("Scan already running")
             return
         }
 
-        let defaults = UserDefaults.standard
-        defaults.set(currentHeaderIndex, forKey: "resumeHeader")
-        defaults.set(currentPID, forKey: "resumePID")
+        beginScan()
 
-        let requestStats = statistics
-        
-        defaults.set(requestStats.requestsSent, forKey: "resumeRequestsSent")
-        defaults.set(requestStats.successfulResponses + requestStats.failedResponses, forKey: "resumeResponses")
-        let stats = ScanStatistics.shared
-        defaults.set(stats.positiveResponses, forKey: "resumePositiveResponses")
-        defaults.set(stats.negativeResponses, forKey: "resumeNegativeResponses")
-        defaults.set(stats.timeouts, forKey: "resumeTimeouts")
-        defaults.set(stats.startedAt, forKey: "resumeStartedAt")
+        defer {
+            if !shouldStop {
+                stats.complete()
+                finishScan(completed: true)
+            }
+        }
 
-        refreshResumeAvailability()
+        guard await ensureConnection(header: context.header) else {
+            finishScan(completed: false)
+            return
+        }
+
+        ELM327.shared.setHeader(context.header)
+        try? await Task.sleep(for: .milliseconds(50))
+
+        stats.begin(totalRequests: mode.runtimeRequests.count)
+
+        var completed = 0
+
+        for request in mode.runtimeRequests {
+            if shouldStop { break }
+
+            await scanSingleRequest(
+                mode: mode,
+                request: request,
+                context: context
+            )
+
+            completed += 1
+            updateProgress(done: completed, total: mode.runtimeRequests.count)
+        }
+
+        if shouldStop {
+            finishScan(completed: false)
+        }
+    }
+
+    private func scanSingleRequest(
+        mode: OBDMode,
+        request: String,
+        context: ScanLauncher.ScanContext
+    ) async {
+        guard await ensureConnection(header: context.header) else {
+            return
+        }
+
+        ELM327.shared.setHeader(context.header)
+        try? await Task.sleep(for: .milliseconds(50))
+
+        scanStatus.currentRequest = request
+
+        var consecutiveTimeouts = 0
+
+        let requestContext = RequestContext(
+            mode: mode,
+            pid: 0,
+            header: context.header,
+            retryCount: 0,
+            searchEngine: .sequential
+        )
+
+        switch await requestExecutor.execute(
+            request: request,
+            context: requestContext,
+            timeout: requestTimeout
+        ) {
+        case .success(let response, let classification, let latency):
+            processSuccessfulResponse(
+                response,
+                classification: classification,
+                latency: latency,
+                header: context.header,
+                mode: mode,
+                request: request,
+                pid: 0,
+                consecutiveTimeouts: &consecutiveTimeouts
+            )
+            await applyDelay()
+
+        case .timeout:
+            await processTimeout(
+                pid: 0,
+                consecutiveTimeouts: &consecutiveTimeouts
+            )
+            if shouldStop {
+                finishScan(completed: false)
+                return
+            }
+
+        case .connectionLost:
+            guard await handleConnectionLoss(
+                header: context.header,
+                consecutiveTimeouts: &consecutiveTimeouts
+            ) else {
+                finishScan(completed: false)
+                return
+            }
+        }
+    }
+
+    // MARK: - Runtime Request Scans
+
+    func scanFixedCommands(
+        mode: OBDMode,
+        context: ScanLauncher.ScanContext
+    ) async {
+        await scanRuntimeRequests(
+            mode: mode,
+            context: context
+        )
+    }
+
+    func scanInfoType(
+        mode: OBDMode,
+        context: ScanLauncher.ScanContext
+    ) async {
+        await scanRuntimeRequests(
+            mode: mode,
+            context: context
+        )
     }
     
     private func beginScan() {
         shouldStop = false
         statistics.reset()
-        // Fresh scans start from zero discoveries. Resume restores this in loadResults().
-        scanStatus.successCount = hasResumePoint ? results.count : 0
-        refreshResumeAvailability()
+
+        scanStatus.successCount =
+            persistence.hasResumePoint
+            ? session.results.count
+            : 0
+        
         scanStatus.isScanning = true
         scanStatus.progress = 0
         scanStatus.currentRequest = ""
@@ -113,65 +241,22 @@ final class BruteForceScanner: ObservableObject {
 
         if completed {
             scanStatus.progress = 1.0
-            clearResumePoint()
+            persistence.clearResumePoint(session: session)
+            // persistence.refreshResumeAvailability() // Removed as ScanPersistence refreshes internally
         } else {
-            saveResumePoint(force: true)
-            saveResults()
+            persistence.saveResumePoint(
+                session: session,
+                statistics: statistics,
+                scanStatistics: stats,
+                force: true
+            )
+            persistence.saveResults(session.results)
+            // persistence.refreshResumeAvailability() // Removed as ScanPersistence refreshes internally
         }
 
         shouldStop = false
     }
-
-    private func loadResumePoint() {
-        let defaults = UserDefaults.standard
-
-        currentHeaderIndex = defaults.object(forKey: "resumeHeader") as? Int ?? 0
-        currentPID = defaults.object(forKey: "resumePID") as? Int ?? 0
-
-        let stats = ScanStatistics.shared
-        stats.positiveResponses = defaults.object(forKey: "resumePositiveResponses") as? Int ?? 0
-        stats.negativeResponses = defaults.object(forKey: "resumeNegativeResponses") as? Int ?? 0
-        stats.timeouts = defaults.object(forKey: "resumeTimeouts") as? Int ?? 0
-        stats.startedAt = defaults.object(forKey: "resumeStartedAt") as? Date
-        stats.finishedAt = nil
-
-        // Restore totalRequests if already known
-        // (no reset of ScanStatistics here)
-
-        refreshResumeAvailability()
-    }
-
-    private func refreshResumeAvailability() {
-        let defaults = UserDefaults.standard
-        hasResumePoint = defaults.object(forKey: "resumeHeader") != nil &&
-                         defaults.object(forKey: "resumePID") != nil
-    }
     
-    private func saveResults() {
-        if let data = try? JSONEncoder().encode(results) {
-            UserDefaults.standard.set(data, forKey: "savedResults")
-        }
-    }
-
-    private func loadResults() {
-        guard
-            let data = UserDefaults.standard.data(forKey: "savedResults"),
-            let saved = try? JSONDecoder().decode([ScanResult].self, from: data)
-        else {
-            return
-        }
-
-        results = saved
-        results.sort {
-            ($0.header, $0.request) < ($1.header, $1.request)
-        }
-        seen = Set(saved.map { "\($0.header)|\($0.request)|\($0.response)" })
-        scanStatus.successCount = saved.count
-        let total = ScanStatistics.shared.totalRequests
-        scanStatus.progress = total > 0
-            ? Double(statistics.requestsSent) / Double(total)
-            : 0
-    }
     func startFresh() {
 
         shouldStop = false
@@ -179,45 +264,31 @@ final class BruteForceScanner: ObservableObject {
         scanStatus.currentRequest = ""
         scanStatus.isScanning = false
         
-        currentHeaderIndex = 0
-        currentPID = 0
-        searchStrategy.reset()
+        session.currentPID = 0
+        session.searchStrategy.reset()
 
-        results.removeAll()
-        seen.removeAll()
+        session.results.removeAll()
+        session.seen.removeAll()
+        results = session.results
         scanStatus.successCount = 0
 
-        UserDefaults.standard.removeObject(forKey: "savedResults")
+        persistence.clearSavedResults()
         Logger.shared.clear()
         statistics.reset()
         ScanStatistics.shared.reset()
-        clearResumePoint()
-    }
-    
-    func clearResumePoint() {
-        currentHeaderIndex = 0
-        currentPID = 0
-        searchStrategy.reset()
-        let defaults = UserDefaults.standard
-        defaults.removeObject(forKey: "resumeHeader")
-        defaults.removeObject(forKey: "resumePID")
-        defaults.removeObject(forKey: "resumeRequestsSent")
-        defaults.removeObject(forKey: "resumeResponses")
-        defaults.removeObject(forKey: "resumePositiveResponses")
-        defaults.removeObject(forKey: "resumeNegativeResponses")
-        defaults.removeObject(forKey: "resumeTimeouts")
-        defaults.removeObject(forKey: "resumeStartedAt")
-        refreshResumeAvailability()
+        persistence.clearResumePoint(session: session)
+        scanStatus.currentRequest = ""
     }
     
     // hasResumePoint is now a published property, no longer a computed property.
     
     private func clearResults() {
-        results.removeAll()
-        seen.removeAll()
+        session.results.removeAll()
+        session.seen.removeAll()
+        results = session.results
         scanStatus.successCount = 0
 
-        UserDefaults.standard.removeObject(forKey: "savedResults")
+        persistence.clearSavedResults()
     }
 
     private func ensureConnection(header: String) async -> Bool {
@@ -273,18 +344,25 @@ final class BruteForceScanner: ObservableObject {
     }
 
     private func updateProgress(done: Int, total: Int) {
-        saveResumePoint()
         scanStatus.progress = Double(done) / Double(total)
         stats.totalRequests = total
+        
+        persistence.saveResumePoint(
+            session: session,
+            statistics: statistics,
+            scanStatistics: stats
+        )
     }
 
     private func makeRequest(mode: OBDMode, pid: String) -> String {
         mode.rawValue + pid
     }
 
+    // MARK: - Response Processing
     // TODO: Move statistics updates into a dedicated ScanResultProcessor once learning and analytics are fully separated.
     private func processSuccessfulResponse(
         _ response: ELMResponse,
+        classification: SearchResult,
         latency: Double,
         header: String,
         mode: OBDMode,
@@ -292,58 +370,83 @@ final class BruteForceScanner: ObservableObject {
         pid: UInt16,
         consecutiveTimeouts: inout Int
     ) {
-        let searchResult = requestExecutor.classify(response)
-        switch response.type {
-            case .mode01, .mode21, .mode22:
-                stats.recordPositiveResponse()
-            case .negative:
-                stats.recordNegativeResponse()
-            case .noData:
-                stats.recordNoData()
-            case .busError:
-                stats.recordBusError()
-            default:
-                break
-            }
+        let outcome = RequestOutcomeProcessor.shared.handleSuccess(
+            response: response,
+            classification: classification,
+            latency: latency,
+            header: header,
+            mode: mode,
+            request: request,
+            pid: pid,
+            consecutiveTimeouts: &consecutiveTimeouts
+        )
 
-        statistics.record(result: searchResult, latency: latency)
+        guard case .success(let processing) = outcome else {
+            assertionFailure("Unexpected RequestOutcome from handleSuccess")
+            return
+        }
 
-        resetTimeoutCounter(&consecutiveTimeouts)
+        statistics.record(
+            result: classification,
+            latency: latency
+        )
+
+        guard processing.shouldPersist else {
+            return
+        }
+
+        let pidString = mode.scanCapability.pidWidth == 2
+            ? String(format: "%02X", pid)
+            : String(format: "%04X", pid)
 
         if appendResponse(
             header: header,
             mode: mode.rawValue,
-            pid: String(request.dropFirst(2)),
+            pid: pid == 0 ? "" : pidString,
             request: request,
             response: response.raw
         ) {
             statistics.recordDiscovery()
         }
 
-        searchStrategy.registerResult(
+        session.searchStrategy.registerResult(
             pid: pid,
-            result: searchResult,
+            result: classification,
             latency: latency
         )
     }
 
+    // MARK: - Timeout Processing
     private func processTimeout(
         pid: UInt16,
         consecutiveTimeouts: inout Int
     ) async {
-        statistics.record(result: .timeout, latency: requestTimeout)
-        stats.recordTimeout()
-        
-        consecutiveTimeouts += 1
+        let requestOutcome = RequestOutcomeProcessor.shared.handleTimeout(
+            timeout: requestTimeout,
+            consecutiveTimeouts: &consecutiveTimeouts,
+            maxConsecutiveTimeouts: maxConsecutiveTimeouts
+        )
 
-        if consecutiveTimeouts >= maxConsecutiveTimeouts {
-            Logger.shared.error("Consecutive timeout limit (\(maxConsecutiveTimeouts)) reached. Stopping scan.")
+        guard case .timeout(let outcome) = requestOutcome else {
+            assertionFailure("Unexpected RequestOutcome from handleTimeout")
+            return
+        }
+
+        statistics.record(
+            result: .timeout,
+            latency: requestTimeout
+        )
+
+        if outcome.shouldAbortScan {
+            Logger.shared.error(
+                "Consecutive timeout limit (\(maxConsecutiveTimeouts)) reached. Stopping scan."
+            )
             stats.complete()
             shouldStop = true
             return
         }
 
-        searchStrategy.registerResult(
+        session.searchStrategy.registerResult(
             pid: pid,
             result: .timeout,
             latency: requestTimeout
@@ -352,11 +455,6 @@ final class BruteForceScanner: ObservableObject {
         await handleTimeout()
     }
     
-    var headers = [
-        "81F111",
-        "80F111",
-        "82F111"
-    ]
     
     func stop() {
         shouldStop = true
@@ -364,58 +462,62 @@ final class BruteForceScanner: ObservableObject {
         stats.complete()
     }
     
-    // MARK: - Generic Scan Implementation
+    // MARK: - Search Strategy Preparation
     private func prepareStrategy(startPID: Int, endPID: Int, resumePID: Int) {
-        searchStrategy = SearchEngineFactory.make(
+        session.searchStrategy = SearchEngineFactory.make(
             type: searchEngine,
             start: UInt16(startPID),
             end: UInt16(endPID)
         )
-        currentPID = resumePID
+        session.currentPID = resumePID
         Logger.shared.info("Search Engine = \(searchEngine)")
         Logger.shared.info(
-            "Scanner using \(searchStrategy.engineType)"
+            "Scanner using \(session.searchStrategy.engineType)"
         )
-        while let pid = searchStrategy.nextPID(), pid < UInt16(resumePID) {
+        while let pid = session.searchStrategy.nextPID(), pid < UInt16(resumePID) {
             // Advance the strategy until it reaches the resume PID.
         }
     }
 
-    private func scan(
-        mode: OBDMode,
-        startPID: Int? = nil,
-        endPID: Int? = nil
-    ) async {
-        let pidWidth = mode.pidDigits
-        let startPID = startPID ?? mode.defaultStartPID
-        let endPID = endPID ?? mode.defaultEndPID
-        
-        // searchStrategy is now created per-header below.
-        
-        loadResumePoint()
-        if currentHeaderIndex >= headers.count {
-            currentHeaderIndex = 0
-        }
-        // Clamp currentPID to range
-        if currentPID < startPID || currentPID > endPID {
-            currentPID = startPID
-        }
-        // searchStrategy.seek(to: UInt16(currentPID)) is now handled per-header.
+    // MARK: - PID Scan Engine
+    
+    private func restoreScanState(
+        configuration: ScanConfiguration
+    ) {
+        persistence.loadResumePoint(
+            into: session,
+            scanStatistics: stats
+        )
 
-        // Clear or load results as needed
-        if currentHeaderIndex == 0 && currentPID == startPID {
+        if session.currentPID < configuration.startPID ||
+            session.currentPID > configuration.endPID {
+            session.currentPID = configuration.startPID
+        }
+
+        if session.currentPID == configuration.startPID {
             clearResults()
         } else {
-            loadResults()
+            session.results = persistence.loadResults()
+            results = session.results
         }
-        // Synchronize the UI counter with the actual in-memory results.
-        scanStatus.successCount = results.count
 
-        let count = endPID - startPID + 1
-        let total = headers.count * count
-        var done = currentHeaderIndex * count + (currentPID - startPID)
+        scanStatus.successCount = session.results.count
+    }
+    
+    private func prepareStatistics(
+        configuration: ScanConfiguration
+    ) -> (total: Int, done: Int) {
 
-        if currentHeaderIndex == 0 && currentPID == startPID {
+        let count =
+            configuration.endPID -
+            configuration.startPID + 1
+
+        let total = count
+
+        let done =
+            session.currentPID - configuration.startPID
+
+        if session.currentPID == configuration.startPID {
             stats.begin(totalRequests: total)
         } else {
             stats.totalRequests = total
@@ -424,93 +526,98 @@ final class BruteForceScanner: ObservableObject {
             }
         }
 
+        return (total, done)
+    }
+    
+
+    // This method contains the complete PID brute-force execution pipeline.
+    // It is intentionally isolated so it can be moved into PIDScanEngine
+    // during the next refactoring step without changing behavior.
+    private func executePIDScan(
+        configuration: ScanConfiguration
+    ) async {
+        
         beginScan()
+        
+        restoreScanState(configuration: configuration)
+        
+        prepareStrategy(
+            startPID: configuration.startPID,
+            endPID: configuration.endPID,
+            resumePID: session.currentPID
+        )
+
+        ELM327.shared.setHeader(configuration.header)
+        try? await Task.sleep(for: .milliseconds(50))
+        
+
+        var progress = prepareStatistics(configuration: configuration)
+
+
         var consecutiveTimeouts = 0
-        let resumeHeader = UserDefaults.standard.object(forKey: "resumeHeader") as? Int
 
-        while currentHeaderIndex < headers.count {
-            let header = headers[currentHeaderIndex]
-            // Recreate the strategy for each header so scanning restarts from the
-            // appropriate PID on every ECU header.
-            let resumePID = (currentHeaderIndex == resumeHeader)
-                ? currentPID
-                : startPID
+        await scanHeader(
+            header: configuration.header,
+            configuration: configuration,
+            total: progress.total,
+            done: &progress.done,
+            consecutiveTimeouts: &consecutiveTimeouts
+        )
 
-            prepareStrategy(
-                startPID: startPID,
-                endPID: endPID,
-                resumePID: resumePID
-            )
-
-            ELM327.shared.setHeader(header)
-            try? await Task.sleep(for: .milliseconds(50))
-
-            await scanHeader(
-                header: header,
-                mode: mode,
-                pidWidth: pidWidth,
-                total: total,
-                done: &done,
-                consecutiveTimeouts: &consecutiveTimeouts
-            )
-
-            if shouldStop {
-                finishScan(completed: false)
-                return
-            }
-
-            currentHeaderIndex += 1
-            currentPID = startPID
-            searchStrategy.reset()
-            saveResumePoint()
+        if shouldStop {
+            finishScan(completed: false)
+            return
         }
+
         stats.complete()
         finishScan(completed: true)
     }
 
-    // MARK: - Header Scan
+    
+    /////////////////////////////////////////////
+    // MARK: - PID Header Execution
     private func scanHeader(
         header: String,
-        mode: OBDMode,
-        pidWidth: Int,
+        configuration: ScanConfiguration,
         total: Int,
         done: inout Int,
         consecutiveTimeouts: inout Int
     ) async {
-        while let nextPID = searchStrategy.nextPID() {
-            currentPID = Int(nextPID)
+        while let nextPID = session.searchStrategy.nextPID() {
+            session.currentPID = Int(nextPID)
             if shouldStop {
                 return
             }
 
-            let pid = String(format: "%0*X", pidWidth, Int(nextPID))
-            let req = makeRequest(mode: mode, pid: pid)
+            let pid = String(format: "%0*X", configuration.pidWidth, Int(nextPID))
+            let req = makeRequest(mode: configuration.mode, pid: pid)
             scanStatus.currentRequest = req
+
             if !BluetoothManager.shared.isConnected {
                 guard await ensureConnection(header: header) else {
                     continue
                 }
-                continue
             }
 
             let context = RequestContext(
-                mode: mode,
+                mode: configuration.mode,
                 pid: nextPID,
                 header: header,
                 retryCount: 0,
-                searchEngine: searchStrategy.engineType
+                searchEngine: session.searchStrategy.engineType
             )
             switch await requestExecutor.execute(
                 request: req,
                 context: context,
                 timeout: requestTimeout
             ) {
-            case .success(let response, let latency):
+            case .success(let response, let classification, let latency):
                 processSuccessfulResponse(
                     response,
+                    classification: classification,
                     latency: latency,
                     header: header,
-                    mode: mode,
+                    mode: configuration.mode,
                     request: req,
                     pid: nextPID,
                     consecutiveTimeouts: &consecutiveTimeouts
@@ -532,7 +639,7 @@ final class BruteForceScanner: ObservableObject {
             }
             done += 1
             updateProgress(done: done, total: total)
-            
+
             if shouldStop {
                 scanStatus.currentRequest = ""
                 return
@@ -542,14 +649,33 @@ final class BruteForceScanner: ObservableObject {
 
     func scan(
         mode: OBDMode,
+        header: String,
         startPID: UInt16? = nil,
         endPID: UInt16? = nil
     ) {
+        guard !scanStatus.isScanning else {
+            Logger.shared.warning("Scan already running")
+            return
+        }
+        shouldStop = false
+        session.searchStrategy.reset()
+        
+        let configuration = ScanConfiguration(
+            mode: mode,
+            pidWidth: mode.scanCapability.pidWidth,
+            startPID: startPID.map(Int.init) ?? mode.pidRange?.lowerBound ?? 0,
+            endPID: endPID.map(Int.init) ?? mode.pidRange?.upperBound ?? 0,
+            header: header
+        )
+
+        Logger.shared.info("Search engine: \(searchEngine)")
+        Logger.shared.info(
+            "Starting \(mode.rawValue) scan using header \(header)"
+        )
+        
         Task {
-            await scan(
-                mode: mode,
-                startPID: startPID.map(Int.init),
-                endPID: endPID.map(Int.init)
+            await executePIDScan(
+                configuration: configuration
             )
         }
     }
@@ -564,9 +690,23 @@ final class BruteForceScanner: ObservableObject {
     ) -> Bool {
         let parsed = ELMResponseParser.parse(response)
 
-        guard parsed.type == .mode01 ||
-              parsed.type == .mode21 ||
-              parsed.type == .mode22 else {
+        let isSupportedResponse: Bool
+
+        switch parsed.type {
+        case .positive:
+            isSupportedResponse = true
+        case .negative,
+             .noData,
+             .busError,
+             .unknown,
+             .atResponse,
+             .searching,
+             .stopped,
+             .unableToConnect:
+            isSupportedResponse = false
+        }
+
+        guard isSupportedResponse else {
             return false
         }
 
@@ -583,18 +723,23 @@ final class BruteForceScanner: ObservableObject {
         )
         let key = result.id
 
-        guard !seen.contains(key) else {
+        guard !session.seen.contains(key) else {
             return false
         }
 
-        seen.insert(key)
+        session.seen.insert(key)
 
-        results.append(result)
-        results.sort { ($0.header, $0.request) < ($1.header, $1.request) }
+        session.results.append(result)
+        session.results.sort {
+            ($0.header, $0.mode, $0.request) <
+            ($1.header, $1.mode, $1.request)
+        }
+        results = session.results
 
-        scanStatus.successCount += 1
+        scanStatus.successCount = session.results.count
         Logger.shared.success("✅ Found PID \(request) -> \(response)")
-        saveResults()
+        // Persist only after the in-memory model and published UI state are synchronized.
+        persistence.saveResults(session.results)
         return true
     }
     

@@ -322,6 +322,13 @@ final class BluetoothManager: NSObject, ObservableObject {
         ECUInfo.shared.status = "Connected"
         ECUInfo.shared.lastConnected = Date()
     }
+    
+    @MainActor
+    func resetTrafficCounters() {
+        txCount = 0
+        rxCount = 0
+    }
+    
 }
 // ======================================================
 // MARK: CBCentralManagerDelegate
@@ -539,18 +546,17 @@ extension BluetoothManager:
 
     private func analyzeResponse(_ response: ELMResponse) {
         switch response.type {
-
-        case .mode01, .mode21, .mode22:
+        case .positive:
             retriedProtocol = false
-            status = response.type.status
-            Logger.shared.success("🎉 \(response.type.displayName) Supported")
+            status = .connected
+            Logger.shared.success("🎉 Service 0x\(String(format: "%02X", response.service ?? 0)) Supported")
             ECUInfo.shared.addService(response.service)
             ScanStatistics.shared.positiveResponses += 1
 
         case .negative:
             ScanStatistics.shared.negativeResponses += 1
             Logger.shared.warning("Negative Response")
-            
+
         case .noData:
             Logger.shared.error("❌ NO DATA")
             ScanStatistics.shared.noData += 1
@@ -566,7 +572,9 @@ extension BluetoothManager:
         case .searching:
             status = .searching
 
-        default:
+        case .stopped,
+             .atResponse,
+             .unknown:
             break
         }
     }
@@ -662,7 +670,7 @@ extension BluetoothManager:
                 // Do not complete a pending request on informational or unparsed
                 // responses. Some ELM327 adapters prepend BUS INIT / SEARCHING
                 // before the actual ECU frame.
-                if response.type == .unknown {
+                if case .unknown = response.type {
                     let compact = response.raw
                         .uppercased()
                         .replacingOccurrences(of: " ", with: "")
@@ -724,43 +732,21 @@ extension BluetoothManager:
     }
 }
 
-extension ELMResponseType {
 
+extension ELMResponseType {
     var canResumeContinuation: Bool {
         switch self {
-        case .mode01,
-             .mode21,
-             .mode22,
+        case .positive,
              .negative,
              .noData,
              .atResponse,
              .unknown,
-             .unknownFrame,
-             .unableToConnect:
+             .unableToConnect,
+             .busError:
             return true
-        default:
+        case .searching,
+             .stopped:
             return false
-        }
-    }
-}
-
-extension ELMResponseType {
-
-    var displayName: String {
-        switch self {
-        case .mode01: return "Mode 01"
-        case .mode21: return "Mode 21"
-        case .mode22: return "Mode 22"
-        default: return "Response"
-        }
-    }
-
-    var status: ECUStatus {
-        switch self {
-        case .mode01: return .mode01OK
-        case .mode21: return .mode21OK
-        case .mode22: return .mode22OK
-        default: return .connected
         }
     }
 }

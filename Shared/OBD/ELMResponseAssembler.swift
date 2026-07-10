@@ -73,9 +73,7 @@ final class ELMResponseAssembler {
             case .unknown:
                 Logger.shared.debug("Assembler ignored non-ECU text: \(trimmed)")
                 continue
-            case .unknownFrame:
-                Logger.shared.debug("Assembler accepted UNKNOWN ECU frame: \(trimmed)")
-                responses.append(parsed)
+
             default:
                 Logger.shared.debug(
                     "Assembler accepted \(parsed.type): \(trimmed)"

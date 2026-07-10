@@ -77,29 +77,29 @@ struct TerminalView: View {
         }
     }
     
-    private var launchScan: () -> Void {
-        {
-            ScanLauncher.shared.start(
-                bt: bt,
-                brute: brute,
-                stats: stats,
-                mode: selectedMode,
-                header: header,
-                startPID: startPID,
-                endPID: endPID,
-                cleanHeader: cleanHeader
-            ) {
+    private func launchScan() {
+        ScanLauncher.shared.start(
+            bt: bt,
+            brute: brute,
+            stats: stats,
+            mode: selectedMode,
+            startPID: startPID,
+            endPID: endPID,
+            cleanHeader: cleanHeader,
+            onPrepareUI: {
                 shouldAutoScroll = true
                 programmaticScroll = true
-
-                Task { @MainActor in
-                    try? await Task.sleep(for: .milliseconds(100))
-                    programmaticScroll = false
-                }
             }
+        )
+        
+        shouldAutoScroll = true
+        programmaticScroll = true
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(100))
+            programmaticScroll = false
         }
     }
-    
     
     private var terminalTab: some View {
         ScrollView(.vertical, showsIndicators: true) {
@@ -120,7 +120,8 @@ struct TerminalView: View {
                         averageLatency: brute.statistics.averageLatency,
                         isScanning: brute.scanStatus.isScanning,
                         isCompleted: stats.finishedAt != nil,
-                        hasResumePoint: brute.hasResumePoint
+                        hasResumePoint: brute.hasResumePoint,
+                        currentMode: selectedMode
                     )
                     
                     ActionBar(
@@ -130,13 +131,19 @@ struct TerminalView: View {
                         hasLines: !viewModel.lines.isEmpty,
                         isCompact: isCompact,
                         onClear: {
+                            bt.resetTrafficCounters()
                             viewModel.clear()
                         },
-                        onScan: launchScan,
+                        onScan: {
+                            bt.resetTrafficCounters()
+                            launchScan()
+                        },
                         onStop: {
                             brute.stop()
                         },
-                        onResume: launchScan,
+                        onResume: {
+                            launchScan()
+                        },
                         onTestECU: {
                             Task {
                                 await ECUTester.shared.run(header: cleanHeader)

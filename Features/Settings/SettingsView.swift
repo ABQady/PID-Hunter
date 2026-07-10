@@ -25,7 +25,7 @@ struct SettingsView: View {
         if !modeDiscovery.supportedModes.isEmpty {
             return modeDiscovery.supportedModes
         }
-        return OBDMode.supportedScanModes
+        return OBDMode.discoveryModes
     }
 
     @AppStorage("requestTimeout")
@@ -163,7 +163,7 @@ struct SettingsView: View {
                     .tint(.orange)
                     Divider()
 
-                    if selectedMode.pidDigits == 4 {
+                    if selectedMode.pidRange != nil {
                         Text("PID Range")
                             .font(.title3)
                             .foregroundStyle(.secondary)
@@ -174,7 +174,10 @@ struct SettingsView: View {
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
 
-                                TextField("%0\(selectedMode.pidDigits)X", text: $startPID)
+                                TextField(
+                                    "%0\(selectedMode.scanCapability.pidWidth)X",
+                                    text: $startPID
+                                )
                                     .textInputAutocapitalization(.characters)
                                     .autocorrectionDisabled()
                             }
@@ -184,7 +187,10 @@ struct SettingsView: View {
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
 
-                                TextField("%0\(selectedMode.pidDigits)X", text: $endPID)
+                                TextField(
+                                    "%0\(selectedMode.scanCapability.pidWidth)X",
+                                    text: $endPID
+                                )
                                     .textInputAutocapitalization(.characters)
                                     .autocorrectionDisabled()
                             }
@@ -318,7 +324,7 @@ struct SettingsView: View {
                 )
                 
 //                //MARK: Statistics
-//                
+//
 //                VStack(alignment: .leading, spacing: 12) {
 //
 //                    Text("Search Statistics")
@@ -398,6 +404,15 @@ struct SettingsView: View {
 
                 if !availableModes.contains(selectedMode) {
                     selectedMode = first
+                }
+                // Synchronize PID fields with new API
+                if let range = first.pidRange {
+                    let width = first.scanCapability.pidWidth
+                    startPID = String(format: "%0\(width)X", range.lowerBound)
+                    endPID = String(format: "%0\(width)X", range.upperBound)
+                } else {
+                    startPID = ""
+                    endPID = ""
                 }
             }
             .padding()
