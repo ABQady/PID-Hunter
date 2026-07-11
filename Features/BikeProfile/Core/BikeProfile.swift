@@ -9,12 +9,13 @@ import Foundation
 struct BikeProfile: Codable, Hashable {
 
     static let currentSchemaVersion = 1
-    let fingerprint: BikeFingerprint
+    var fingerprint: BikeFingerprint
     var schemaVersion: Int = BikeProfile.currentSchemaVersion
     var displayName: String
     var firstSeen: Date = .now
     var lastSeen: Date = .now
     var discoveries: [DiscoveryKey: BikeKnowledge]
+    var headerDiscoveries: [HeaderDiscoveryResult] = []
 
     mutating func touch() {
         lastSeen = .now
@@ -28,11 +29,13 @@ struct BikeProfile: Codable, Hashable {
     init(
         fingerprint: BikeFingerprint,
         displayName: String? = nil,
-        discoveries: [DiscoveryKey: BikeKnowledge] = [:]
+        discoveries: [DiscoveryKey: BikeKnowledge] = [:],
+        headerDiscoveries: [HeaderDiscoveryResult] = []
     ) {
         self.fingerprint = fingerprint
         self.displayName = displayName ?? fingerprint.header
         self.discoveries = discoveries
+        self.headerDiscoveries = headerDiscoveries
         self.lastSeen = self.firstSeen
     }
 }

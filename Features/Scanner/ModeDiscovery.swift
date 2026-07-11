@@ -121,7 +121,7 @@ final class ModeDiscovery: ObservableObject {
 
     private init() { }
 
-    func discover() async {
+    func discover(on header: String? = nil) async {
 
         supportedModes.removeAll()
         discoveryLog.removeAll()
@@ -140,10 +140,16 @@ final class ModeDiscovery: ObservableObject {
 
         Logger.shared.info("🔎 Starting mode discovery")
 
+        if let header {
+            Logger.shared.info("Using header: \(header)")
+            elm.send("ATSH\(header)")
+        }
+
         for mode in OBDMode.discoveryModes {
             await probe(mode)
         }
         finishDiscovery()
+        return
     }
 
     func handleSuccess(_ mode: OBDMode) {

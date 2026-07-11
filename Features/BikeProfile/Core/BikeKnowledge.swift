@@ -20,6 +20,8 @@ struct BikeKnowledge: Codable, Hashable {
     
     var averageLatency: TimeInterval = 0
 
+    var notes: [String] = []
+
 }
 
 enum DiscoveryClassification: String, Codable {
@@ -67,6 +69,9 @@ extension BikeKnowledge {
         lastSeen = .now
         lastResponse = response
         classification = DiscoveryClassification(from: responseType)
+        if !notes.contains(response) {
+            notes.append(response)
+        }
 
         averageLatency =
             (averageLatency * Double(hitCount - 1) + latency)

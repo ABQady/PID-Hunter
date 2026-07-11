@@ -9,7 +9,6 @@ struct ResultsView: View {
     @ObservedObject private var brute = BruteForceScanner.shared
     @ObservedObject private var ecu = ECUInfo.shared
     @ObservedObject private var stats = ScanStatistics.shared
-    @ObservedObject private var discovery = ModeDiscovery.shared
     
     @State private var search = ""
     @State private var ecuExpanded = true
@@ -128,46 +127,6 @@ struct ResultsView: View {
 //                            .frame(maxWidth: .infinity, alignment: .leading)
 //                        }
 //                    }
-                    if !discovery.supportedModes.isEmpty {
-
-                        Divider()
-                            .padding(.vertical, 8)
-
-                        Text("Supported Modes")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-
-                        LazyVGrid(
-                            columns: [
-                                GridItem(.adaptive(minimum: 80))
-                            ],
-                            alignment: .leading,
-                            spacing: 8
-                        ) {
-                            ForEach(
-                                discovery.supportedModes
-                                    .sorted(by: { $0.requestService < $1.requestService })
-                            ) { mode in
-                                Text("\(mode.rawValue) • \(mode.title)")
-                                    .font(
-                                        .system(
-                                            .caption,
-                                            design: .monospaced
-                                        ).bold()
-                                    )
-                                    .foregroundStyle(.blue)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 5)
-                                    .background(.blue.opacity(0.15))
-                                    .overlay {
-                                        Capsule()
-                                            .stroke(.blue.opacity(0.35))
-                                    }
-                                    .clipShape(Capsule())
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
                 }
                 .font(.headline)
                 .padding()

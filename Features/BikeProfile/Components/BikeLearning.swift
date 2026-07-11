@@ -30,6 +30,42 @@ struct BikeLearningCard: View {
                     Label("Bike Learning", systemImage: "brain.head.profile")
                         .font(.headline)
 
+                    if let profile,
+                       !profile.headerDiscoveries.isEmpty {
+
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Discovered Communication Paths")
+                                .font(.subheadline.weight(.semibold))
+
+                            ForEach(profile.headerDiscoveries, id: \.header) { discovery in
+                                VStack(alignment: .leading, spacing: 6) {
+                                    HStack {
+                                        Text(discovery.header)
+                                            .font(.headline.monospaced())
+
+                                        Spacer()
+
+                                        Text("\(discovery.supportedModes.count) modes")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+
+                                    Text(discovery.supportedModes
+                                        .map { $0.title }
+                                        .joined(separator: " • "))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(10)
+                                .background(.thinMaterial)
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            }
+                        }
+
+                        Divider()
+                    }
+
                     LazyVGrid(
                         columns: [
                             GridItem(.flexible()),

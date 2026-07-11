@@ -11,6 +11,7 @@ struct BikeFingerprint: Codable, Hashable {
     let protocolName: String
     let ecuIdentifier: String?
     let calibrationIdentifier: String?
+    var supportedHeaders: [String] = []
 
     private func normalized(_ value: String?) -> String {
         guard let value else {
@@ -34,4 +35,5 @@ struct BikeFingerprint: Codable, Hashable {
         .replacingOccurrences(of: "/", with: "-")
         .replacingOccurrences(of: ":", with: "-")
     }
+    
 }

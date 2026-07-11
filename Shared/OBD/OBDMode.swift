@@ -36,7 +36,7 @@ enum ScanStrategyType {
     case infoType
 }
 
-enum OBDMode: String, CaseIterable, Identifiable {
+enum OBDMode: String, CaseIterable, Identifiable, Codable {
 
     case mode01 = "01"
     case mode02 = "02"

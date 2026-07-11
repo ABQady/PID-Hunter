@@ -181,4 +181,28 @@ final class BikeProfileManager {
         Logger.shared.info("🧹 Bike Profile Reset")
         currentProfile = nil
     }
+    
+    func replaceHeaderDiscoveries(with discoveries: [HeaderDiscoveryResult]) {
+        guard var profile = currentProfile else {
+            return
+        }
+
+        var fingerprint = profile.fingerprint
+        fingerprint.supportedHeaders = discoveries
+            .map(\.header)
+            .sorted()
+
+        profile.fingerprint = fingerprint
+        profile.headerDiscoveries = discoveries
+        profile.touch()
+
+        currentProfile = profile
+
+        isDirty = true
+        autosaveIfNeeded()
+    }
+
+    var headerDiscoveries: [HeaderDiscoveryResult] {
+        currentProfile?.headerDiscoveries ?? []
+    }
 }

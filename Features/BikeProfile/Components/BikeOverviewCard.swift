@@ -60,6 +60,37 @@ struct BikeOverviewCard: View {
 
                     Divider()
 
+                    if !profile.headerDiscoveries.isEmpty {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Communication Profile")
+                                .font(.headline)
+
+                            ForEach(profile.headerDiscoveries, id: \.header) { discovery in
+                                VStack(alignment: .leading, spacing: 6) {
+                                    HStack {
+                                        Image(systemName: "point.3.connected.trianglepath.dotted")
+                                            .foregroundStyle(.blue)
+
+                                        Text(discovery.header)
+                                            .font(.headline.monospaced())
+                                    }
+
+                                    Text(discovery.supportedModes
+                                        .map { $0.title }
+                                        .joined(separator: " • "))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                .padding(10)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(.thinMaterial)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                            }
+                        }
+
+                        Divider()
+                    }
+
                     HStack {
 
                         stat(
