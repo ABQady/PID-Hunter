@@ -1,4 +1,3 @@
-
 //
 //  BikeProfileStore.swift
 //  PID Hunter
@@ -53,10 +52,29 @@ final class BikeProfileStore {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
-        let profile = try decoder.decode(BikeProfile.self, from: data)
+        let decodedProfile = try decoder.decode(BikeProfile.self, from: data)
+
+        var profile = decodedProfile
+
+        if profile.discoveries.keys.contains(where: \.isLegacy) {
+            var migrated: [DiscoveryKey: BikeKnowledge] = [:]
+
+            for (key, value) in profile.discoveries {
+                let newKey = DiscoveryKey(
+                    header: key.isLegacy ? profile.fingerprint.header : key.header,
+                    mode: key.mode,
+                    request: key.request
+                )
+                migrated[newKey] = value
+            }
+
+            profile.discoveries = migrated
+
+            try? save(profile)
+            Logger.shared.info("🔄 Migrated Bike Profile discovery keys")
+        }
 
         Logger.shared.info("📂 Loaded Bike Profile")
-
         return profile
     }
 
@@ -93,15 +111,36 @@ final class BikeProfileStore {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
-        return try urls
-            .map { url -> BikeProfile in
-                let data = try Data(contentsOf: url)
-                return try decoder.decode(BikeProfile.self, from: data)
+        var profiles: [BikeProfile] = []
+        for url in urls {
+            let data = try Data(contentsOf: url)
+            let decodedProfile = try decoder.decode(BikeProfile.self, from: data)
+
+            var profile = decodedProfile
+
+            if profile.discoveries.keys.contains(where: \.isLegacy) {
+                var migrated: [DiscoveryKey: BikeKnowledge] = [:]
+
+                for (key, value) in profile.discoveries {
+                    let newKey = DiscoveryKey(
+                        header: key.isLegacy ? profile.fingerprint.header : key.header,
+                        mode: key.mode,
+                        request: key.request
+                    )
+                    migrated[newKey] = value
+                }
+
+                profile.discoveries = migrated
+
+                try? save(profile)
+                Logger.shared.info("🔄 Migrated Bike Profile discovery keys")
             }
-            .sorted { (lhs: BikeProfile, rhs: BikeProfile) in
-                lhs.lastSeen > rhs.lastSeen
-            }
+
+            profiles.append(profile)
+        }
+        return profiles.sorted { $0.lastSeen > $1.lastSeen }
     }
+
     func save(_ profile: BikeProfile) throws {
         _ = profilesDirectory
         let url = fileURL(for: profile.fingerprint)
@@ -119,4 +158,3 @@ final class BikeProfileStore {
         try fileManager.removeItem(at: fileURL(for: fingerprint))
     }
 }
-

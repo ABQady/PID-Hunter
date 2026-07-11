@@ -35,9 +35,9 @@ final class FixedCommandStrategy: ScanStrategy {
             return
         }
 
-        guard mode.requestFormat == .singleCommand else {
+        guard mode.scanCapability == .fixedCommand else {
             Logger.shared.error(
-                "Invalid request format \(mode.requestFormat) for \(mode.title)"
+                "Invalid scan capability \(mode.scanCapability) for \(mode.title)"
             )
             return
         }

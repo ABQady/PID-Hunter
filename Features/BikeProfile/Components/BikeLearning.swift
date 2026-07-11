@@ -12,6 +12,9 @@ struct BikeLearningCard: View {
     @Environment(BikeProfileManager.self)
     private var manager
 
+    @State
+    private var selectedClassification: DiscoveryClassification?
+
     private var profile: BikeProfile? {
         manager.displayedProfile
     }
@@ -34,7 +37,7 @@ struct BikeLearningCard: View {
                        !profile.headerDiscoveries.isEmpty {
 
                         VStack(alignment: .leading, spacing: 10) {
-                            Text("Discovered Communication Paths")
+                            Text("Discovered Headers")
                                 .font(.subheadline.weight(.semibold))
 
                             ForEach(profile.headerDiscoveries, id: \.header) { discovery in
@@ -75,7 +78,7 @@ struct BikeLearningCard: View {
                     ) {
 
                         statistic(
-                            title: "Known Requests",
+                            title: "Tried Requests",
                             value: "\(analytics.totalRequests)",
                             icon: "externaldrive.badge.checkmark",
                             tint: .blue
@@ -99,33 +102,53 @@ struct BikeLearningCard: View {
                         spacing: 14
                     ) {
 
-                        statistic(
-                            title: "Positive",
-                            value: "\(analytics.positiveRequests)",
-                            icon: "checkmark.circle.fill",
-                            tint: .green
-                        )
+                        Button {
+                            selectedClassification = .positive
+                        } label: {
+                            statistic(
+                                title: "Valid PIDs",
+                                value: "\(analytics.positiveRequests)",
+                                icon: "checkmark.circle.fill",
+                                tint: .green
+                            )
+                        }
+                        .buttonStyle(.plain)
 
-                        statistic(
-                            title: "Negative",
-                            value: "\(analytics.negativeRequests)",
-                            icon: "xmark.circle.fill",
-                            tint: .red
-                        )
+                        Button {
+                            selectedClassification = .negative
+                        } label: {
+                            statistic(
+                                title: "Negative",
+                                value: "\(analytics.negativeRequests)",
+                                icon: "xmark.circle.fill",
+                                tint: .red
+                            )
+                        }
+                        .buttonStyle(.plain)
 
-                        statistic(
-                            title: "No Data",
-                            value: "\(analytics.noDataRequests)",
-                            icon: "minus.circle.fill",
-                            tint: .orange
-                        )
+                        Button {
+                            selectedClassification = .noData
+                        } label: {
+                            statistic(
+                                title: "No Data",
+                                value: "\(analytics.noDataRequests)",
+                                icon: "minus.circle.fill",
+                                tint: .orange
+                            )
+                        }
+                        .buttonStyle(.plain)
 
-                        statistic(
-                            title: "Unknown",
-                            value: "\(analytics.unknownRequests)",
-                            icon: "questionmark.circle.fill",
-                            tint: .gray
-                        )
+                        Button {
+                            selectedClassification = .unknown
+                        } label: {
+                            statistic(
+                                title: "Unknown",
+                                value: "\(analytics.unknownRequests)",
+                                icon: "questionmark.circle.fill",
+                                tint: .gray
+                            )
+                        }
+                        .buttonStyle(.plain)
                     }
 
                     Divider()
@@ -152,6 +175,14 @@ struct BikeLearningCard: View {
                     "No Learning Data",
                     systemImage: "brain.head.profile",
                     description: Text("Connect to an ECU once or select a saved bike profile.")
+                )
+            }
+        }
+        .sheet(item: $selectedClassification) { classification in
+            if let profile {
+                StoredKnowledgeSheet(
+                    profile: profile,
+                    classification: classification
                 )
             }
         }

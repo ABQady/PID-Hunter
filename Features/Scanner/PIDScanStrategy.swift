@@ -21,7 +21,7 @@ final class PIDScanStrategy: ScanStrategy {
         context: ScanLauncher.ScanContext
     ) async {
 
-        guard mode.requestFormat == .pid8 || mode.requestFormat == .pid16 else {
+        guard mode.supportsPIDRange else {
             Logger.shared.warning("\(mode.title) does not support PID scanning.")
             return
         }

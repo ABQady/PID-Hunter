@@ -35,9 +35,9 @@ final class InfoTypeStrategy: ScanStrategy {
             return
         }
 
-        guard mode.requestFormat == .infoSequence else {
+        guard mode.scanCapability == .infoType else {
             Logger.shared.error(
-                "Invalid request format \(mode.requestFormat) for \(mode.title)"
+                "Invalid scan capability \(mode.scanCapability) for \(mode.title)"
             )
             return
         }

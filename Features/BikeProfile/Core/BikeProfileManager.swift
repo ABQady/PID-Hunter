@@ -159,7 +159,11 @@ final class BikeProfileManager {
         request: String
     ) -> BikeKnowledge? {
         currentProfile?.discoveries[
-            DiscoveryKey(mode: mode, request: request)
+            DiscoveryKey(
+                header: currentProfile?.fingerprint.header ?? "",
+                mode: mode,
+                request: request
+            )
         ]
     }
 
@@ -168,7 +172,11 @@ final class BikeProfileManager {
         request: String
     ) -> Bool {
         currentProfile?.discoveries[
-            DiscoveryKey(mode: mode, request: request)
+            DiscoveryKey(
+                header: currentProfile?.fingerprint.header ?? "",
+                mode: mode,
+                request: request
+            )
         ] != nil
     }
 
@@ -180,12 +188,13 @@ final class BikeProfileManager {
         response: ELMResponse,
         latency: TimeInterval
     ) {
+        guard var profile = currentProfile else { return }
+
         let key = DiscoveryKey(
+            header: profile.fingerprint.header,
             mode: mode,
             request: request
         )
-
-        guard var profile = currentProfile else { return }
 
         if var existing = profile.discoveries[key] {
             existing.record(

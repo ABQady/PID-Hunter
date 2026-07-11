@@ -39,3 +39,18 @@ struct BikeProfile: Codable, Hashable {
         self.lastSeen = self.firstSeen
     }
 }
+extension BikeProfile {
+
+    func discoveries(
+        classifiedAs classification: DiscoveryClassification
+    ) -> [(DiscoveryKey, BikeKnowledge)] {
+
+        discoveries
+            .filter {
+                $0.value.classification == classification
+            }
+            .sorted {
+                $0.key.request < $1.key.request
+            }
+    }
+}
