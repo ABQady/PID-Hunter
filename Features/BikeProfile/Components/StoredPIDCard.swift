@@ -11,12 +11,20 @@ struct StoredPIDCard: View {
 
     let key: DiscoveryKey
     let knowledge: BikeKnowledge
+    var isSelectionMode = false
+    var isSelected = false
+    var onTap: (() -> Void)? = nil
 
     var body: some View {
 
         VStack(alignment: .leading, spacing: 12) {
             // Header row: request and classification capsule
             HStack(alignment: .top) {
+                if isSelectionMode {
+                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                        .font(.title3)
+                }
                 Text(key.request)
                     .font(.headline.monospaced())
                 Spacer()
@@ -122,9 +130,28 @@ struct StoredPIDCard: View {
             }
         }
         .padding()
-        .background(.regularMaterial)
+        .background {
+            if isSelected {
+                Color.accentColor.opacity(0.12)
+            } else {
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(.regularMaterial)
+            }
+        }
         .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.quaternary))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .strokeBorder(
+                    isSelected ? Color.accentColor : Color.gray.opacity(0.25),
+                    lineWidth: isSelected ? 2 : 1
+                )
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if isSelectionMode {
+                onTap?()
+            }
+        }
 
     }
 
