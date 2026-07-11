@@ -20,6 +20,8 @@ struct BikeProfileCard: View {
     @AppStorage("bikeProfileCardExpanded") private var rememberExpanded = false
 
     @State private var exportedURL: URL?
+    @State private var showDeleteConfirmation = false
+    @State private var isRenaming = false
 
     let context: BikeProfileContext?
 
@@ -31,24 +33,6 @@ struct BikeProfileCard: View {
         DisclosureGroup(isExpanded: $rememberExpanded) {
             if let profile, let analytics {
                 VStack(alignment: .leading, spacing: 12) {
-                    TextField("Bike Name", text: $displayName)
-                        .textFieldStyle(.roundedBorder)
-                        .focused($nameFieldFocused)
-                        .onAppear {
-                            displayName = profile.displayName
-                        }
-                        .onSubmit {
-                            manager.rename(displayName)
-                        }
-                    Text("Give this motorcycle a friendly name. The fingerprint is still used internally.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    if manager.isDirty {
-                        Label("Unsaved changes", systemImage: "exclamationmark.circle.fill")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
-                    }
-
                     infoRow("Header", profile.fingerprint.header)
                     infoRow("Protocol", profile.fingerprint.protocolName)
                     infoRow("VIN", profile.fingerprint.decodedVIN ?? "-")
@@ -71,6 +55,34 @@ struct BikeProfileCard: View {
 
                     HStack {
                         Button {
+                            manager.createProfileFromCurrent(named: displayName.isEmpty ? nil : displayName)
+                        } label: {
+                            Label("New", systemImage: "plus")
+                                .font(.caption)
+                                .frame(maxWidth: .infinity)
+                        }
+
+                        Button {
+                            displayName = profile.displayName
+                            isRenaming = true
+                            DispatchQueue.main.async {
+                                nameFieldFocused = true
+                            }
+                        } label: {
+                            Label("Rename", systemImage: "pencil")
+                                .font(.caption)
+                                .frame(maxWidth: .infinity)
+                        }
+
+                        Button(role: .destructive) {
+                            showDeleteConfirmation = true
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                                .font(.caption)
+                                .frame(maxWidth: .infinity)
+                        }
+
+                        Button {
                             do {
                                 exportedURL = try Exporter.export(profile)
                             } catch {
@@ -78,9 +90,37 @@ struct BikeProfileCard: View {
                             }
                         } label: {
                             Label("Export", systemImage: "square.and.arrow.up")
+                                .font(.caption)
+                                .frame(maxWidth: .infinity)
                         }
                     }
                     .buttonStyle(.borderless)
+                    
+                    if isRenaming {
+                        TextField("Bike Name", text: $displayName)
+                            .textFieldStyle(.roundedBorder)
+                            .focused($nameFieldFocused)
+                            .onSubmit {
+                                manager.renameSelectedProfile(to: displayName)
+                                isRenaming = false
+                                nameFieldFocused = false
+                            }
+                            .onChange(of: nameFieldFocused) { _, focused in
+                                if !focused {
+                                    isRenaming = false
+                                }
+                            }
+
+                        Text("Give this motorcycle a friendly name. The fingerprint is still used internally.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    if manager.isDirty {
+                        Label("Unsaved changes", systemImage: "exclamationmark.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                    
 
                     HStack {
                         Label(
@@ -143,6 +183,21 @@ struct BikeProfileCard: View {
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .onAppear {
             manager.reloadProfiles()
+        }
+        .confirmationDialog(
+            "Delete Bike Profile?",
+            isPresented: $showDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                if let profile {
+                    manager.deleteProfile(profile)
+                }
+            }
+
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Are you sure you want to delete \(profile?.displayName ?? "this bike profile")? This action cannot be undone.")
         }
         .sheet(isPresented: Binding(
             get: { exportedURL != nil },
