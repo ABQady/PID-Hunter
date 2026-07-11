@@ -52,8 +52,7 @@ final class HeaderDiscovery {
                 case .positive, .negative:
                     Logger.shared.info("Discovered header: \(header)")
                     Logger.shared.info("Running mode discovery on \(header)...")
-                    await ModeDiscovery.shared.discover(on: header)
-                    let modes = await ModeDiscovery.shared.supportedModes
+                    let modes = await ModeDiscovery.shared.discover(on: header)
                     let modeNames = modes.map { $0.title }.joined(separator: ", ")
                     Logger.shared.info("Header \(header) supports: \(modeNames)")
                     discoveries.append(
@@ -71,6 +70,14 @@ final class HeaderDiscovery {
                 Logger.shared.debug("Header discovery failed for \(header): \(error.localizedDescription)")
             }
         }
+        
+        if !discoveries.isEmpty {
+            await  BikeProfileManager.shared.updateHeaderDiscoveries(discoveries)
+        }
+        
+        Logger.shared.info(
+            "💾 Persisted \(discoveries.count) header discoveries."
+        )
 
         Logger.shared.info(
             "Header discovery complete. Found \(discoveries.count) supported headers."

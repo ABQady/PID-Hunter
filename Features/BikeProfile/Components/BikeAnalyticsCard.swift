@@ -94,7 +94,7 @@ struct BikeAnalyticsCard: View {
                 ContentUnavailableView(
                     "No Analytics",
                     systemImage: "chart.xyaxis.line",
-                    description: Text("Connect to a motorcycle to generate analytics.")
+                    description: Text("Connect to an ECU once or select a saved bike profile.")
                 )
             }
         }

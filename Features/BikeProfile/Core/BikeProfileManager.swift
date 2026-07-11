@@ -14,7 +14,16 @@ final class BikeProfileManager {
 
     static let shared = BikeProfileManager()
 
-    private(set) var currentProfile: BikeProfile?
+    private(set) var currentProfile: BikeProfile? {
+        didSet {
+            Logger.shared.warning(
+                "BikeProfile: \(oldValue?.displayName ?? "nil") -> \(currentProfile?.displayName ?? "nil")"
+            )
+        }
+    }
+
+    private(set) var selectedProfile: BikeProfile?
+    private(set) var availableProfiles: [BikeProfile] = []
 
     private let store = BikeProfileStore.shared
 
@@ -23,8 +32,12 @@ final class BikeProfileManager {
 
     private init() {}
 
+    var displayedProfile: BikeProfile? {
+        currentProfile ?? selectedProfile
+    }
+
     var context: BikeProfileContext? {
-        guard let profile = currentProfile else {
+        guard let profile = displayedProfile else {
             return nil
         }
 
@@ -33,7 +46,37 @@ final class BikeProfileManager {
             analytics: BikeAnalytics(profile: profile)
         )
     }
+
+    func reloadProfiles() {
+        do {
+            availableProfiles = try store.loadAll()
+
+            if selectedProfile == nil {
+                selectedProfile = availableProfiles.first
+            }
+        } catch {
+            Logger.shared.error("❌ Failed to load Bike Profiles: \(error.localizedDescription)")
+            availableProfiles = []
+        }
+    }
+
+    func selectProfile(_ profile: BikeProfile) {
+        selectedProfile = profile
+    }
     
+    // Helper to generate a default display name based on fingerprint
+    private func defaultDisplayName(for fingerprint: BikeFingerprint) -> String {
+        if let vin = fingerprint.decodedVIN {
+            return vin
+        }
+
+        if let calibration = fingerprint.decodedCalibrationID {
+            return calibration
+        }
+
+        return fingerprint.header
+    }
+
     // MARK: - Lifecycle
 
     @discardableResult
@@ -44,8 +87,10 @@ final class BikeProfileManager {
                 reset()
             }
             currentProfile = try store.loadOrCreate(for: fingerprint)
+            selectedProfile = currentProfile
+            reloadProfiles()
             if currentProfile?.displayName.isEmpty == true {
-                currentProfile?.rename(to: fingerprint.header)
+                currentProfile?.rename(to: defaultDisplayName(for: fingerprint))
             }
             isDirty = false
             lastSaveDate = Date()
@@ -99,6 +144,10 @@ final class BikeProfileManager {
 
         profile.rename(to: trimmed)
         currentProfile = profile
+        selectedProfile = profile
+        if let index = availableProfiles.firstIndex(where: { $0.fingerprint.id == profile.fingerprint.id }) {
+            availableProfiles[index] = profile
+        }
         isDirty = true
         autosaveIfNeeded()
     }
@@ -180,29 +229,31 @@ final class BikeProfileManager {
         lastSaveDate = .distantPast
         Logger.shared.info("🧹 Bike Profile Reset")
         currentProfile = nil
+        // Keep selectedProfile so the UI can continue browsing the last loaded bike while offline.
+        reloadProfiles()
     }
     
-    func replaceHeaderDiscoveries(with discoveries: [HeaderDiscoveryResult]) {
+    var headerDiscoveries: [HeaderDiscoveryResult] {
+        currentProfile?.headerDiscoveries ?? []
+    }
+    
+    func updateHeaderDiscoveries(_ discoveries: [HeaderDiscoveryResult]) {
         guard var profile = currentProfile else {
+            Logger.shared.warning("No active Bike Profile to update.")
             return
         }
 
-        var fingerprint = profile.fingerprint
-        fingerprint.supportedHeaders = discoveries
-            .map(\.header)
-            .sorted()
-
-        profile.fingerprint = fingerprint
-        profile.headerDiscoveries = discoveries
-        profile.touch()
-
+        if !discoveries.isEmpty {
+            profile.headerDiscoveries = discoveries
+        }
         currentProfile = profile
+        selectedProfile = profile
 
-        isDirty = true
-        autosaveIfNeeded()
-    }
-
-    var headerDiscoveries: [HeaderDiscoveryResult] {
-        currentProfile?.headerDiscoveries ?? []
+        do {
+            try store.save(profile)
+            Logger.shared.info("✅ Saved \(discoveries.count) header discoveries.")
+        } catch {
+            Logger.shared.error("❌ Failed to save header discoveries: \(error.localizedDescription)")
+        }
     }
 }

@@ -74,8 +74,8 @@ final class ECUInfo: ObservableObject {
         BikeFingerprint(
             header: header,
             protocolName: protocolName,
-            ecuIdentifier: normalized(ecuIdentifier),
-            calibrationIdentifier: normalized(calibrationIdentifier)
+            vinHex: normalized(ecuIdentifier),
+            calibrationHex: normalized(calibrationIdentifier)
         )
     }
     

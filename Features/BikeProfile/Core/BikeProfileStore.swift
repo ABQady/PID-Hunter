@@ -80,6 +80,28 @@ final class BikeProfileStore {
         return profile
     }
 
+    func loadAll() throws -> [BikeProfile] {
+        _ = profilesDirectory
+
+        let urls = try fileManager.contentsOfDirectory(
+            at: profilesDirectory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )
+        .filter { $0.pathExtension.lowercased() == "json" }
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        return try urls
+            .map { url -> BikeProfile in
+                let data = try Data(contentsOf: url)
+                return try decoder.decode(BikeProfile.self, from: data)
+            }
+            .sorted { (lhs: BikeProfile, rhs: BikeProfile) in
+                lhs.lastSeen > rhs.lastSeen
+            }
+    }
     func save(_ profile: BikeProfile) throws {
         _ = profilesDirectory
         let url = fileURL(for: profile.fingerprint)

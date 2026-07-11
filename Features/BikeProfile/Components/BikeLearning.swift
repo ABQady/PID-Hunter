@@ -13,7 +13,7 @@ struct BikeLearningCard: View {
     private var manager
 
     private var profile: BikeProfile? {
-        manager.currentProfile
+        manager.displayedProfile
     }
 
     private var analytics: BikeAnalytics? {
@@ -151,7 +151,7 @@ struct BikeLearningCard: View {
                 ContentUnavailableView(
                     "No Learning Data",
                     systemImage: "brain.head.profile",
-                    description: Text("Run a scan to start building your bike knowledge.")
+                    description: Text("Connect to an ECU once or select a saved bike profile.")
                 )
             }
         }

@@ -12,8 +12,10 @@ struct BikeOverviewCard: View {
     @Environment(BikeProfileManager.self)
     private var manager
 
+    @ObservedObject var bt: BluetoothManager = .shared
+
     private var profile: BikeProfile? {
-        manager.currentProfile
+        manager.displayedProfile
     }
 
     private var analytics: BikeAnalytics? {
@@ -44,12 +46,11 @@ struct BikeOverviewCard: View {
                                 .foregroundStyle(.secondary)
 
                             HStack(spacing: 6) {
-
                                 Circle()
-                                    .fill(.green)
+                                    .fill(bt.isConnected ? .green : .red)
                                     .frame(width: 8, height: 8)
 
-                                Text("Connected")
+                                Text(bt.isConnected ? "Connected" : "Disconnected")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -62,7 +63,7 @@ struct BikeOverviewCard: View {
 
                     if !profile.headerDiscoveries.isEmpty {
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("Communication Profile")
+                            Text("Supported Headers")
                                 .font(.headline)
 
                             ForEach(profile.headerDiscoveries, id: \.header) { discovery in
@@ -87,6 +88,10 @@ struct BikeOverviewCard: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                             }
                         }
+                        .onAppear {
+                            Logger.shared.debug("Header Discoveries: \(profile.headerDiscoveries.count)")
+                        }
+                        
 
                         Divider()
                     }
@@ -122,10 +127,10 @@ struct BikeOverviewCard: View {
             } else {
 
                 ContentUnavailableView(
-                    "No Bike Connected",
+                    "No Bike Profile",
                     systemImage: "motorcycle",
                     description: Text(
-                        "Connect to an ECU to build a Bike Profile."
+                        "Connect to an ECU once or select a saved bike profile."
                     )
                 )
             }

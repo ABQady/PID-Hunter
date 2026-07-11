@@ -121,13 +121,13 @@ final class ModeDiscovery: ObservableObject {
 
     private init() { }
 
-    func discover(on header: String? = nil) async {
+    func discover(on header: String? = nil) async -> [OBDMode] {
 
         supportedModes.removeAll()
         discoveryLog.removeAll()
         
         guard !isRunning else {
-            return
+            return supportedModes
         }
 
         isRunning = true
@@ -149,7 +149,7 @@ final class ModeDiscovery: ObservableObject {
             await probe(mode)
         }
         finishDiscovery()
-        return
+        return supportedModes
     }
 
     func handleSuccess(_ mode: OBDMode) {

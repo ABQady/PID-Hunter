@@ -26,6 +26,7 @@ struct BikeProfileCard: View {
     var body: some View {
         let profile = context?.profile
         let analytics = context?.analytics
+        let isConnected = BluetoothManager.shared.isConnected
 
         DisclosureGroup(isExpanded: $rememberExpanded) {
             if let profile, let analytics {
@@ -50,8 +51,8 @@ struct BikeProfileCard: View {
 
                     infoRow("Header", profile.fingerprint.header)
                     infoRow("Protocol", profile.fingerprint.protocolName)
-                    infoRow("VIN", profile.fingerprint.ecuIdentifier ?? "-")
-                    infoRow("Calibration", profile.fingerprint.calibrationIdentifier ?? "-")
+                    infoRow("VIN", profile.fingerprint.decodedVIN ?? "-")
+                    infoRow("Calibration", profile.fingerprint.decodedCalibrationID ?? "-")
 
                     Divider()
 
@@ -111,18 +112,38 @@ struct BikeProfileCard: View {
                 Image(systemName: "motorcycle")
                 Text("Bike Profile")
                 Spacer()
-
-                Text(profile?.displayName ?? "No Bike Connected")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                if isConnected {
+                    Text(manager.displayedProfile?.displayName ?? "No Bike Profile")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                } else {
+                    Picker("", selection: Binding(
+                        get: { manager.displayedProfile?.fingerprint.id ?? "" },
+                        set: { selectedID in
+                            if let selected = manager.availableProfiles.first(where: { $0.fingerprint.id == selectedID }) {
+                                manager.selectProfile(selected)
+                            }
+                        }
+                    )) {
+                        ForEach(manager.availableProfiles, id: \.fingerprint.id) { profile in
+                            Text(profile.displayName)
+                                .tag(profile.fingerprint.id)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                }
             }
             .font(.headline)
         }
         .padding()
         .background(.regularMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 16))
+        .onAppear {
+            manager.reloadProfiles()
+        }
         .sheet(isPresented: Binding(
             get: { exportedURL != nil },
             set: { if !$0 { exportedURL = nil } }
@@ -160,27 +181,19 @@ struct BikeProfileCard: View {
 
 
 #Preview {
+    let previewProfile = BikeProfile(
+        fingerprint: BikeFingerprint(
+            header: "81F111",
+            protocolName: "ISO 14230-4",
+            vinHex: "00000000000000000",
+            calibrationHex: "4D344C2F3445433834313930"
+        )
+    )
     ScrollView {
         BikeProfileCard(
             context: BikeProfileContext(
-                profile: BikeProfile(
-                    fingerprint: BikeFingerprint(
-                        header: "81F111",
-                        protocolName: "ISO 14230-4",
-                        ecuIdentifier: "Demo ECU",
-                        calibrationIdentifier: "CAL-001"
-                    )
-                ),
-                analytics: BikeAnalytics(
-                    profile: BikeProfile(
-                        fingerprint: BikeFingerprint(
-                            header: "81F111",
-                            protocolName: "ISO 14230-4",
-                            ecuIdentifier: "Demo ECU",
-                            calibrationIdentifier: "CAL-001"
-                        )
-                    )
-                )
+                profile: previewProfile,
+                analytics: BikeAnalytics(profile: previewProfile)
             )
         )
             .padding()

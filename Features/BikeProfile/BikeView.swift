@@ -17,13 +17,9 @@ struct BikeView: View {
         ScrollView {
             VStack(spacing: 20) {
 
-                BikeOverviewCard(
-                    //context: manager.context
-                )
+                BikeOverviewCard()
 
-                BikeLearningCard(
-                    //context: manager.context
-                )
+                BikeLearningCard()
 
                 BikeAnalyticsCard(
                     context: manager.context
@@ -33,6 +29,9 @@ struct BikeView: View {
         }
         .navigationTitle("Bike")
         .navigationBarTitleDisplayMode(.large)
+        .onAppear {
+            manager.reloadProfiles()
+        }
     }
 }
 
