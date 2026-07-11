@@ -61,20 +61,50 @@ final class ELM327: ObservableObject {
     }
 
     // MARK: - Header
-    func setHeader(_ header: String) {
+    @discardableResult
+    func setHeader(
+        _ header: String,
+        timeout: Duration = .seconds(1)
+    ) async throws -> ELMRequestResult {
+
         let normalized = normalize(header)
 
-        guard !normalized.isEmpty else { return }
-        guard currentHeader != normalized else { return }
-
-        do {
-            Logger.shared.debug("TX -> ATSH\(normalized)")
-            try BluetoothManager.shared.send("ATSH\(normalized)")
-            currentHeader = normalized
-            Logger.shared.info("Header -> \(normalized)")
-        } catch {
-            Logger.shared.error("Failed to set header: \(normalized)")
+        guard !normalized.isEmpty else {
+            throw ELMError.timeout
         }
+
+        if currentHeader == normalized {
+            Logger.shared.verbose("Header already active -> \(normalized)")
+            return ELMRequestResult(
+                response: ELMResponse(
+                    raw: "OK",
+                    type: .atResponse,
+                    header: normalized,
+                    pid: nil,
+                    payload: []
+                ),
+                latency: 0
+            )
+        }
+
+        Logger.shared.debug("TX(wait) -> ATSH\(normalized)")
+
+        let result = try await BluetoothManager.shared.sendAndWait(
+            "ATSH\(normalized)",
+            timeout: timeout
+        )
+        Logger.shared.verbose("RX(wait) <- \(result.response.raw)")
+        Logger.shared.verbose(
+            String(format: "Header switch completed in %.1f ms", result.latency * 1000)
+        )
+
+        currentHeader = normalized
+        Logger.shared.info("Header -> \(normalized)")
+
+        return ELMRequestResult(
+            response: result.response,
+            latency: result.latency
+        )
     }
     // MARK: - PID Requests
     func request(

@@ -108,8 +108,12 @@ final class BruteForceScanner: ObservableObject {
             return
         }
 
-        ELM327.shared.setHeader(context.header)
-        try? await Task.sleep(for: .milliseconds(50))
+        do {
+            try await ELM327.shared.setHeader(context.header)
+        } catch {
+            Logger.shared.error("Failed to set header \(context.header): \(error)")
+            return
+        }
 
         let requests = BikeKnowledgeFilter.buildQueue(
             for: mode,
@@ -314,8 +318,12 @@ final class BruteForceScanner: ObservableObject {
             return false
         }
 
-        ELM327.shared.setHeader(header)
-        try? await Task.sleep(for: .milliseconds(100))
+        do {
+            try await ELM327.shared.setHeader(header)
+        } catch {
+            Logger.shared.error("Failed to restore header \(header): \(error)")
+            return false
+        }
         
         return true
     }
@@ -560,8 +568,12 @@ final class BruteForceScanner: ObservableObject {
             resumePID: session.currentPID
         )
 
-        ELM327.shared.setHeader(configuration.header)
-        try? await Task.sleep(for: .milliseconds(50))
+        do {
+            try await ELM327.shared.setHeader(configuration.header)
+        } catch {
+            Logger.shared.error("Failed to set header \(configuration.header): \(error)")
+            return
+        }
 
         var progress = prepareStatistics(configuration: configuration)
         var consecutiveTimeouts = 0
