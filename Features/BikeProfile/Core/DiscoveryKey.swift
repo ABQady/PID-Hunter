@@ -20,10 +20,11 @@ struct DiscoveryKey: Hashable, Codable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
 
-        self.header = try container.decodeIfPresent(
+        self.header = (try container.decodeIfPresent(
             String.self,
             forKey: .header
-        ) ?? ""
+        ) ?? "")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
 
         self.mode = try container.decode(
             String.self,
@@ -57,6 +58,11 @@ struct DiscoveryKey: Hashable, Codable {
     }
 
     var isLegacy: Bool {
-        header.isEmpty
+        header.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var isValid: Bool {
+        !mode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !request.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 }

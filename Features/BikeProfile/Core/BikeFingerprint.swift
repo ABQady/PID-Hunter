@@ -70,6 +70,16 @@ struct BikeFingerprint: Codable, Hashable {
         return result.isEmpty ? calibrationHex : result
     }
 
+    func debugDescription() -> String {
+        """
+        header='\(header)'
+        protocol='\(protocolName)'
+        vin='\(vinHex ?? "nil")'
+        calibration='\(calibrationHex ?? "nil")'
+        supportedHeaders=\(supportedHeaders)
+        """
+    }
+
     var id: String {
         [
             normalized(header),

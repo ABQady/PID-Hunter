@@ -54,25 +54,7 @@ final class BikeProfileStore {
 
         let decodedProfile = try decoder.decode(BikeProfile.self, from: data)
 
-        var profile = decodedProfile
-
-        if profile.discoveries.keys.contains(where: \.isLegacy) {
-            var migrated: [DiscoveryKey: BikeKnowledge] = [:]
-
-            for (key, value) in profile.discoveries {
-                let newKey = DiscoveryKey(
-                    header: key.isLegacy ? profile.fingerprint.header : key.header,
-                    mode: key.mode,
-                    request: key.request
-                )
-                migrated[newKey] = value
-            }
-
-            profile.discoveries = migrated
-
-            try? save(profile)
-            Logger.shared.info("🔄 Migrated Bike Profile discovery keys")
-        }
+        let profile = decodedProfile
 
         Logger.shared.info("📂 Loaded Bike Profile")
         return profile
@@ -116,25 +98,7 @@ final class BikeProfileStore {
             let data = try Data(contentsOf: url)
             let decodedProfile = try decoder.decode(BikeProfile.self, from: data)
 
-            var profile = decodedProfile
-
-            if profile.discoveries.keys.contains(where: \.isLegacy) {
-                var migrated: [DiscoveryKey: BikeKnowledge] = [:]
-
-                for (key, value) in profile.discoveries {
-                    let newKey = DiscoveryKey(
-                        header: key.isLegacy ? profile.fingerprint.header : key.header,
-                        mode: key.mode,
-                        request: key.request
-                    )
-                    migrated[newKey] = value
-                }
-
-                profile.discoveries = migrated
-
-                try? save(profile)
-                Logger.shared.info("🔄 Migrated Bike Profile discovery keys")
-            }
+            let profile = decodedProfile
 
             profiles.append(profile)
         }
@@ -152,6 +116,32 @@ final class BikeProfileStore {
         let data = try encoder.encode(profile)
         try data.write(to: url, options: .atomic)
         Logger.shared.info("💾 Saved Bike Profile")
+    }
+
+    func delete(_ profile: BikeProfile) throws {
+        let urls = try fileManager.contentsOfDirectory(
+            at: profilesDirectory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )
+        .filter { $0.pathExtension.lowercased() == "json" }
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        for url in urls {
+            let data = try Data(contentsOf: url)
+            let stored = try decoder.decode(BikeProfile.self, from: data)
+
+            if stored.fingerprint == profile.fingerprint,
+               stored.displayName == profile.displayName {
+                try fileManager.removeItem(at: url)
+                Logger.shared.info("🗑 Deleted Bike Profile")
+                return
+            }
+        }
+
+        throw CocoaError(.fileNoSuchFile)
     }
 
     func delete(for fingerprint: BikeFingerprint) throws {

@@ -7,6 +7,7 @@
 import Foundation
 
 struct BikeProfile: Codable, Hashable {
+    let id: UUID
 
     static let currentSchemaVersion = 1
     var fingerprint: BikeFingerprint
@@ -32,6 +33,7 @@ struct BikeProfile: Codable, Hashable {
         discoveries: [DiscoveryKey: BikeKnowledge] = [:],
         headerDiscoveries: [HeaderDiscoveryResult] = []
     ) {
+        self.id = UUID()
         self.fingerprint = fingerprint
         self.displayName = displayName ?? fingerprint.header
         self.discoveries = discoveries

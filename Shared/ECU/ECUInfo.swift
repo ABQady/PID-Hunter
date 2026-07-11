@@ -67,13 +67,19 @@ final class ECUInfo: ObservableObject {
         let trimmed = value
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        return trimmed.isEmpty ? nil : trimmed
+        guard !trimmed.isEmpty,
+              trimmed != "-",
+              trimmed.uppercased() != "UNKNOWN" else {
+            return nil
+        }
+
+        return trimmed
     }
 
     var fingerprint: BikeFingerprint {
         BikeFingerprint(
-            header: header,
-            protocolName: protocolName,
+            header: normalized(header) ?? "",
+            protocolName: normalized(protocolName) ?? "",
             vinHex: normalized(ecuIdentifier),
             calibrationHex: normalized(calibrationIdentifier)
         )

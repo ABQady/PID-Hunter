@@ -33,7 +33,7 @@ final class BikeProfileManager {
     private init() {}
 
     var displayedProfile: BikeProfile? {
-        currentProfile ?? selectedProfile
+        selectedProfile ?? currentProfile
     }
 
     var context: BikeProfileContext? {
@@ -50,6 +50,16 @@ final class BikeProfileManager {
     func reloadProfiles() {
         do {
             availableProfiles = try store.loadAll()
+
+            if let active = currentProfile,
+               let refreshed = availableProfiles.first(where: { $0.id == active.id }) {
+                currentProfile = refreshed
+            }
+
+            if let selected = selectedProfile,
+               let refreshed = availableProfiles.first(where: { $0.id == selected.id }) {
+                selectedProfile = refreshed
+            }
 
             if selectedProfile == nil {
                 selectedProfile = availableProfiles.first
@@ -86,7 +96,12 @@ final class BikeProfileManager {
                current.fingerprint != fingerprint {
                 reset()
             }
-            currentProfile = try store.loadOrCreate(for: fingerprint)
+            currentProfile = try store.load(for: fingerprint)
+
+            if currentProfile == nil {
+                Logger.shared.warning("⚠️ No Bike Profile exists for this ECU. Create one manually.")
+            }
+
             selectedProfile = currentProfile
             reloadProfiles()
             if currentProfile?.displayName.isEmpty == true {
@@ -102,6 +117,60 @@ final class BikeProfileManager {
             currentProfile = nil
             return nil
         }
+    }
+
+    @discardableResult
+    func createProfile(for fingerprint: BikeFingerprint, named name: String? = nil) -> BikeProfile? {
+        var profile = BikeProfile(fingerprint: fingerprint)
+
+        if let name {
+            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                profile.rename(to: trimmed)
+            }
+        }
+
+        do {
+            try store.save(profile)
+            currentProfile = profile
+            selectedProfile = profile
+            reloadProfiles()
+            isDirty = false
+            lastSaveDate = Date()
+            Logger.shared.info("🆕 Created Bike Profile")
+            return profile
+        } catch {
+            Logger.shared.error("❌ Failed to create Bike Profile: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    func deleteProfile(_ profile: BikeProfile) {
+        do {
+            try store.delete(profile)
+
+            if currentProfile?.id == profile.id {
+                currentProfile = nil
+            }
+
+            if selectedProfile?.id == profile.id {
+                selectedProfile = nil
+            }
+
+            reloadProfiles()
+            Logger.shared.info("🗑 Deleted Bike Profile: \(profile.displayName)")
+        } catch {
+            Logger.shared.error("❌ Failed to delete Bike Profile: \(error.localizedDescription)")
+        }
+    }
+
+    func createProfileFromCurrent(named name: String? = nil) {
+        guard let fingerprint = currentProfile?.fingerprint ?? selectedProfile?.fingerprint else {
+            Logger.shared.warning("⚠️ No ECU fingerprint available to create a Bike Profile.")
+            return
+        }
+
+        _ = createProfile(for: fingerprint, named: name)
     }
 
     private func autosaveIfNeeded() {
@@ -128,7 +197,7 @@ final class BikeProfileManager {
     }
 
     func rename(_ newName: String) {
-        guard var profile = currentProfile else {
+        guard var profile = selectedProfile ?? currentProfile else {
             return
         }
 
@@ -143,13 +212,20 @@ final class BikeProfileManager {
         }
 
         profile.rename(to: trimmed)
+        try? store.save(profile)
         currentProfile = profile
-        selectedProfile = profile
-        if let index = availableProfiles.firstIndex(where: { $0.fingerprint.id == profile.fingerprint.id }) {
+        if let index = availableProfiles.firstIndex(where: { $0.id == profile.id }) {
             availableProfiles[index] = profile
+        }
+        if selectedProfile?.id == profile.id {
+            selectedProfile = profile
         }
         isDirty = true
         autosaveIfNeeded()
+    }
+
+    func renameSelectedProfile(to newName: String) {
+        rename(newName)
     }
 
     // MARK: - Knowledge
@@ -216,6 +292,9 @@ final class BikeProfileManager {
 
         profile.touch()
         currentProfile = profile
+        if selectedProfile?.id == profile.id {
+            selectedProfile = profile
+        }
         isDirty = true
         autosaveIfNeeded()
     }
@@ -256,7 +335,9 @@ final class BikeProfileManager {
             profile.headerDiscoveries = discoveries
         }
         currentProfile = profile
-        selectedProfile = profile
+        if selectedProfile?.id == profile.id {
+            selectedProfile = profile
+        }
 
         do {
             try store.save(profile)
