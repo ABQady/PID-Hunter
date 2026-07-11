@@ -23,6 +23,17 @@ final class BikeProfileManager {
 
     private init() {}
 
+    var context: BikeProfileContext? {
+        guard let profile = currentProfile else {
+            return nil
+        }
+
+        return BikeProfileContext(
+            profile: profile,
+            analytics: BikeAnalytics(profile: profile)
+        )
+    }
+    
     // MARK: - Lifecycle
 
     @discardableResult
@@ -34,7 +45,7 @@ final class BikeProfileManager {
             }
             currentProfile = try store.loadOrCreate(for: fingerprint)
             if currentProfile?.displayName.isEmpty == true {
-                currentProfile?.displayName = fingerprint.header
+                currentProfile?.rename(to: fingerprint.header)
             }
             isDirty = false
             lastSaveDate = Date()
@@ -77,6 +88,7 @@ final class BikeProfileManager {
         }
 
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+
         guard !trimmed.isEmpty else {
             return
         }
@@ -85,7 +97,7 @@ final class BikeProfileManager {
             return
         }
 
-        profile.displayName = trimmed
+        profile.rename(to: trimmed)
         currentProfile = profile
         isDirty = true
         autosaveIfNeeded()
@@ -117,48 +129,34 @@ final class BikeProfileManager {
         mode: OBDMode,
         request: String,
         response: ELMResponse,
-        classification: SearchResult
+        latency: TimeInterval
     ) {
         let key = DiscoveryKey(
             mode: mode,
             request: request
         )
-        
-        let state: DiscoveryState
-        
-        switch classification {
-        case .positive:
-            state = .discovered
-        case .negative, .noData:
-            state = .unsupported
-        case .timeout:
-            state = .timeout
-        case .adapter:
-            state = .adapter
-        case .unknown:
-            state = .unknown
-        }
 
         guard var profile = currentProfile else { return }
 
-        let now = Date()
-
         if var existing = profile.discoveries[key] {
-            existing.lastSeen = now
-            existing.hitCount += 1
-            existing.response = response.raw
-            existing.state = state
+            existing.record(
+                response: response.raw,
+                responseType: response.type,
+                latency: latency
+            )
             profile.discoveries[key] = existing
         } else {
             profile.discoveries[key] = BikeKnowledge(
-                response: response.raw,
-                state: state,
-                firstSeen: now,
-                lastSeen: now,
-                hitCount: 1
+                firstSeen: .now,
+                lastSeen: .now,
+                hitCount: 1,
+                lastResponse: response.raw,
+                classification: DiscoveryClassification(from: response.type),
+                averageLatency: latency
             )
         }
 
+        profile.touch()
         currentProfile = profile
         isDirty = true
         autosaveIfNeeded()
@@ -170,38 +168,6 @@ final class BikeProfileManager {
     
     var profileDisplayName: String {
         currentProfile?.displayName ?? "No Bike Connected"
-    }
-
-    var coverage: Double {
-        currentProfile?.coverage ?? 0
-    }
-    
-    func unknownRequests(
-        mode: OBDMode,
-        from requests: [String]
-    ) -> [String] {
-        guard currentProfile != nil else {
-            return requests
-        }
-
-        return requests.filter {
-            !isKnown(mode: mode, request: $0)
-        }
-    }
-    
-    func buildQueue(
-        for mode: OBDMode
-    ) -> [String] {
-        let queue = unknownRequests(
-            mode: mode,
-            from: mode.runtimeRequests
-        )
-
-        Logger.shared.info(
-            "🧠 Bike Profile filtered \(mode.runtimeRequests.count - queue.count) known request(s)"
-        )
-
-        return queue
     }
 
     func flush() {

@@ -49,7 +49,7 @@ final class RequestOutcomeProcessor {
             mode: mode,
             request: request,
             response: response,
-            classification: classification
+            latency: latency
         )
 
         Logger.shared.verbose(

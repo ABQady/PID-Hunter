@@ -115,6 +115,11 @@ struct MacLayout: View {
                                 .tabItem {
                                     Label("Results", systemImage: "list.bullet.rectangle")
                                 }
+
+                            BikeView()
+                                .tabItem {
+                                    Label("Bike", systemImage: "motorcycle")
+                                }
                         }
                     }
                 }

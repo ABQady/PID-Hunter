@@ -1,0 +1,40 @@
+//
+//  BikeKnowledgeFilter.swift
+//  PID Hunter
+//
+//  Created by Ahmed Al Qady on 11/07/2026.
+//
+struct BikeKnowledgeFilter {
+    
+   static func unknownRequests(
+        mode: OBDMode,
+        from requests: [String],
+        profile: BikeProfile?
+    ) -> [String] {
+        guard let profile else {
+            return requests
+        }
+
+        return requests.filter { request in
+            let key = DiscoveryKey(mode: mode, request: request)
+            return profile.discoveries[key] == nil
+        }
+    }
+    
+    static func buildQueue(
+        for mode: OBDMode,
+        profile: BikeProfile?
+    ) -> [String] {
+        let queue = unknownRequests(
+            mode: mode,
+            from: mode.runtimeRequests,
+            profile: profile
+        )
+
+        Logger.shared.info(
+            "🧠 Bike Profile filtered \(mode.runtimeRequests.count - queue.count) known request(s)"
+        )
+
+        return queue
+    }
+}

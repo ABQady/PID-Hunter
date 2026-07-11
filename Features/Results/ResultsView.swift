@@ -40,9 +40,6 @@ struct ResultsView: View {
         SearchEngineType(rawValue: selectedSearchEngine) != .sequential
     }
     
-    private var searchStats: SearchStatistics {
-        brute.statistics
-    }
 
     // MARK: - Results View
     private var resultsView: some View {
@@ -267,36 +264,29 @@ struct ResultsView: View {
                         HStack {
                             statistic(
                                 title: "Requests",
-                                value: "\(searchStats.requestsSent)"
+                                value: "\(brute.statistics.requestsSent)"
                             )
 
                             Spacer()
 
                             statistic(
                                 title: "Successes",
-                                value: "\(searchStats.successfulResponses)"
+                                value: "\(brute.statistics.successfulResponses)"
                             )
 
                             Spacer()
 
                             statistic(
                                 title: "Failures",
-                                value: "\(searchStats.failedResponses)"
+                                value: "\(brute.statistics.failedResponses)"
                             )
                         }
                         HStack {
                             statistic(
-                                title: "Discoveries",
-                                value: "\(searchStats.discoveredPIDs)"
-                            )
-
-                            Spacer()
-
-                            statistic(
-                                title: "Success %",
+                                title: "Success Rate",
                                 value: String(
                                     format: "%.1f%%",
-                                    searchStats.successRate * 100
+                                    brute.statistics.successRate * 100
                                 )
                             )
 
@@ -306,7 +296,7 @@ struct ResultsView: View {
                                 title: "Avg",
                                 value: String(
                                     format: "%.0f ms",
-                                    searchStats.averageLatency * 1000
+                                    brute.statistics.averageLatency * 1000
                                 )
                             )
                         }
@@ -316,7 +306,7 @@ struct ResultsView: View {
                                 title: "Fastest",
                                 value: String(
                                     format: "%.0f ms",
-                                    searchStats.fastestSuccessfulResponse
+                                    brute.statistics.fastestSuccessfulResponse
                                         * 1000
                                 )
                             )
@@ -327,7 +317,7 @@ struct ResultsView: View {
                                 title: "Slowest",
                                 value: String(
                                     format: "%.0f ms",
-                                    searchStats.slowestResponse * 1000
+                                    brute.statistics.slowestResponse * 1000
                                 )
                             )
 

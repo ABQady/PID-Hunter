@@ -7,6 +7,11 @@
 
 import SwiftUI
 
+struct BikeProfileContext {
+    let profile: BikeProfile
+    let analytics: BikeAnalytics
+}
+
 struct BikeProfileCard: View {
 
     @Environment(BikeProfileManager.self) private var manager
@@ -16,13 +21,14 @@ struct BikeProfileCard: View {
 
     @State private var exportedURL: URL?
 
-    private var profile: BikeProfile? {
-        manager.currentProfile
-    }
+    let context: BikeProfileContext?
 
     var body: some View {
+        let profile = context?.profile
+        let analytics = context?.analytics
+
         DisclosureGroup(isExpanded: $rememberExpanded) {
-            if let profile = profile {
+            if let profile, let analytics {
                 VStack(alignment: .leading, spacing: 12) {
                     TextField("Bike Name", text: $displayName)
                         .textFieldStyle(.roundedBorder)
@@ -50,15 +56,14 @@ struct BikeProfileCard: View {
                     Divider()
 
                     HStack(spacing: 24) {
-                        statistic("Known", value: "\(profile.discoveries.count)")
-                        statistic("Coverage", value: profile.coverageString)
+                        statistic("Known", value: "\(analytics.totalRequests)")
+                        statistic("Coverage", value: analytics.coverageString)
                         statistic("Version", value: "v\(profile.schemaVersion)")
                         Spacer(minLength: 0)
                     }
 
-                    ProgressView(value: profile.coverage)
-                    Text(profile.coverageString + " of the request space discovered")
-                        .font(.caption)
+                    ProgressView(value: analytics.coverage)
+                    Text(analytics.coverageString + " of the request space discovered")                        .font(.caption)
                         .foregroundStyle(.secondary)
 
                     Divider()
@@ -98,7 +103,7 @@ struct BikeProfileCard: View {
                 ContentUnavailableView(
                     "No Bike Profile",
                     systemImage: "motorcycle",
-                    description: Text("Connect to a bike to load its profile.")
+                    description: Text("Connect to a motorcycle to create and load its bike profile.")
                 )
             }
         } label: {
@@ -156,7 +161,28 @@ struct BikeProfileCard: View {
 
 #Preview {
     ScrollView {
-        BikeProfileCard()
+        BikeProfileCard(
+            context: BikeProfileContext(
+                profile: BikeProfile(
+                    fingerprint: BikeFingerprint(
+                        header: "81F111",
+                        protocolName: "ISO 14230-4",
+                        ecuIdentifier: "Demo ECU",
+                        calibrationIdentifier: "CAL-001"
+                    )
+                ),
+                analytics: BikeAnalytics(
+                    profile: BikeProfile(
+                        fingerprint: BikeFingerprint(
+                            header: "81F111",
+                            protocolName: "ISO 14230-4",
+                            ecuIdentifier: "Demo ECU",
+                            calibrationIdentifier: "CAL-001"
+                        )
+                    )
+                )
+            )
+        )
             .padding()
             .environment(BikeProfileManager.shared)
     }

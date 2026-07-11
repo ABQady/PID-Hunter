@@ -34,7 +34,7 @@ final class ScanPersistence {
     
     func saveResumePoint(
         session: ScanSession,
-        statistics: SearchStatistics,
+        statistics: SearchEngineStatistics,
         scanStatistics: ScanStatistics,
         force: Bool = false
     ){

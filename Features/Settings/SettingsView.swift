@@ -10,6 +10,8 @@ import UIKit
 #endif
 
 struct SettingsView: View {
+    @Environment(BikeProfileManager.self)
+    private var manager
     @ObservedObject private var brute = BruteForceScanner.shared
     @AppStorage("enableDebugLogging")
     private var enableDebugLogging = false
@@ -120,7 +122,8 @@ struct SettingsView: View {
             
             VStack(spacing: 18) {
 
-                BikeProfileCard()
+                BikeProfileCard(context: manager.context)
+
                 // MARK: Configuration
                 VStack(alignment: .leading, spacing: 12) {
                     

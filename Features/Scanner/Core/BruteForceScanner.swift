@@ -46,7 +46,7 @@ final class BruteForceScanner: ObservableObject {
     @Published private(set) var results: [ScanResult] = []
     @Published var delayMs: Double = 100
     @Published private(set) var scanStatus = ScanStatus()
-    @Published private(set) var statistics = SearchStatistics()
+    @Published private(set) var statistics = SearchEngineStatistics()
 
     @AppStorage("selectedSearchEngine")
     private var selectedSearchEngine = SearchEngineType.sequential.rawValue
@@ -111,8 +111,9 @@ final class BruteForceScanner: ObservableObject {
         ELM327.shared.setHeader(context.header)
         try? await Task.sleep(for: .milliseconds(50))
 
-        let requests = BikeProfileManager.shared.buildQueue(
-            for: mode
+        let requests = BikeKnowledgeFilter.buildQueue(
+            for: mode,
+            profile: BikeProfileManager.shared.currentProfile
         )
 
         stats.begin(totalRequests: requests.count)
@@ -410,7 +411,7 @@ final class BruteForceScanner: ObservableObject {
             response: response,
             classification: classification
         ) {
-            statistics.recordDiscovery()
+            // statistics.recordDiscovery() // No longer tracked
         }
 
         session.searchStrategy.registerResult(
@@ -437,7 +438,7 @@ final class BruteForceScanner: ObservableObject {
         }
 
         statistics.record(
-            result: .timeout,
+            result: SearchResult.timeout,
             latency: requestTimeout
         )
 

@@ -28,7 +28,7 @@ struct SearchContext {
 
     var knowledge = SearchKnowledgeBase()
     var queue = PIDQueue()
-    var statistics = SearchStatistics()
+    var statistics = SearchEngineStatistics()
 
     // MARK: - Runtime
 

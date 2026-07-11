@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct SearchStatistics: Sendable, Codable {
+struct SearchEngineStatistics: Sendable, Codable {
 
     // MARK: - Requests
 
@@ -27,9 +27,6 @@ struct SearchStatistics: Sendable, Codable {
         return Double(successfulResponses) / Double(completedRequests)
     }
 
-    // MARK: - Discoveries
-
-    private(set) var discoveredPIDs: Int = 0
 
     // MARK: - Timing
 
@@ -62,11 +59,10 @@ struct SearchStatistics: Sendable, Codable {
         requestsSent += 1
     }
 
-    mutating func merge(with other: SearchStatistics) {
+    mutating func merge(with other: SearchEngineStatistics) {
         requestsSent += other.requestsSent
         successfulResponses += other.successfulResponses
         failedResponses += other.failedResponses
-        discoveredPIDs += other.discoveredPIDs
         totalLatency += other.totalLatency
 
         guard other.hasSuccessfulResponses else {
@@ -95,15 +91,18 @@ struct SearchStatistics: Sendable, Codable {
         failedResponses += 1
     }
 
-    mutating func recordDiscovery() {
-        discoveredPIDs += 1
-    }
 
     mutating func record(result: SearchResult, latency: TimeInterval) {
         recordRequest()
-        if case .positive = result {
+        switch result {
+        case .positive:
             recordSuccess(latency: latency)
-        } else {
+
+        case .negative,
+             .timeout,
+             .adapter,
+             .unknown,
+             .noData:
             recordFailure()
         }
     }
@@ -112,7 +111,6 @@ struct SearchStatistics: Sendable, Codable {
         requestsSent = 0
         successfulResponses = 0
         failedResponses = 0
-        discoveredPIDs = 0
         totalLatency = 0
         fastestResponse = .greatestFiniteMagnitude
         slowestResponse = 0

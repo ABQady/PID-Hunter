@@ -6,7 +6,7 @@
 //
 import Foundation
 
-struct BikeProfile: Codable {
+struct BikeProfile: Codable, Hashable {
 
     static let currentSchemaVersion = 1
     let fingerprint: BikeFingerprint
@@ -16,17 +16,13 @@ struct BikeProfile: Codable {
     var lastSeen: Date = .now
     var discoveries: [DiscoveryKey: BikeKnowledge]
 
-    var coverage: Double {
-        guard !discoveries.isEmpty else {
-            return 0
-        }
-
-        // Full 16-bit request space.
-        return Double(discoveries.count) / 65536.0
+    mutating func touch() {
+        lastSeen = .now
     }
 
-    var coverageString: String {
-        String(format: "%.2f%%", coverage * 100)
+    mutating func rename(to name: String) {
+        displayName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        touch()
     }
 
     init(
@@ -37,5 +33,6 @@ struct BikeProfile: Codable {
         self.fingerprint = fingerprint
         self.displayName = displayName ?? fingerprint.header
         self.discoveries = discoveries
+        self.lastSeen = self.firstSeen
     }
 }
