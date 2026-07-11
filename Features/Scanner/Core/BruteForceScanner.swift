@@ -32,14 +32,6 @@ struct ScanConfiguration {
 }
 
 @MainActor
-final class ScanSession {
-    var results: [ScanResult] = []
-    var seen = Set<String>()
-    var currentPID = 0
-    var searchStrategy: any SearchStrategy = SequentialSearchStrategy(start: 0, end: 0)
-}
-
-@MainActor
 final class BruteForceScanner: ObservableObject {
     static let shared = BruteForceScanner()
     
@@ -270,9 +262,15 @@ final class BruteForceScanner: ObservableObject {
         scanStatus.isScanning = false
         
         session.currentPID = 0
+        session.header = ""
+        session.mode = nil
+        session.startPID = 0
+        session.endPID = 0
+
         session.searchStrategy.reset()
 
         session.results.removeAll()
+        
         session.seen.removeAll()
         results = session.results
         scanStatus.successCount = 0
@@ -506,6 +504,14 @@ final class BruteForceScanner: ObservableObject {
             session.currentPID > configuration.endPID {
             session.currentPID = configuration.startPID
         }
+        
+        // Resume should only validate against the persisted session selected by
+        // ScanLauncher. At this point configuration already contains the
+        // restored header/mode. Only restart if there is no valid resume point.
+        if !persistence.hasResumePoint {
+            session.currentPID = configuration.startPID
+            clearResults()
+        }
 
         if session.currentPID == configuration.startPID {
             clearResults()
@@ -513,6 +519,9 @@ final class BruteForceScanner: ObservableObject {
             session.results = persistence.loadResults()
             results = session.results
         }
+
+        // Rebuild the duplicate filter after loading persisted discoveries.
+        session.seen = Set(session.results.map(\.id))
 
         scanStatus.successCount = session.results.count
     }
@@ -685,6 +694,12 @@ final class BruteForceScanner: ObservableObject {
             endPID: endPID.map(Int.init) ?? mode.pidRange?.upperBound ?? 0,
             header: header
         )
+        
+        // Persist session metadata for Resume Session.
+        session.header = configuration.header
+        session.mode = configuration.mode
+        session.startPID = configuration.startPID
+        session.endPID = configuration.endPID
 
         Logger.shared.info("Search engine: \(searchEngine)")
         Logger.shared.info(

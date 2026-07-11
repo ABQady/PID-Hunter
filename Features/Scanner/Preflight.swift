@@ -78,10 +78,10 @@ final class Preflight {
             return false
         }
 
-        guard await ELM327.shared.initializeELM() else {
-            Logger.shared.error("❌ Failed to initialize ELM")
-            return false
-        }
+//        guard await ELM327.shared.initializeELM() else {
+//            Logger.shared.error("❌ Failed to initialize ELM")
+//            return false
+//        }
 
         guard ensureConnected() else {
             return false

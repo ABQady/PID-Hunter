@@ -69,29 +69,49 @@ final class ScanLauncher {
             return
         }
         
+        let hasResume = ScanPersistence.shared.hasResumePoint
+
+        let metadata = hasResume
+            ? ScanPersistence.shared.loadResumeMetadata()
+            : nil
+
+        let effectiveHeader = hasResume && !(metadata?.header.isEmpty ?? true)
+            ? metadata!.header
+            : headerValue
+
+        let effectiveMode = metadata?.mode ?? mode
+
+        let effectiveStartPID = hasResume
+            ? String(format: "%04X", metadata!.startPID)
+            : startPID
+
+        let effectiveEndPID = hasResume
+            ? String(format: "%04X", metadata!.endPID)
+            : endPID
+        
         let context = ScanContext(
             brute: brute,
             stats: stats,
-            header: headerValue,
-            startPID: startPID,
-            endPID: endPID
+            header: effectiveHeader,
+            startPID: effectiveStartPID,
+            endPID: effectiveEndPID
         )
         
         onPrepareUI()
         
-        if !ScanPersistence.shared.hasResumePoint {
+        if !hasResume {
             brute.startFresh()
         }
         
         Task { @MainActor in
-            guard await prepareSession(header: headerValue) else {
+            guard await prepareSession(header: effectiveHeader) else {
                 return
             }
 
-            let strategy = ScanStrategyFactory.strategy(for: mode)
-            Logger.shared.info("Launching \(mode.rawValue) using \(type(of: strategy))")
+            let strategy = ScanStrategyFactory.strategy(for: effectiveMode)
+            Logger.shared.info("Launching \(effectiveMode.rawValue) using \(type(of: strategy))")
             await strategy.start(
-                mode: mode,
+                mode: effectiveMode,
                 launcher: self,
                 context: context
             )

@@ -31,7 +31,14 @@ final class ELM327: ObservableObject {
     func initializeELM(
     ) async -> Bool{
         do {
-            _ = try await BluetoothManager.shared.sendAndWait("ATZ", timeout: .seconds(2))
+            currentHeader = ""
+            _ = try await BluetoothManager.shared.sendAndWait(
+                "ATZ",
+                timeout: .seconds(2)
+            )
+            // Give the adapter a brief moment to reboot after ATZ.
+            try? await Task.sleep(for: .milliseconds(500))
+
             _ = try await BluetoothManager.shared.sendAndWait("ATE0", timeout: .seconds(1))
             _ = try await BluetoothManager.shared.sendAndWait("ATL0", timeout: .seconds(1))
             _ = try await BluetoothManager.shared.sendAndWait("ATS0", timeout: .seconds(1))
