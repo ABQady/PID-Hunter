@@ -9,8 +9,7 @@ import UIKit
 
 struct StoredPIDCard: View {
 
-    let key: DiscoveryKey
-    let knowledge: BikeKnowledge
+    let record: DiscoveryRecord
     var isSelectionMode = false
     var isSelected = false
     var onTap: (() -> Void)? = nil
@@ -25,20 +24,20 @@ struct StoredPIDCard: View {
                         .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
                         .font(.title3)
                 }
-                Text(key.request)
+                Text(record.request)
                     .font(.headline.monospaced())
                 Spacer()
                 Label {
-                    Text(knowledge.classification.title)
+                    Text(record.classification.title)
                         .font(.caption.weight(.semibold))
                 } icon: {
-                    Image(systemName: knowledge.classification.icon)
+                    Image(systemName: record.classification.icon)
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .background(knowledge.classification.color.opacity(0.15))
+                .background(record.classification.color.opacity(0.15))
                 .clipShape(Capsule())
-                .foregroundStyle(knowledge.classification.color)
+                .foregroundStyle(record.classification.color)
             }
 
             // Info grid: Header, Mode, Payload
@@ -47,14 +46,14 @@ struct StoredPIDCard: View {
                     Text("Header")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
-                    Text(key.header)
+                    Text(record.header)
                         .font(.footnote.monospaced())
                 }
                 GridRow {
                     Text("Mode")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
-                    Text(key.mode)
+                    Text(record.mode)
                         .font(.footnote.monospaced())
                 }
                 GridRow {
@@ -91,9 +90,9 @@ struct StoredPIDCard: View {
             }
 
             // Raw response, collapsible
-            if !knowledge.lastResponse.isEmpty {
+            if !record.response.isEmpty {
                 DisclosureGroup("Raw Response") {
-                    Text(knowledge.lastResponse)
+                    Text(record.response)
                         .font(.footnote.monospaced())
                         .padding(.top, 2)
                 }
@@ -103,7 +102,7 @@ struct StoredPIDCard: View {
             HStack(spacing: 8) {
                 HStack(spacing: 4) {
                     Image(systemName: "scope")
-                    Text("\(knowledge.hitCount)")
+                    Text("\(record.hitCount)")
                 }
                 .padding(8)
                 .background(.thinMaterial)
@@ -111,7 +110,7 @@ struct StoredPIDCard: View {
 
                 HStack(spacing: 4) {
                     Image(systemName: "timer")
-                    Text("\(Int(knowledge.averageLatency * 1000)) ms")
+                    Text("\(Int(record.averageLatency * 1000)) ms")
                 }
                 .padding(8)
                 .background(.thinMaterial)
@@ -121,7 +120,7 @@ struct StoredPIDCard: View {
             .foregroundStyle(.secondary)
 
             // Optional notes
-            let notesText = String(describing: knowledge.notes)
+            let notesText = String(describing: record.notes)
             if !notesText.isEmpty && notesText != "[]" {
                 Divider()
                 Text(notesText)
@@ -188,20 +187,20 @@ struct StoredPIDCard: View {
     }
 
     private var cleanResponsePayload: String {
-        guard !knowledge.lastResponse.isEmpty else {
+        guard !record.response.isEmpty else {
             return "—"
         }
 
         guard
-            !knowledge.lastResponse.isEmpty,
-            let mode = OBDMode(rawValue: key.mode)
+            !record.response.isEmpty,
+            let mode = OBDMode(rawValue: record.mode)
         else {
             return "—"
         }
 
         return mode.payload(
-            from: knowledge.lastResponse,
-            request: key.request
+            from: record.response,
+            request: record.request
         )
     }
 

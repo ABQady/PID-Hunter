@@ -15,7 +15,7 @@ struct BikeProfile: Codable, Hashable {
     var displayName: String
     var firstSeen: Date = .now
     var lastSeen: Date = .now
-    var discoveries: [DiscoveryKey: BikeKnowledge]
+    var discoveries: [DiscoveryRecord]
     var headerDiscoveries: [HeaderDiscoveryResult] = []
 
     mutating func touch() {
@@ -30,7 +30,7 @@ struct BikeProfile: Codable, Hashable {
     init(
         fingerprint: BikeFingerprint,
         displayName: String? = nil,
-        discoveries: [DiscoveryKey: BikeKnowledge] = [:],
+        discoveries: [DiscoveryRecord] = [],
         headerDiscoveries: [HeaderDiscoveryResult] = []
     ) {
         self.id = UUID()
@@ -45,14 +45,14 @@ extension BikeProfile {
 
     func discoveries(
         classifiedAs classification: DiscoveryClassification
-    ) -> [(DiscoveryKey, BikeKnowledge)] {
+    ) -> [DiscoveryRecord] {
 
         discoveries
             .filter {
-                $0.value.classification == classification
+                $0.classification == classification
             }
             .sorted {
-                $0.key.request < $1.key.request
+                $0.request < $1.request
             }
     }
 }

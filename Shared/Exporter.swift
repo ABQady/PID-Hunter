@@ -86,20 +86,17 @@ enum Exporter {
 
     // MARK: - Stored Knowledge
     static func exportKnowledge(
-        _ items: [(key: DiscoveryKey, value: BikeKnowledge)]
+        _ items: [DiscoveryRecord]
     ) throws -> URL {
 
         var csv = "Header,Mode,Request,Response,Classification\n"
 
         for item in items {
-            let key = item.key
-            let value = item.value
-
-            csv += "\(csvField(key.header)),"
-            csv += "\(csvField(key.mode)),"
-            csv += "\(csvField(key.request)),"
-            csv += "\(csvField(value.lastResponse)),"
-            csv += "\(csvField(value.classification.rawValue))\n"
+            csv += "\(csvField(item.header)),"
+            csv += "\(csvField(item.mode)),"
+            csv += "\(csvField(item.request)),"
+            csv += "\(csvField(item.response)),"
+            csv += "\(csvField(String(item.classification.rawValue)))\n"
         }
 
         Logger.shared.success("📤 Exported \(items.count) stored knowledge entries")

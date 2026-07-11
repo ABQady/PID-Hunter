@@ -16,7 +16,7 @@ struct StoredKnowledgeSheet: View {
     @State private var selectedHeader: String? = nil
     @State private var selectedMode: String? = nil
     @State private var isSelectionMode = false
-    @State private var selectedKeys = Set<DiscoveryKey>()
+    @State private var selectedRecords = Set<DiscoveryRecord>()
     private struct ExportedFile: Identifiable {
         let id = UUID()
         let url: URL
@@ -25,29 +25,29 @@ struct StoredKnowledgeSheet: View {
     @State private var exportedFile: ExportedFile?
 
 
-    private var discoveries: [(key: DiscoveryKey, value: BikeKnowledge)] {
+    private var discoveries: [DiscoveryRecord] {
         profile.discoveries
-            .filter { $0.value.classification == classification }
-            .filter { item in
-                (selectedHeader == nil || item.key.header == selectedHeader!) &&
-                (selectedMode == nil || item.key.mode == selectedMode!)
+            .filter { $0.classification == classification }
+            .filter {
+                (selectedHeader == nil || $0.header == selectedHeader!) &&
+                (selectedMode == nil || $0.mode == selectedMode!)
             }
-            .filter { item in
+            .filter {
                 guard !searchText.isEmpty else { return true }
                 let query = searchText.lowercased()
-                return item.key.request.lowercased().contains(query)
-                    || item.key.header.lowercased().contains(query)
-                    || item.key.mode.lowercased().contains(query)
+                return $0.request.lowercased().contains(query)
+                    || $0.header.lowercased().contains(query)
+                    || $0.mode.lowercased().contains(query)
             }
-            .sorted { $0.key.request < $1.key.request }
+            .sorted { $0.request < $1.request }
     }
 
     private var availableHeaders: [String] {
-        Array(Set(profile.discoveries.map { $0.key.header })).sorted()
+        Array(Set(profile.discoveries.map { $0.header })).sorted()
     }
 
     private var availableModes: [String] {
-        Array(Set(profile.discoveries.map { $0.key.mode })).sorted()
+        Array(Set(profile.discoveries.map { $0.mode })).sorted()
     }
 
     var body: some View {
@@ -58,29 +58,25 @@ struct StoredKnowledgeSheet: View {
 
                 LazyVStack(spacing: 12) {
 
-                    ForEach(discoveries, id: \.key) { item in
-
+                    ForEach(discoveries, id: \.self) { record in
                         if isSelectionMode {
                             StoredPIDCard(
-                                key: item.key,
-                                knowledge: item.value,
+                                record: record,
                                 isSelectionMode: true,
-                                isSelected: selectedKeys.contains(item.key),
+                                isSelected: selectedRecords.contains(record),
                                 onTap: {
-                                    if selectedKeys.contains(item.key) {
-                                        selectedKeys.remove(item.key)
+                                    if selectedRecords.contains(record) {
+                                        selectedRecords.remove(record)
                                     } else {
-                                        selectedKeys.insert(item.key)
+                                        selectedRecords.insert(record)
                                     }
                                 }
                             )
                         } else {
                             StoredPIDCard(
-                                key: item.key,
-                                knowledge: item.value
+                                record: record
                             )
                         }
-
                     }
 
                 }
@@ -89,7 +85,7 @@ struct StoredKnowledgeSheet: View {
             }
             .navigationTitle(
                 isSelectionMode
-                    ? "\(selectedKeys.count) Selected"
+                    ? "\(selectedRecords.count) Selected"
                     : "\(classification.title) (\(discoveries.count))"
             )
             .navigationBarTitleDisplayMode(.inline)
@@ -117,26 +113,28 @@ struct StoredKnowledgeSheet: View {
                     Button(isSelectionMode ? "Done" : "Select") {
                         isSelectionMode.toggle()
                         if !isSelectionMode {
-                            selectedKeys.removeAll()
+                            selectedRecords.removeAll()
                         }
                     }
 
                     if isSelectionMode {
                         Button("All") {
-                            selectedKeys = Set(discoveries.map(\.key))
+                            selectedRecords = Set<DiscoveryRecord>(discoveries)
                         }
 
                         Button("Clear") {
-                            selectedKeys.removeAll()
+                            selectedRecords.removeAll()
                         }
 
                         Button {
-                            let exportItems: [(key: DiscoveryKey, value: BikeKnowledge)]
+                            let exportItems: [DiscoveryRecord]
 
-                            if selectedKeys.isEmpty {
+                            if selectedRecords.isEmpty {
                                 exportItems = discoveries
                             } else {
-                                exportItems = discoveries.filter { selectedKeys.contains($0.key) }
+                                exportItems = discoveries.filter { record in
+                                    selectedRecords.contains(record)
+                                }
                             }
 
                             do {
@@ -146,10 +144,10 @@ struct StoredKnowledgeSheet: View {
                                 Logger.shared.error("❌ Failed to export stored knowledge: \(error.localizedDescription)")
                             }
                         } label: {
-                            if selectedKeys.isEmpty {
+                            if selectedRecords.isEmpty {
                                 Label("Export All", systemImage: "square.and.arrow.up")
                             } else {
-                                Label("Export (\(selectedKeys.count))", systemImage: "square.and.arrow.up")
+                                Label("Export (\(selectedRecords.count))", systemImage: "square.and.arrow.up")
                             }
                         }
                     }

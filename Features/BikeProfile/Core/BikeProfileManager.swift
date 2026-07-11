@@ -233,27 +233,23 @@ final class BikeProfileManager {
     func knowledge(
         mode: OBDMode,
         request: String
-    ) -> BikeKnowledge? {
-        currentProfile?.discoveries[
-            DiscoveryKey(
-                header: currentProfile?.fingerprint.header ?? "",
-                mode: mode,
-                request: request
-            )
-        ]
+    ) -> DiscoveryRecord? {
+        currentProfile?.discoveries.first {
+            $0.header == currentProfile?.fingerprint.header &&
+            $0.mode == mode.rawValue &&
+            $0.request == request
+        }
     }
 
     func isKnown(
         mode: OBDMode,
         request: String
     ) -> Bool {
-        currentProfile?.discoveries[
-            DiscoveryKey(
-                header: currentProfile?.fingerprint.header ?? "",
-                mode: mode,
-                request: request
-            )
-        ] != nil
+        currentProfile?.discoveries.contains {
+            $0.header == currentProfile?.fingerprint.header &&
+            $0.mode == mode.rawValue &&
+            $0.request == request
+        } ?? false
     }
 
     private(set) var isDirty = false
@@ -266,27 +262,30 @@ final class BikeProfileManager {
     ) {
         guard var profile = currentProfile else { return }
 
-        let key = DiscoveryKey(
-            header: profile.fingerprint.header,
-            mode: mode,
-            request: request
-        )
-
-        if var existing = profile.discoveries[key] {
-            existing.record(
+        if let index = profile.discoveries.firstIndex(where: {
+            $0.header == profile.fingerprint.header &&
+            $0.mode == mode.rawValue &&
+            $0.request == request
+        }) {
+            profile.discoveries[index].record(
                 response: response.raw,
                 responseType: response.type,
                 latency: latency
             )
-            profile.discoveries[key] = existing
         } else {
-            profile.discoveries[key] = BikeKnowledge(
-                firstSeen: .now,
-                lastSeen: .now,
-                hitCount: 1,
-                lastResponse: response.raw,
-                classification: DiscoveryClassification(from: response.type),
-                averageLatency: latency
+            profile.discoveries.append(
+                DiscoveryRecord(
+                    header: profile.fingerprint.header,
+                    mode: mode.rawValue,
+                    request: request,
+                    response: response.raw,
+                    firstSeen: .now,
+                    lastSeen: .now,
+                    hitCount: 1,
+                    classification: DiscoveryClassification(from: response.type),
+                    averageLatency: latency,
+                    notes: [response.raw]
+                )
             )
         }
 

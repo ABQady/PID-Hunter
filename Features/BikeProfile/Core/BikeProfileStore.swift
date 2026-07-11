@@ -70,7 +70,7 @@ final class BikeProfileStore {
 
         let profile = BikeProfile(
             fingerprint: fingerprint,
-            discoveries: [:]
+            discoveries: []
         )
 
         try save(profile)

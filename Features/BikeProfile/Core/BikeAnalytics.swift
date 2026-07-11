@@ -163,14 +163,13 @@ struct BikeAnalytics {
             var slowest: TimeInterval = 0
             var modes: [String: Int] = [:]
 
-            for (key, knowledge) in profile.discoveries {
+            for record in profile.discoveries {
+                modes[record.mode, default: 0] += 1
+                latency += record.averageLatency
+                fastest = min(fastest, record.averageLatency)
+                slowest = max(slowest, record.averageLatency)
 
-                modes[key.mode, default: 0] += 1
-                latency += knowledge.averageLatency
-                fastest = min(fastest, knowledge.averageLatency)
-                slowest = max(slowest, knowledge.averageLatency)
-
-                switch knowledge.classification {
+                switch record.classification {
                 case .positive:
                     positive += 1
                 case .negative:

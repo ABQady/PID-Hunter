@@ -18,12 +18,11 @@ struct BikeKnowledgeFilter {
         let header = profile.fingerprint.header
 
         return requests.filter { request in
-            let key = DiscoveryKey(
-                header: header,
-                mode: mode,
-                request: request
-            )
-            return profile.discoveries[key] == nil
+            return !profile.discoveries.contains { record in
+                record.header == header &&
+                record.mode == mode.rawValue &&
+                record.request == request
+            }
         }
     }
     
