@@ -16,6 +16,7 @@ final class ScanLauncher {
     struct ScanContext {
         let brute: BruteForceScanner
         let stats: ScanStatistics
+        let mode: OBDMode
         let header: String
         let startPID: String
         let endPID: String
@@ -92,20 +93,48 @@ final class ScanLauncher {
         let context = ScanContext(
             brute: brute,
             stats: stats,
+            mode: effectiveMode,
             header: effectiveHeader,
             startPID: effectiveStartPID,
             endPID: effectiveEndPID
         )
-        
+
+        // Build logging metadata
+        let loggingMetadata = LogSessionManager.Metadata(
+            appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown",
+            mode: effectiveMode,
+            header: effectiveHeader,
+            searchEngine: brute.searchEngine,
+            requestDelay: brute.delayMs / 1000.0,
+            requestTimeout: UserDefaults.standard.double(forKey: "requestTimeout"),
+            autoPreflight: UserDefaults.standard.bool(forKey: "enableAutoPreflight"),
+            debugLogging: UserDefaults.standard.bool(forKey: "enableDebugLogging")
+        )
+
         onPrepareUI()
-        
+
         if !hasResume {
             brute.startFresh()
         }
-        
+
         Task { @MainActor in
-            guard await prepareSession(header: effectiveHeader) else {
+            guard await prepareSession(
+                header: effectiveHeader,
+                loggingMetadata: loggingMetadata
+            ) else {
                 return
+            }
+            do {
+                try await LogSessionManager.shared.promoteCurrentSession(
+                    mode: effectiveMode,
+                    header: effectiveHeader,
+                    searchEngine: brute.searchEngine,
+                    logger: Logger.shared
+                )
+            } catch {
+                Logger.shared.error(
+                    "Failed to promote log session: \(error)"
+                )
             }
 
             let strategy = ScanStrategyFactory.strategy(for: effectiveMode)
@@ -120,8 +149,20 @@ final class ScanLauncher {
     
     @MainActor
     private func prepareSession(
-        header: String
+        header: String,
+        loggingMetadata: LogSessionManager.Metadata
     ) async -> Bool {
+
+        // Begin logging session with metadata
+        do {
+            try await LogSessionManager.shared.beginLoggingSessionIfNeeded(
+                metadata: loggingMetadata,
+                logger: Logger.shared
+            )
+        } catch {
+            Logger.shared.error("❌ Failed to start logging session: \(error)")
+            return false
+        }
 
         Logger.shared.info("Running preflight using header \(header)")
 

@@ -1,3 +1,14 @@
+import UIKit
+
+struct ActivityView: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
 //
 //  AppStorageViewer.swift
 //  PID Hunter
@@ -7,8 +18,12 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-struct JSONDocument: Identifiable {
+struct TextDocument: Identifiable {
+    let id = UUID()
+    let url: URL
+}
 
+struct SharedItem: Identifiable {
     let id = UUID()
     let url: URL
 }
@@ -19,67 +34,31 @@ struct AppStorageViewer: View {
 
     @State private var nodes: [StorageNode] = []
     @State private var selectedFile: StorageFile?
-    @State private var jsonDocument: JSONDocument?
+    @State private var textDocument: TextDocument?
     @State private var showDeleteAlert = false
+    @State private var sharedItem: SharedItem?
+    @State private var expandedFolders: Set<URL> = []
 
     var body: some View {
         NavigationStack {
             List {
-
-                OutlineGroup(nodes,
-                             children: \.children) { node in
-
-                    if node.isDirectory {
-
-                        Label(node.name,
-                              systemImage: "folder")
-
-                    } else if let url = node.url,
-                              let file = StorageFile(url: url) {
-
-                        VStack(alignment: .leading,
-                               spacing: 6) {
-
-                            HStack {
-
-                                Image(systemName: icon(for: url))
-
-                                Text(node.name)
-                                    .font(.headline)
-
-                                Spacer()
-
-                                Text(file.sizeString)
-                                    .foregroundStyle(.secondary)
+                ForEach(nodes) { node in
+                    StorageNodeRow(
+                        node: node,
+                        expandedFolders: $expandedFolders,
+                        preview: preview,
+                        copy: copy,
+                        copyFolder: copyFolder,
+                        shareFolder: { url in sharedItem = SharedItem(url: url) },
+                        deleteFile: { file in selectedFile = file; showDeleteAlert = true },
+                        deleteFolder: { url in
+                            if let file = StorageFile(url: url) {
+                                selectedFile = file
+                                showDeleteAlert = true
                             }
-
-                            Text(file.modified.formatted())
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-
-                            HStack {
-
-                                Button("Preview") {
-                                    preview(file)
-                                }
-
-                                Button("Copy") {
-                                    copy(file)
-                                }
-
-                                Button(role: .destructive) {
-
-                                    selectedFile = file
-                                    showDeleteAlert = true
-
-                                } label: {
-                                    Text("Delete")
-                                }
-
-                            }
-                            .buttonStyle(.bordered)
-                        }
-                    }
+                        },
+                        icon: icon
+                    )
                 }
             }
             .navigationTitle("App Storage")
@@ -100,10 +79,13 @@ struct AppStorageViewer: View {
                 }
             }
             .onAppear(perform: reload)
-            .sheet(item: $jsonDocument) { document in
+            .sheet(item: $textDocument) { document in
                 TextFileViewer(url: document.url)
             }
-            .alert("Delete file?",
+            .sheet(item: $sharedItem) { item in
+                ActivityView(items: [item.url])
+            }
+            .alert("Are you sure you want to fuck this file?",
                    isPresented: $showDeleteAlert) {
 
                 Button("Delete", role: .destructive) {
@@ -122,45 +104,44 @@ struct AppStorageViewer: View {
     // MARK: - Helpers
 
     private func reload() {
-
         let fm = FileManager.default
-
-        nodes.removeAll()
-
+        var newNodes: [StorageNode] = []
         if let documents = fm.urls(
             for: .documentDirectory,
             in: .userDomainMask
         ).first {
-
-            nodes.append(
+            newNodes.append(
                 makeTree(
                     url: documents,
                     displayName: "Documents"
                 )
             )
         }
-
         if let support = fm.urls(
             for: .applicationSupportDirectory,
             in: .userDomainMask
         ).first {
-
-            nodes.append(
+            newNodes.append(
                 makeTree(
                     url: support,
                     displayName: "Application Support"
                 )
             )
         }
+        nodes = newNodes
+        // Do not clear expandedFolders; preserve expansion state.
     }
     private func preview(_ file: StorageFile) {
 
         selectedFile = file
 
-        if file.url.pathExtension.lowercased() == "json" {
+        switch file.url.pathExtension.lowercased() {
 
-            jsonDocument = JSONDocument(url: file.url)
-            return
+        case "json", "log", "txt", "csv", "jsonl":
+            textDocument = TextDocument(url: file.url)
+
+        default:
+            break
         }
     }
 
@@ -170,6 +151,45 @@ struct AppStorageViewer: View {
         UIPasteboard.general.string =
             (try? String(contentsOf: file.url, encoding: .utf8)) ?? ""
 #endif
+    }
+
+    private func copyFolder(_ node: StorageNode) {
+        guard let sourceURL = node.url else { return }
+
+        let coordinator = NSFileCoordinator()
+        var coordinationError: NSError?
+
+        coordinator.coordinate(
+            readingItemAt: sourceURL,
+            options: .forUploading,
+            error: &coordinationError
+        ) { zippedURL in
+            do {
+                let fm = FileManager.default
+                let destination = fm.temporaryDirectory
+                    .appendingPathComponent(sourceURL.lastPathComponent)
+                    .appendingPathExtension("zip")
+
+                if fm.fileExists(atPath: destination.path) {
+                    try fm.removeItem(at: destination)
+                }
+
+                try fm.copyItem(at: zippedURL, to: destination)
+
+                #if os(iOS)
+                UIPasteboard.general.url = destination
+                #endif
+
+                sharedItem = SharedItem(url: destination)
+
+            } catch {
+                print("Failed to export ZIP: \(error)")
+            }
+        }
+
+        if let coordinationError {
+            print("ZIP coordination failed: \(coordinationError)")
+        }
     }
 
     private func icon(for url: URL) -> String {
@@ -245,10 +265,8 @@ struct AppStorageViewer: View {
                 )) ?? []
 
             return StorageNode(
-
-                name: displayName ??
-                      url.lastPathComponent,
-
+                name: displayName ?? url.lastPathComponent,
+                url: url,
                 children: children
                     .sorted {
                         $0.lastPathComponent <
@@ -314,5 +332,105 @@ struct StorageFile {
             fromByteCount: Int64(size),
             countStyle: .file
         )
+    }
+}
+
+
+// MARK: - Recursive StorageNodeRow
+
+private struct StorageNodeRow: View {
+    let node: StorageNode
+    @Binding var expandedFolders: Set<URL>
+    let preview: (StorageFile) -> Void
+    let copy: (StorageFile) -> Void
+    let copyFolder: (StorageNode) -> Void
+    let shareFolder: (URL) -> Void
+    let deleteFile: (StorageFile) -> Void
+    let deleteFolder: (URL) -> Void
+    let icon: (URL) -> String
+
+    var body: some View {
+        if node.isDirectory, let url = node.url {
+            DisclosureGroup(
+                isExpanded: Binding(
+                    get: { expandedFolders.contains(url) },
+                    set: { expanded in
+                        if expanded {
+                            expandedFolders.insert(url)
+                        } else {
+                            expandedFolders.remove(url)
+                        }
+                    }
+                )
+            ) {
+                if let children = node.children {
+                    ForEach(children) { child in
+                        StorageNodeRow(
+                            node: child,
+                            expandedFolders: $expandedFolders,
+                            preview: preview,
+                            copy: copy,
+                            copyFolder: copyFolder,
+                            shareFolder: shareFolder,
+                            deleteFile: deleteFile,
+                            deleteFolder: deleteFolder,
+                            icon: icon
+                        )
+                    }
+                }
+            } label: {
+                Label(node.name, systemImage: "folder")
+                    .contextMenu {
+                        Button {
+                            copyFolder(node)
+                        } label: {
+                            Label("Copy", systemImage: "doc.on.doc")
+                        }
+                        Button {
+                            shareFolder(url)
+                        } label: {
+                            Label("Share", systemImage: "square.and.arrow.up")
+                        }
+                        Button(role: .destructive) {
+                            deleteFolder(url)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
+            }
+        } else if let url = node.url, let file = StorageFile(url: url) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Image(systemName: icon(url))
+                    Text(node.name)
+                        .font(.headline)
+                    Spacer()
+                    Text(file.sizeString)
+                        .foregroundStyle(.secondary)
+                }
+                Text(file.modified.formatted())
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                HStack {
+                    Button {
+                        copy(file)
+                    } label: {
+                        Label("Copy", systemImage: "doc.on.doc")
+                            .frame(maxWidth: .infinity)
+                    }
+                    Button(role: .destructive) {
+                        deleteFile(file)
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .buttonStyle(.bordered)
+            }
+            .onTapGesture {
+                preview(file)
+            }
+        }
     }
 }

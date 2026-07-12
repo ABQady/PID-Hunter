@@ -276,7 +276,7 @@ final class BruteForceScanner: ObservableObject {
             persistence.saveResults(session.results)
             // persistence.refreshResumeAvailability() // Removed as ScanPersistence refreshes internally
         }
-
+        
         shouldStop = false
     }
     
@@ -533,7 +533,7 @@ final class BruteForceScanner: ObservableObject {
     private func processRetryResult(
         _ result: PartialFrameRetryResult,
         consecutiveTimeouts: inout Int
-    ) {
+    ) async {
         guard let index = partialFrames.firstIndex(where: {
             $0.id == result.frame.id
         }) else {
@@ -600,6 +600,7 @@ final class BruteForceScanner: ObservableObject {
                     result: classification,
                     latency: latency
                 )
+                ScanStatistics.shared.recordPartialFrame()
                 Logger.shared.warning("🟡 Partial retry still incomplete: \(frame.request)")
 
             case .negative, .noData:
@@ -786,7 +787,7 @@ final class BruteForceScanner: ObservableObject {
             )
 
             for retryResult in retryResults {
-                processRetryResult(
+                await processRetryResult(
                     retryResult,
                     consecutiveTimeouts: &consecutiveTimeouts
                 )
@@ -903,6 +904,7 @@ final class BruteForceScanner: ObservableObject {
         session.startPID = configuration.startPID
         session.endPID = configuration.endPID
 
+        
         Logger.shared.info("Search engine: \(searchEngine)")
         Logger.shared.info(
             "Starting \(mode.rawValue) scan using header \(header)"

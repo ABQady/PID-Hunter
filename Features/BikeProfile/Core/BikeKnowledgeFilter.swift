@@ -36,7 +36,7 @@ struct BikeKnowledgeFilter {
             profile: profile
         )
 
-        Logger.shared.info(
+    Logger.shared.info(
             "🧠 Bike Profile filtered \(mode.runtimeRequests.count - queue.count) known request(s)"
         )
 

@@ -15,6 +15,7 @@ enum DiscoveryClassification: String, Codable {
     case busError
     case unableToConnect
     case unknown
+    case partialFrame
 }
 
 extension DiscoveryClassification {
@@ -36,6 +37,8 @@ extension DiscoveryClassification {
              .atResponse,
              .unknown:
             self = .unknown
+        case .partialFrame:
+            self = .partialFrame
         }
     }
 }
@@ -50,7 +53,8 @@ extension DiscoveryClassification {
         case .timeout: "Timeout"
         case .unknown: "Unknown"
         case .busError: "Bus Error"
-        case .unableToConnect: "Unable to Conect"
+        case .unableToConnect: "Unable to Connect"
+        case .partialFrame: "Partial Frame"
         }
     }
 
@@ -61,8 +65,9 @@ extension DiscoveryClassification {
         case .noData: "minus.circle.fill"
         case .timeout: "clock.badge.xmark.fill"
         case .unknown: "questionmark.circle.fill"
-        case .busError:" xmark.circle.fill"
+        case .busError: "xmark.circle.fill"
         case .unableToConnect: "xmark.circle.fill"
+        case .partialFrame: "exclamationmark.triangle.fill"
         }
     }
 
@@ -75,6 +80,7 @@ extension DiscoveryClassification {
         case .unknown: .gray
         case .busError: .red
         case .unableToConnect: .red
+        case .partialFrame: .yellow
         }
     }
 

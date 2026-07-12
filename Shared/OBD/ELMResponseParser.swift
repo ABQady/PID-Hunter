@@ -33,6 +33,7 @@ enum ELMResponseType {
     case unknown
     case positive(service: UInt8)
     case negative(service: UInt8)
+    case partialFrame
 }
 
 enum ELMResponseParser {

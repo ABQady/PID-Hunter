@@ -32,7 +32,7 @@ enum SearchResult {
 
 struct ResponseClassifier {
 
-    func classify(_ response: ELMResponse) -> SearchResult {
+    func classify(_ response: ELMResponse) async -> SearchResult {
         
         switch response.type {
 
@@ -45,7 +45,10 @@ struct ResponseClassifier {
                 return .partialFrame(response)
             }
             return .positive(response)
-
+            
+        case .partialFrame:
+            return .partialFrame(response)
+            
         case .negative:
             return .negative(response)
 
@@ -122,7 +125,7 @@ final class RequestExecutor {
                 timeout: .seconds(timeout)
             )
 
-            let searchResult = classifier.classify(result.response)
+            let searchResult = await classifier.classify(result.response)
             Logger.shared.verbose("""
 Request Classification
 REQUEST = \(request)

@@ -6,6 +6,9 @@
 //
 
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct TextFileViewer: View {
 
@@ -37,13 +40,16 @@ struct TextFileViewer: View {
                     )
 
                 } else {
-
-                    TextEditor(text: .constant(text))
-                        .font(.system(.body,
-                                      design: .monospaced))
-                        .textSelection(.enabled)
-#if os(iOS)
-                        .scrollContentBackground(.hidden)
+#if canImport(UIKit)
+                    ReadOnlyTextView(text: text)
+#else
+                    ScrollView {
+                        Text(text)
+                            .font(.system(size: 13, design: .monospaced))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding()
+                    }
 #endif
                 }
             }
@@ -169,4 +175,29 @@ struct TextFileViewer: View {
         }
 
         isLoading = false
-    }}
+    }
+}
+#if canImport(UIKit)
+private struct ReadOnlyTextView: UIViewRepresentable {
+
+    let text: String
+
+    func makeUIView(context: Context) -> UITextView {
+        let view = UITextView()
+        view.isEditable = false
+        view.isSelectable = true
+        view.isScrollEnabled = true
+        view.font = UIFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        view.backgroundColor = .clear
+        view.textContainerInset = UIEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
+        view.textContainer.lineFragmentPadding = 0
+        return view
+    }
+
+    func updateUIView(_ uiView: UITextView, context: Context) {
+        if uiView.text != text {
+            uiView.text = text
+        }
+    }
+}
+#endif

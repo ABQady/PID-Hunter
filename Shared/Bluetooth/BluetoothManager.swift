@@ -87,54 +87,61 @@ final class BluetoothManager: NSObject, ObservableObject {
     }
     
     // MARK: Scan
-        func startScan() {
-            ELMResponseAssembler.shared.clear()
-            txCount = 0
-            rxCount = 0
-            status = .scanningBLE
-            
-            guard central.state == .poweredOn else { return }
-            
-            isConnected = false
-            lastResponse = ""
-            detectedTX = ""
-            detectedRX = ""
-            detectedService = ""
-            
-            elmPeripheral = nil
-            writeCharacteristic = nil
-            notifyCharacteristic = nil
-            elmInitialized = false
-            retriedProtocol = false
-            
-            discoveredDevices.removeAll()
-            isScanning = true
-            
-            central.scanForPeripherals(
-                withServices: nil,
-                options: [
-                    CBCentralManagerScanOptionAllowDuplicatesKey: false
-                ]
-            )
-            
-            Task { @MainActor [weak self] in
-                try? await Task.sleep(for: .seconds(10))
+    func startScan() {
+        ELMResponseAssembler.shared.clear()
+        txCount = 0
+        rxCount = 0
+        status = .scanningBLE
 
-                guard let self else { return }
+        guard central.state == .poweredOn else { return }
 
-                if self.isScanning {
-                    self.status = .timeout
-                    self.stopScan()
-                    Logger.shared.warning("Scan timed out")
-                }
+        isConnected = false
+        lastResponse = ""
+        detectedTX = ""
+        detectedRX = ""
+        detectedService = ""
+
+        elmPeripheral = nil
+        writeCharacteristic = nil
+        notifyCharacteristic = nil
+        elmInitialized = false
+        retriedProtocol = false
+
+        discoveredDevices.removeAll()
+        isScanning = true
+
+        central.scanForPeripherals(
+            withServices: nil,
+            options: [
+                CBCentralManagerScanOptionAllowDuplicatesKey: false
+            ]
+        )
+
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(10))
+
+            guard let self else { return }
+
+            if self.isScanning {
+                self.status = .timeout
+                self.stopScan()
+                Logger.shared.warning("Scan timed out")
             }
+        }
         Logger.shared.console("Scanning...")
         Logger.shared.info("Scanning...")
     }
     func stopScan() {
         guard isScanning else { return }
+
         central.stopScan()
         isScanning = false
+
+        Task {
+            if LogSessionManager.shared.isSessionStarted {
+                await closeLoggingSession()
+            }
+        }
     }
     // MARK: Connection
     func connect(
@@ -279,7 +286,12 @@ final class BluetoothManager: NSObject, ObservableObject {
         txCount = 0
         rxCount = 0
     }
-    
+
+    // MARK: - Private helpers
+    private func closeLoggingSession() async {
+        await Logger.shared.finishSessionImpl()
+        LogSessionManager.shared.endLoggingSession()
+    }
 }
 // ======================================================
 // MARK: CBCentralManagerDelegate
@@ -393,7 +405,10 @@ extension BluetoothManager:
             }
 
             clearPendingRequest(resumingWith: BluetoothError.disconnected)
-        }
+            
+            if LogSessionManager.shared.isSessionStarted {
+                await closeLoggingSession()
+            }        }
     }
 }
 // ======================================================
@@ -527,6 +542,9 @@ extension BluetoothManager:
              .atResponse,
              .unknown:
             break
+        case .partialFrame:
+            ScanStatistics.shared.recordPartialFrame()
+            Logger.shared.warning("🟡 Partial ECU frame")
         }
     }
     
@@ -717,7 +735,10 @@ extension ELMResponseType {
         case .searching,
              .stopped:
             return false
+        case .partialFrame:
+            return true
         }
     }
 }
+
 

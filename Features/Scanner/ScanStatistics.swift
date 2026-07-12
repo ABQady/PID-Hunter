@@ -16,6 +16,7 @@ final class ScanStatistics: ObservableObject {
     @Published var positiveResponses = 0
     @Published var negativeResponses = 0
     @Published var noData = 0
+    @Published var partialFrames = 0
     @Published var busErrors = 0
     @Published var timeouts = 0
 
@@ -36,6 +37,7 @@ final class ScanStatistics: ObservableObject {
         positiveResponses = 0
         negativeResponses = 0
         noData = 0
+        partialFrames = 0
         busErrors = 0
         timeouts = 0
 
@@ -154,6 +156,12 @@ final class ScanStatistics: ObservableObject {
         requestsSent += 1
         responses += 1
         noData += 1
+    }
+
+    func recordPartialFrame() {
+        requestsSent += 1
+        responses += 1
+        partialFrames += 1
     }
 
     func recordTimeout() {
