@@ -15,6 +15,9 @@ struct BikeLearningCard: View {
     @State
     private var selectedClassification: DiscoveryClassification?
 
+    @State
+    private var isShowingPartialResponsesSheet = false
+
     private var profile: BikeProfile? {
         manager.displayedProfile
     }
@@ -149,6 +152,18 @@ struct BikeLearningCard: View {
                             )
                         }
                         .buttonStyle(.plain)
+
+                        Button {
+                            isShowingPartialResponsesSheet = true
+                        } label: {
+                            statistic(
+                                title: "Partial Frames",
+                                value: "\(analytics.partialResponseRequests)",
+                                icon: "exclamationmark.triangle.fill",
+                                tint: .yellow
+                            )
+                        }
+                        .buttonStyle(.plain)
                     }
 
                     Divider()
@@ -183,6 +198,14 @@ struct BikeLearningCard: View {
                 StoredKnowledgeSheet(
                     profile: profile,
                     classification: classification
+                )
+            }
+        }
+        .sheet(isPresented: $isShowingPartialResponsesSheet) {
+            if let profile {
+                StoredKnowledgeSheet(
+                    profile: profile,
+                    partialResponsesOnly: true
                 )
             }
         }

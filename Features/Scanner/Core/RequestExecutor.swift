@@ -24,6 +24,7 @@ enum SearchResult {
     case positive(ELMResponse)
     case noData
     case negative(ELMResponse)
+    case partialFrame(ELMResponse)
     case timeout
     case unknown(ELMResponse)
     case adapter(ELMResponse)
@@ -36,6 +37,13 @@ struct ResponseClassifier {
         switch response.type {
 
         case .positive:
+            // A response classified as positive may still be an incomplete frame
+            // (for example, only the echoed header without a service byte/payload).
+            // Treat those as partial frames so they can be retried later instead of
+            // being promoted to positive or discarded as negative.
+            if response.raw == "83F111" {
+                return .partialFrame(response)
+            }
             return .positive(response)
 
         case .negative:

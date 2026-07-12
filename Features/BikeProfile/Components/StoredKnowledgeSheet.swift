@@ -10,7 +10,18 @@ import SwiftUI
 struct StoredKnowledgeSheet: View {
 
     let profile: BikeProfile
-    let classification: DiscoveryClassification
+    let classification: DiscoveryClassification?
+    let partialResponsesOnly: Bool
+
+    init(
+        profile: BikeProfile,
+        classification: DiscoveryClassification? = nil,
+        partialResponsesOnly: Bool = false
+    ) {
+        self.profile = profile
+        self.classification = classification
+        self.partialResponsesOnly = partialResponsesOnly
+    }
 
     @State private var searchText = ""
     @State private var selectedHeader: String? = nil
@@ -27,7 +38,17 @@ struct StoredKnowledgeSheet: View {
 
     private var discoveries: [DiscoveryRecord] {
         profile.discoveries
-            .filter { $0.classification == classification }
+            .filter { record in
+                if partialResponsesOnly {
+                    return record.hadPartialResponse
+                }
+
+                guard let classification else {
+                    return true
+                }
+
+                return record.classification == classification
+            }
             .filter {
                 (selectedHeader == nil || $0.header == selectedHeader!) &&
                 (selectedMode == nil || $0.mode == selectedMode!)
@@ -62,6 +83,7 @@ struct StoredKnowledgeSheet: View {
                         if isSelectionMode {
                             StoredPIDCard(
                                 record: record,
+                                partialResponsesOnly: partialResponsesOnly,
                                 isSelectionMode: true,
                                 isSelected: selectedRecords.contains(record),
                                 onTap: {
@@ -74,7 +96,8 @@ struct StoredKnowledgeSheet: View {
                             )
                         } else {
                             StoredPIDCard(
-                                record: record
+                                record: record,
+                                partialResponsesOnly: partialResponsesOnly
                             )
                         }
                     }
@@ -86,7 +109,7 @@ struct StoredKnowledgeSheet: View {
             .navigationTitle(
                 isSelectionMode
                     ? "\(selectedRecords.count) Selected"
-                    : "\(classification.title) (\(discoveries.count))"
+                    : "\((partialResponsesOnly ? "Partial Frames" : (classification?.title ?? "Knowledge"))) (\(discoveries.count))"
             )
             .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $searchText, prompt: "Search PID, Header or Mode")

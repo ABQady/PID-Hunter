@@ -16,6 +16,27 @@ struct ScanResult: Codable, Identifiable {
     let response: String
 }
 
+struct PartialFrame: Codable, Identifiable {
+    var id: String {
+            "\(header)|\(mode)|\(request)"
+        }
+    let header: String
+    let mode: String
+    let pid: String
+    let request: String
+    let rawResponse: String
+    var timestamp = Date()
+    var attempts = 1
+    var retrySucceeded = false
+    var resolution: PartialFrameResolution = .pending
+}
+
+enum PartialFrameResolution: String, Codable {
+    case pending
+    case confirmedPositive
+    case confirmedNegative
+}
+
 struct ScanStatus {
     var progress = 0.0
     var currentRequest = ""
@@ -40,6 +61,8 @@ final class BruteForceScanner: ObservableObject {
     @Published private(set) var scanStatus = ScanStatus()
     @Published private(set) var session = ScanSession()
     @Published private(set) var statistics = SearchEngineStatistics()
+    @Published private(set) var partialFrames: [PartialFrame] = []
+    @Published private(set) var partialFrameCount = 0
 
     @AppStorage("selectedSearchEngine")
     private var selectedSearchEngine = SearchEngineType.sequential.rawValue
@@ -56,6 +79,9 @@ final class BruteForceScanner: ObservableObject {
 
     @AppStorage("maxConsecutiveTimeouts")
     private var maxConsecutiveTimeouts = 15
+
+    @AppStorage("partialFrameRetryCount")
+    private var partialFrameRetryCount = 3
     
     private var shouldStop = false
     
@@ -229,7 +255,7 @@ final class BruteForceScanner: ObservableObject {
     private func finishScan(completed: Bool) {
         scanStatus.isScanning = false
         scanStatus.currentRequest = ""
-        
+
         RequestOutcomeProcessor.shared.flushProfile()
         
         Logger.shared.info(
@@ -270,6 +296,8 @@ final class BruteForceScanner: ObservableObject {
         session.searchStrategy.reset()
 
         session.results.removeAll()
+        partialFrames.removeAll()
+        partialFrameCount = 0
         
         session.seen.removeAll()
         results = session.results
@@ -287,6 +315,8 @@ final class BruteForceScanner: ObservableObject {
     
     private func clearResults() {
         session.results.removeAll()
+        partialFrames.removeAll()
+        partialFrameCount = 0
         session.seen.removeAll()
         results = session.results
         scanStatus.successCount = 0
@@ -377,6 +407,38 @@ final class BruteForceScanner: ObservableObject {
         header: String,
         consecutiveTimeouts: inout Int
     ) {
+        // Move partial frame handling before handleSuccess
+        statistics.record(
+            result: classification,
+            latency: latency
+        )
+
+        if case .partialFrame = classification {
+            let pidString = mode.scanCapability.pidWidth == 2
+                ? String(format: "%02X", pid)
+                : String(format: "%04X", pid)
+
+            partialFrames.append(
+                PartialFrame(
+                    header: header,
+                    mode: mode.rawValue,
+                    pid: pid == 0 ? "" : pidString,
+                    request: request,
+                    rawResponse: response.raw
+                )
+            )
+            partialFrameCount = partialFrames.count
+
+            session.searchStrategy.registerResult(
+                pid: pid,
+                result: classification,
+                latency: latency
+            )
+
+            Logger.shared.warning("🟡 Partial frame detected: \(request) -> \(response.raw)")
+            return
+        }
+
         let outcome = RequestOutcomeProcessor.shared.handleSuccess(
             response: response,
             classification: classification,
@@ -391,11 +453,10 @@ final class BruteForceScanner: ObservableObject {
             return
         }
 
-        statistics.record(
-            result: classification,
-            latency: latency
-        )
-        
+        // statistics.record(...) already called above, so remove below.
+
+        // Remove old partial frame handling block below.
+
         guard processing.profileUpdated else {
             Logger.shared.warning("Bike Profile update skipped")
             return
@@ -464,6 +525,113 @@ final class BruteForceScanner: ObservableObject {
         )
 
         await handleTimeout()
+    }
+
+    // MARK: - Partial Frame Retry Processing
+
+
+    private func processRetryResult(
+        _ result: PartialFrameRetryResult,
+        consecutiveTimeouts: inout Int
+    ) {
+        guard let index = partialFrames.firstIndex(where: {
+            $0.id == result.frame.id
+        }) else {
+            Logger.shared.warning("Retry result ignored; frame no longer exists: \(result.frame.request)")
+            return
+        }
+
+        let frame = result.frame
+        let pid = UInt16(frame.pid, radix: 16) ?? 0
+        let mode = OBDMode(rawValue: frame.mode) ?? .mode01
+
+        switch result.outcome {
+        case .success(let response, let classification, let latency):
+            // Only a received response is a completed retry attempt. The retry
+            // engine never mutates this bookkeeping.
+            partialFrames[index].attempts += 1
+            statistics.record(
+                result: classification,
+                latency: latency
+            )
+            resetTimeoutCounter(&consecutiveTimeouts)
+
+            switch classification {
+            case .positive:
+
+                partialFrames[index].retrySucceeded = true
+                partialFrames[index].resolution = .confirmedPositive
+
+                let outcome = RequestOutcomeProcessor.shared.recordRetryPositive(
+                    response: response,
+                    classification: classification,
+                    latency: latency,
+                    mode: mode,
+                    request: frame.request,
+                    consecutiveTimeouts: &consecutiveTimeouts
+                )
+
+                guard case .success(let processing) = outcome else {
+                    return
+                }
+
+                if processing.shouldPersist {
+                    _ = appendResponse(
+                        header: frame.header,
+                        mode: frame.mode,
+                        pid: frame.pid,
+                        request: frame.request,
+                        response: response,
+                        classification: classification
+                    )
+                }
+
+                session.searchStrategy.registerResult(
+                    pid: pid,
+                    result: classification,
+                    latency: latency
+                )
+
+                Logger.shared.success("✅ Partial retry confirmed positive: \(frame.request)")
+
+            case .partialFrame:
+                session.searchStrategy.registerResult(
+                    pid: pid,
+                    result: classification,
+                    latency: latency
+                )
+                Logger.shared.warning("🟡 Partial retry still incomplete: \(frame.request)")
+
+            case .negative, .noData:
+                partialFrames[index].resolution = .confirmedNegative
+
+                _ = RequestOutcomeProcessor.shared.recordConfirmedNegative(
+                    response: response,
+                    classification: classification,
+                    latency: latency,
+                    mode: mode,
+                    request: frame.request,
+                    consecutiveTimeouts: &consecutiveTimeouts
+                )
+
+                session.searchStrategy.registerResult(
+                    pid: pid,
+                    result: classification,
+                    latency: latency
+                )
+
+                Logger.shared.info("🔴 Partial retry confirmed negative: \(frame.request)")
+
+            case .timeout, .adapter, .unknown:
+                Logger.shared.warning("Retry returned \(classification) for \(frame.request)")
+            }
+
+        case .timeout:
+            Logger.shared.warning("⏱️ Partial retry timed out: \(frame.request)")
+
+        case .connectionLost:
+            Logger.shared.error("📡 Partial retry lost connection: \(frame.request)")
+        }
     }
     
     
@@ -594,6 +762,40 @@ final class BruteForceScanner: ObservableObject {
             done: &progress.done,
             consecutiveTimeouts: &consecutiveTimeouts
         )
+
+        if !shouldStop && !partialFrames.isEmpty {
+            Logger.shared.info("Retrying partial frames...")
+
+            let retryResults = await PartialFrameRetryEngine().retryPendingFrames(
+                using: requestExecutor,
+                frames: partialFrames,
+                makeContext: { frame in
+                    RequestContext(
+                        mode: OBDMode(rawValue: frame.mode) ?? configuration.mode,
+                        pid: UInt16(frame.pid, radix: 16) ?? 0,
+                        header: frame.header,
+                        retryCount: frame.attempts,
+                        searchEngine: session.searchStrategy.engineType
+                    )
+                },
+                timeout: requestTimeout
+            )
+
+            Logger.shared.info(
+                "Partial retry pass completed. \(retryResults.count) frame(s) processed."
+            )
+
+            for retryResult in retryResults {
+                processRetryResult(
+                    retryResult,
+                    consecutiveTimeouts: &consecutiveTimeouts
+                )
+            }
+
+            partialFrameCount = partialFrames.filter {
+                $0.resolution == .pending
+            }.count
+        }
 
         if shouldStop {
             return

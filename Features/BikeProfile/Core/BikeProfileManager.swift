@@ -258,7 +258,9 @@ final class BikeProfileManager {
         mode: OBDMode,
         request: String,
         response: ELMResponse,
-        latency: TimeInterval
+        latency: TimeInterval,
+        source: RecordSource = .discovery,
+        hadPartialResponse: Bool = false
     ) {
         guard var profile = currentProfile else { return }
 
@@ -272,6 +274,20 @@ final class BikeProfileManager {
                 responseType: response.type,
                 latency: latency
             )
+            switch (profile.discoveries[index].source, source) {
+            case (.confirmedNegative, .discovery):
+                // Keep the stronger knowledge.
+                break
+
+            case (.retryPositive, .discovery):
+                // Do not downgrade a retry-confirmed discovery.
+                break
+
+            default:
+                profile.discoveries[index].source = source
+            }
+            profile.discoveries[index].hadPartialResponse =
+                profile.discoveries[index].hadPartialResponse || hadPartialResponse
         } else {
             profile.discoveries.append(
                 DiscoveryRecord(
@@ -284,7 +300,9 @@ final class BikeProfileManager {
                     hitCount: 1,
                     classification: DiscoveryClassification(from: response.type),
                     averageLatency: latency,
-                    notes: [response.raw]
+                    notes: [response.raw],
+                    source: source,
+                    hadPartialResponse: hadPartialResponse
                 )
             )
         }

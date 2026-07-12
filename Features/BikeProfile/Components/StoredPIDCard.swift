@@ -10,6 +10,7 @@ import UIKit
 struct StoredPIDCard: View {
 
     let record: DiscoveryRecord
+    var partialResponsesOnly = false
     var isSelectionMode = false
     var isSelected = false
     var onTap: (() -> Void)? = nil
@@ -118,6 +119,38 @@ struct StoredPIDCard: View {
             }
             .font(.footnote)
             .foregroundStyle(.secondary)
+
+            // Compact status badges for partial responses view
+            if partialResponsesOnly {
+                HStack(spacing: 8) {
+
+                    Label(
+                        record.classification == .positive
+                            ? "Confirmed Positive"
+                            : "Confirmed Negative",
+                        systemImage: record.classification == .positive
+                            ? "checkmark.circle.fill"
+                            : "xmark.circle.fill"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        (record.classification == .positive
+                            ? Color.green
+                            : Color.red)
+                            .opacity(0.15)
+                    )
+                    .foregroundStyle(
+                        record.classification == .positive
+                            ? Color.green
+                            : Color.red
+                    )
+                    .clipShape(Capsule())
+
+                    Spacer()
+                }
+            }
 
             // Optional notes
             let notesText = String(describing: record.notes)

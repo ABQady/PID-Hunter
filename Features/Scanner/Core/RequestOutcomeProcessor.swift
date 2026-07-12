@@ -31,6 +31,38 @@ final class RequestOutcomeProcessor {
 
     private init() {}
 
+    @discardableResult
+    func recordRetryPositive(
+        response: ELMResponse,
+        classification: SearchResult,
+        latency: TimeInterval,
+        mode: OBDMode,
+        request: String,
+        consecutiveTimeouts: inout Int
+    ) -> RequestOutcome {
+
+        consecutiveTimeouts = 0
+
+        BikeProfileManager.shared.record(
+            mode: mode,
+            request: request,
+            response: response,
+            latency: latency,
+            source: .retryPositive
+        )
+
+        Logger.shared.success(
+            "🟢 Retry Positive | \(mode.rawValue) | \(request) | \(Int(latency * 1000)) ms"
+        )
+
+        return .success(
+            ScanProcessingResult(
+                shouldPersist: classification.shouldPersist,
+                profileUpdated: true
+            )
+        )
+    }
+    
     // MARK: - Success
 
     @discardableResult
@@ -49,7 +81,8 @@ final class RequestOutcomeProcessor {
             mode: mode,
             request: request,
             response: response,
-            latency: latency
+            latency: latency,
+            source: .discovery
         )
 
         Logger.shared.verbose(
@@ -58,6 +91,40 @@ final class RequestOutcomeProcessor {
         return .success(
             ScanProcessingResult(
                 shouldPersist: shouldPersist,
+                profileUpdated: true
+            )
+        )
+    }
+
+    // MARK: - Confirmed Negative
+
+    @discardableResult
+    func recordConfirmedNegative(
+        response: ELMResponse,
+        classification: SearchResult,
+        latency: TimeInterval,
+        mode: OBDMode,
+        request: String,
+        consecutiveTimeouts: inout Int
+    ) -> RequestOutcome {
+
+        consecutiveTimeouts = 0
+
+        BikeProfileManager.shared.record(
+            mode: mode,
+            request: request,
+            response: response,
+            latency: latency,
+            source: .confirmedNegative
+        )
+
+        Logger.shared.info(
+            "🔴 Confirmed Negative | \(mode.rawValue) | \(request) | \(classification) | \(Int(latency * 1000)) ms"
+        )
+
+        return .success(
+            ScanProcessingResult(
+                shouldPersist: false,
                 profileUpdated: true
             )
         )

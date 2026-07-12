@@ -14,11 +14,29 @@ struct SearchEngineStatistics: Sendable, Codable {
     private(set) var requestsSent: Int = 0
     private(set) var successfulResponses: Int = 0
     private(set) var failedResponses: Int = 0
+    private(set) var pendingResponses: Int = 0
 
     // MARK: - Derived Values
     @inline(__always)
     var completedRequests: Int {
         successfulResponses + failedResponses
+    }
+
+    @inline(__always)
+    var pendingRequests: Int {
+        pendingResponses
+    }
+
+    // Invariant metric for debugging request accounting.
+    @inline(__always)
+    var outstandingRequests: Int {
+        max(
+            0,
+            requestsSent -
+            successfulResponses -
+            failedResponses -
+            pendingResponses
+        )
     }
 
     @inline(__always)
@@ -63,6 +81,7 @@ struct SearchEngineStatistics: Sendable, Codable {
         requestsSent += other.requestsSent
         successfulResponses += other.successfulResponses
         failedResponses += other.failedResponses
+        pendingResponses += other.pendingResponses
         totalLatency += other.totalLatency
 
         guard other.hasSuccessfulResponses else {
@@ -91,6 +110,10 @@ struct SearchEngineStatistics: Sendable, Codable {
         failedResponses += 1
     }
 
+    mutating func recordPending() {
+        pendingResponses += 1
+    }
+
 
     mutating func record(result: SearchResult, latency: TimeInterval) {
         recordRequest()
@@ -104,6 +127,9 @@ struct SearchEngineStatistics: Sendable, Codable {
              .unknown,
              .noData:
             recordFailure()
+
+        case .partialFrame:
+            recordPending()
         }
     }
 
@@ -111,6 +137,7 @@ struct SearchEngineStatistics: Sendable, Codable {
         requestsSent = 0
         successfulResponses = 0
         failedResponses = 0
+        pendingResponses = 0
         totalLatency = 0
         fastestResponse = .greatestFiniteMagnitude
         slowestResponse = 0

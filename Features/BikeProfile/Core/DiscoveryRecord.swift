@@ -6,6 +6,12 @@
 //
 import Foundation
 
+enum RecordSource: String, Codable {
+    case discovery
+    case retryPositive
+    case confirmedNegative
+}
+
 struct DiscoveryRecord: Hashable, Codable {
     let header: String
     let mode: String
@@ -17,6 +23,8 @@ struct DiscoveryRecord: Hashable, Codable {
     var classification: DiscoveryClassification = .unknown
     var averageLatency: TimeInterval = 0
     var notes: [String] = []
+    var source: RecordSource = .discovery
+    var hadPartialResponse = false
 
     enum CodingKeys: String, CodingKey {
         case header
@@ -29,6 +37,8 @@ struct DiscoveryRecord: Hashable, Codable {
         case classification
         case averageLatency
         case notes
+        case source
+        case hadPartialResponse
     }
 
     init(from decoder: Decoder) throws {
@@ -55,6 +65,14 @@ struct DiscoveryRecord: Hashable, Codable {
         self.classification = try container.decodeIfPresent(DiscoveryClassification.self, forKey: .classification) ?? .unknown
         self.averageLatency = try container.decodeIfPresent(TimeInterval.self, forKey: .averageLatency) ?? 0
         self.notes = try container.decodeIfPresent([String].self, forKey: .notes) ?? []
+        self.source = try container.decodeIfPresent(
+            RecordSource.self,
+            forKey: .source
+        ) ?? .discovery
+        self.hadPartialResponse = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .hadPartialResponse
+        ) ?? false
     }
 
     func encode(to encoder: Encoder) throws {
@@ -69,6 +87,8 @@ struct DiscoveryRecord: Hashable, Codable {
         try container.encode(classification, forKey: .classification)
         try container.encode(averageLatency, forKey: .averageLatency)
         try container.encode(notes, forKey: .notes)
+        try container.encode(source, forKey: .source)
+        try container.encode(hadPartialResponse, forKey: .hadPartialResponse)
     }
 
     init(
@@ -81,7 +101,9 @@ struct DiscoveryRecord: Hashable, Codable {
         hitCount: Int = 1,
         classification: DiscoveryClassification = .unknown,
         averageLatency: TimeInterval = 0,
-        notes: [String] = []
+        notes: [String] = [],
+        source: RecordSource = .discovery,
+        hadPartialResponse: Bool = false
     ) {
         self.header = header.trimmingCharacters(in: .whitespacesAndNewlines)
         self.mode = mode.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -93,6 +115,8 @@ struct DiscoveryRecord: Hashable, Codable {
         self.classification = classification
         self.averageLatency = averageLatency
         self.notes = notes
+        self.source = source
+        self.hadPartialResponse = hadPartialResponse
     }
 
     var isValid: Bool {

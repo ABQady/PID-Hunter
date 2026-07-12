@@ -94,6 +94,10 @@ struct BikeAnalytics {
     var unknownRequests: Int {
         summary.unknownRequests
     }
+    
+    var partialResponseRequests: Int {
+        summary.partialResponseRequests
+    }
 
     var averageLatency: TimeInterval {
         summary.averageLatency
@@ -144,6 +148,7 @@ struct BikeAnalytics {
         let negativeRequests: Int
         let noDataRequests: Int
         let unknownRequests: Int
+        let partialResponseRequests: Int
         let averageLatency: TimeInterval
         let modeCounts: [String: Int]
         let strongestMode: String
@@ -158,6 +163,7 @@ struct BikeAnalytics {
             var negative = 0
             var noData = 0
             var unknown = 0
+            var partialResponses = 0
             var latency: TimeInterval = 0
             var fastest = TimeInterval.greatestFiniteMagnitude
             var slowest: TimeInterval = 0
@@ -168,6 +174,10 @@ struct BikeAnalytics {
                 latency += record.averageLatency
                 fastest = min(fastest, record.averageLatency)
                 slowest = max(slowest, record.averageLatency)
+
+                if record.hadPartialResponse {
+                    partialResponses += 1
+                }
 
                 switch record.classification {
                 case .positive:
@@ -186,6 +196,7 @@ struct BikeAnalytics {
             negativeRequests = negative
             noDataRequests = noData
             unknownRequests = unknown
+            partialResponseRequests = partialResponses
             averageLatency = totalRequests == 0 ? 0 : latency / Double(totalRequests)
             modeCounts = modes
             fastestResponse = totalRequests == 0 ? 0 : fastest
