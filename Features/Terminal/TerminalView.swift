@@ -127,7 +127,10 @@ struct TerminalView: View {
                     ActionBar(
                         isConnected: bt.isConnected,
                         isScanning: brute.scanStatus.isScanning,
-                        hasResumePoint: brute.hasResumePoint,
+                        resumeMetadata:
+                            ScanPersistence.shared.hasResumePoint
+                                ? ScanPersistence.shared.loadResumeMetadata()
+                                : nil,
                         hasLines: !viewModel.lines.isEmpty,
                         isCompact: isCompact,
                         onClear: {

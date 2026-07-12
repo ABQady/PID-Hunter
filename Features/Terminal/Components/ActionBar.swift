@@ -10,7 +10,7 @@ struct ActionBar: View {
 
     let isConnected: Bool
     let isScanning: Bool
-    let hasResumePoint: Bool
+    let resumeMetadata: ScanPersistence.ResumeMetadata?
     let hasLines: Bool
     let isCompact: Bool
 
@@ -22,6 +22,47 @@ struct ActionBar: View {
     let onDiscoverModes: () -> Void
 
     var body: some View {
+        VStack{
+            HStack{
+                if let session = resumeMetadata {
+                    
+                    DisclosureGroup {
+                        VStack(alignment: .leading, spacing: 8) {
+                            
+                            LabeledContent("Header") {
+                                Text(session.header)
+                                    .monospaced()
+                            }
+                            
+                            LabeledContent("Mode") {
+                                Text(session.mode?.rawValue ?? "Unknown")
+                                    .monospaced()
+                            }
+                            
+                            LabeledContent("Last PID") {
+                                Text(String(format: "%04X", session.currentPID))
+                                    .monospaced()
+                            }
+                            
+                            Button {
+                                onResume()
+                            } label: {
+                                Label("Resume",
+                                      systemImage: "arrow.clockwise.circle.fill")
+                                .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(!isConnected || isScanning)
+                            
+                        }
+                        .padding(.top, 6)
+                        
+                    } label: {
+                        Label("Resume Available",
+                              systemImage: "arrow.clockwise.circle")
+                    }
+                }
+            }
             HStack(alignment: .center, spacing: 10) {
                 Button {
                     onClear()
@@ -40,7 +81,7 @@ struct ActionBar: View {
                           systemImage: "dot.radiowaves.up.forward")
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(!isConnected || isScanning || hasResumePoint)
+                .disabled(!isConnected || isScanning || resumeMetadata != nil)
                 
                 Button(role: .destructive)
                 {
@@ -50,15 +91,7 @@ struct ActionBar: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(!isScanning)
-                // Scan and Resume are mutually exclusive to avoid accidentally starting a fresh scan over a resumable session.
-                Button {
-                    onResume()
-                }
-                label: {
-                    Label("Resume",systemImage: "arrow.clockwise.circle.fill")
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(!isConnected || isScanning || !hasResumePoint)
+                
                 Spacer()
                 Button {
                     onTestECU()
@@ -83,10 +116,7 @@ struct ActionBar: View {
             .if(isCompact) {
                 $0.font(.title3)
             }
-
-        
-        
-        
-        
+            
+        }
     }
 }

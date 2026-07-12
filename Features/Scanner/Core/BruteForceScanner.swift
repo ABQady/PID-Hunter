@@ -38,6 +38,7 @@ final class BruteForceScanner: ObservableObject {
     @Published private(set) var results: [ScanResult] = []
     @Published var delayMs: Double = 100
     @Published private(set) var scanStatus = ScanStatus()
+    @Published private(set) var session = ScanSession()
     @Published private(set) var statistics = SearchEngineStatistics()
 
     @AppStorage("selectedSearchEngine")
@@ -57,7 +58,6 @@ final class BruteForceScanner: ObservableObject {
     private var maxConsecutiveTimeouts = 15
     
     private var shouldStop = false
-    private let session = ScanSession()
     
     private let requestExecutor = RequestExecutor()
     @inline(__always)

@@ -99,22 +99,5 @@ struct ProgressCard: View {
             .padding()
             .background(.thinMaterial)
             .clipShape(RoundedRectangle(cornerRadius: 18))
-            .overlay(
-                Group {
-                    if hasResumePoint && !isScanning {
-                        VStack {
-                            Spacer()
-                            HStack {
-                                Text("Resume available")
-                                    .font(.caption)
-                                    .foregroundStyle(.orange)
-                                Spacer()
-                            }
-                            .padding(.horizontal)
-                        }
-                    }
-                }
-            )
-        
     }
 }
