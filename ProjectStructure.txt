@@ -1,0 +1,142 @@
+.
+├── .swiftpm
+│   ├── configuration
+│   ├── playgrounds
+│   │   ├── CachedManifest.plist
+│   │   ├── DocumentThumbnail.plist
+│   │   ├── DocumentThumbnail.png
+│   │   └── Workspace.plist
+│   └── xcode
+│       ├── package.xcworkspace
+│       │   ├── contents.xcworkspacedata
+│       │   └── xcuserdata
+│       │       └── qady.xcuserdatad
+│       │           └── UserInterfaceState.xcuserstate
+│       └── xcuserdata
+│           └── qady.xcuserdatad
+│               ├── xcdebugger
+│               │   └── Breakpoints_v2.xcbkptlist
+│               └── xcschemes
+│                   └── xcschememanagement.plist
+├── Assets.xcassets
+│   ├── AppIcon.appiconset
+│   │   ├── AppIcon1024x1024.png
+│   │   └── Contents.json
+│   ├── Contents.json
+│   ├── Image.imageset
+│   │   ├── Contents.json
+│   │   ├── Image.png
+│   │   ├── Image@2x.png
+│   │   └── Image@3x.png
+│   ├── PIDHunterSplash.imageset
+│   │   ├── Contents.json
+│   │   ├── PIDHunterSplashScreen 1.png
+│   │   ├── PIDHunterSplashScreen 2.png
+│   │   └── PIDHunterSplashScreen.png
+│   └── PIDHunterSplashLandScape.imageset
+│       ├── Contents.json
+│       ├── PIDHunterSplashLandScape 1.png
+│       ├── PIDHunterSplashLandScape 2.png
+│       └── PIDHunterSplashLandScape.png
+├── Documentation
+│   ├── Architecture Inventory.png
+│   ├── Dependancy Map.png
+│   ├── Master Architecture V2.png
+│   ├── Ownership Map.png
+│   ├── Runtime Sequence Diagram.png
+│   ├── Search Engine Blueprint.png
+│   └── Threading Map.png
+├── Features
+│   ├── Results
+│   │   ├── InfoChip.swift
+│   │   ├── PIDResultCard.swift
+│   │   ├── ResultsView.swift
+│   │   └── ScanStatistics.swift
+│   ├── Scanner
+│   │   ├── Core
+│   │   │   ├── BruteForceScanner.swift
+│   │   │   ├── PIDScanContext.swift
+│   │   │   ├── PIDScanEngine.swift
+│   │   │   ├── RequestExecutor.swift
+│   │   │   └── RequestOutcomeProcessor.swift
+│   │   ├── FixedCommandStrategy.swift
+│   │   ├── InfoTypeStrategy.swift
+│   │   ├── ModeDiscovery.swift
+│   │   ├── PIDScanStrategy.swift
+│   │   ├── Preflight.swift
+│   │   ├── ScanLauncher.swift
+│   │   ├── ScanPersistence.swift
+│   │   └── ScanStrategy.swift
+│   ├── Search
+│   │   ├── Core
+│   │   │   ├── SearchConfiguration.swift
+│   │   │   ├── SearchContext.swift
+│   │   │   ├── SearchEngine.swift
+│   │   │   ├── SearchEngineBootstrap.swift
+│   │   │   ├── SearchEngineCatalog.swift
+│   │   │   ├── SearchEngineDescriptor.swift
+│   │   │   ├── SearchEngineFactory.swift
+│   │   │   ├── SearchEngineRegistry.swift
+│   │   │   ├── SearchEngineType.swift
+│   │   │   ├── SearchStatistics.swift
+│   │   │   └── SearchStrategy.swift
+│   │   ├── Engines
+│   │   │   ├── AdaptiveSearchStrategy.swift
+│   │   │   ├── SequentialSearchStrategy.swift
+│   │   │   └── SmartSearchStrategy.swift
+│   │   ├── PIDQueue.swift
+│   │   ├── PriorityPIDQueue.swift
+│   │   └── SearchKnowledgeBase.swift
+│   ├── Settings
+│   │   └── SettingsView.swift
+│   ├── SplashScreen.swift
+│   └── Terminal
+│       ├── Components
+│       │   ├── ActionBar.swift
+│       │   ├── LogRowView.swift
+│       │   ├── ManualCommandBar.swift
+│       │   ├── ProgressCard.swift
+│       │   ├── StatusCard.swift
+│       │   ├── TerminalHeader.swift
+│       │   └── TerminalLog.swift
+│       ├── TerminalView.swift
+│       └── TerminalViewModel.swift
+├── Layout
+│   ├── ContentView.swift
+│   ├── iphoneLayout.swift
+│   └── macLayout.swift
+├── MyApp.swift
+├── Package.swift
+├── ProjectStructure.txt
+├── README.md
+├── Shared
+│   ├── Bluetooth
+│   │   ├── BluetoothManager.swift
+│   │   └── ELM327.swift
+│   ├── CSVExporter.swift
+│   ├── ECU
+│   │   ├── ECUInfo.swift
+│   │   ├── ECUStatus.swift
+│   │   └── ECUTester.swift
+│   ├── Logger
+│   │   ├── LogLine+Formatting.swift
+│   │   ├── LogStyle+Color.swift
+│   │   └── Logger.swift
+│   ├── OBD
+│   │   ├── ELMResponseAssembler.swift
+│   │   ├── ELMResponseParser.swift
+│   │   ├── ManualCommandSender.swift
+│   │   └── OBDMode.swift
+│   ├── ShareSheet.swift
+│   └── Telemetry
+│       ├── PIDRange.swift
+│       ├── PIDStatistics.swift
+│       ├── RequestTelemetry.swift
+│       ├── TelemetryAnalyzer.swift
+│       └── TelemetryStore.swift
+└── Z.Old
+    ├── DynamicScanner.swift
+    ├── MyContentView.swift
+    └── TabView.swift
+
+36 directories, 104 files

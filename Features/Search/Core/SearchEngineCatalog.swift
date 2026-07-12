@@ -1,0 +1,56 @@
+//
+//  SearchEngineCatalog.swift
+//  PID Hunter
+//
+//  Created by Ahmed Al Qady on 02/07/2026.
+//
+
+import Foundation
+
+@MainActor
+enum SearchEngineCatalog {
+
+    @inline(__always)
+    private static func registeredEngines() -> [SearchEngine] {
+        SearchEngineBootstrap.registerAll()
+
+        return SearchEngineType.allCases.compactMap(SearchEngineFactory.engine)
+    }
+
+    // MARK: - Collections
+
+    static var all: [SearchEngine] {
+        registeredEngines()
+    }
+
+    // MARK: - Defaults
+
+    static var `default`: SearchEngine? {
+        engine(.adaptive)
+    }
+
+    // MARK: - Groups
+
+    static var core: [SearchEngine] { all.filter(\.isCore) }
+
+    static var experimental: [SearchEngine] { all.filter(\.type.isExperimental) }
+
+    static var benchmarkable: [SearchEngine] { all.filter(\.supportsBenchmark) }
+
+    // MARK: - Utilities
+
+    @inline(__always)
+    static func contains(
+        _ type: SearchEngineType
+    ) -> Bool {
+        engine(type) != nil
+    }
+
+    // MARK: - Lookup
+
+    static func engine(
+        _ type: SearchEngineType
+    ) -> SearchEngine? {
+        SearchEngineFactory.engine(for: type)
+    }
+}
