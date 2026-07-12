@@ -10,6 +10,8 @@ import UIKit
 #endif
 
 struct SettingsView: View {
+    @State private var showAppStorage = false
+    
     @Environment(BikeProfileManager.self)
     private var manager
     @ObservedObject private var brute = BruteForceScanner.shared
@@ -121,9 +123,9 @@ struct SettingsView: View {
         ScrollView {
             
             VStack(spacing: 18) {
-
+                
                 BikeProfileCard(context: manager.context)
-
+                
                 // MARK: Configuration
                 VStack(alignment: .leading, spacing: 12) {
                     
@@ -144,11 +146,11 @@ struct SettingsView: View {
                         .pickerStyle(.menu)
                     }
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
-
+                        
                         Text("OBD Mode")
                             .font(.title3)
                             .foregroundStyle(.secondary)
-
+                        
                         Picker("Mode", selection: $selectedMode) {
                             ForEach(availableModes) { mode in
                                 Text("\(mode.title)")
@@ -159,7 +161,7 @@ struct SettingsView: View {
                         .frame(maxWidth: .infinity, alignment: .trailing)
                         .multilineTextAlignment(.trailing)
                     }
-
+                    
                     Toggle(isOn: $forceModeSelection) {
                         Label(
                             "Force Mode (Expert)",
@@ -169,37 +171,37 @@ struct SettingsView: View {
                     .disabled(modeDiscovery.isRunning)
                     .tint(.orange)
                     Divider()
-
+                    
                     if selectedMode.pidRange != nil {
                         Text("PID Range")
                             .font(.title3)
                             .foregroundStyle(.secondary)
-
+                        
                         HStack {
                             VStack(alignment: .leading) {
                                 Text("Start PID")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
-
+                                
                                 TextField(
                                     "%0\(selectedMode.scanCapability.pidWidth)X",
                                     text: $startPID
                                 )
-                                    .textInputAutocapitalization(.characters)
-                                    .autocorrectionDisabled()
+                                .textInputAutocapitalization(.characters)
+                                .autocorrectionDisabled()
                             }
-
+                            
                             VStack(alignment: .leading) {
                                 Text("End PID")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
-
+                                
                                 TextField(
                                     "%0\(selectedMode.scanCapability.pidWidth)X",
                                     text: $endPID
                                 )
-                                    .textInputAutocapitalization(.characters)
-                                    .autocorrectionDisabled()
+                                .textInputAutocapitalization(.characters)
+                                .autocorrectionDisabled()
                             }
                         }
                         Divider()
@@ -215,39 +217,39 @@ struct SettingsView: View {
                     )
                     
                     Divider()
-
+                    
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Request Timeout: \(requestTimeout, specifier: "%.1f") s")
                             .font(.title3)
                             .foregroundStyle(.secondary)
-
+                        
                         Slider(
                             value: $requestTimeout,
                             in: 0.5...5.0,
                             step: 0.5
                         )
                     }
-
+                    
                     Divider()
-
+                    
                     Stepper(value: $maxConsecutiveTimeouts, in: 1...100) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Max Consecutive Timeouts")
                                 .font(.headline)
-
+                            
                             Text("Stop scan after \(maxConsecutiveTimeouts) consecutive request timeouts.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                     }
-
+                    
                     Divider()
-
+                    
                     Toggle(isOn: $enableAutoPreflight) {
                         VStack(alignment: .leading, spacing: 4) {
                             Label("Auto Preflight", systemImage: "checklist")
                                 .font(.headline)
-
+                            
                             Text("Automatically initialize the ELM327 before each scan.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -260,24 +262,24 @@ struct SettingsView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Label("Enable Debug Logging", systemImage: "ladybug.fill")
                                 .font(.headline)
-
+                            
                             Text("Show internal parser, assembler and Bluetooth diagnostic messages.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .padding(.leading, 28)
                         }
                     }
-
+                    
                     if enableDebugLogging {
                         Divider()
-
+                        
                         HStack {
                             Text("Debug Level")
                                 .font(.title3)
                                 .foregroundStyle(.secondary)
-
+                            
                             Spacer()
-
+                            
                             Picker("Debug Level", selection: $debugVerbosity) {
                                 Text("Normal")
                                     .tag(DebugVerbosity.normal.rawValue)
@@ -300,10 +302,10 @@ struct SettingsView: View {
                 //MARK: Search Engine Settings
                 
                 VStack(alignment: .leading, spacing: 12) {
-
+                    
                     Text("Search Engine")
                         .font(.headline)
-
+                    
                     Picker("Algorithm", selection: $selectedSearchEngine) {
                         ForEach(SearchEngineCatalog.all) { engine in
                             Label(
@@ -319,29 +321,29 @@ struct SettingsView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-
+                    
                     if isSmartEngineSelected {
-
+                        
                         Divider()
-
+                        
                         Toggle("Enable Telemetry Learning", isOn: $enableTelemetryLearning)
-
+                        
                         Group {
                             Text("Success Weight: \(Int(successWeight))")
                             Slider(value: $successWeight, in: 100...3000, step: 50)
-
+                            
                             Text("Latency Weight: \(Int(latencyWeight))")
                             Slider(value: $latencyWeight, in: 100...3000, step: 50)
-
+                            
                             Text("Confidence Weight: \(confidenceWeight, specifier: "%.1f")")
                             Slider(value: $confidenceWeight, in: 0...10, step: 0.5)
-
+                            
                             Text("Distance Weight: \(distanceWeight, specifier: "%.1f")")
                             Slider(value: $distanceWeight, in: 0...10, step: 0.5)
                         }
                         .font(.caption)
                     }
-
+                    
                     Divider()
                 }
                 .padding()
@@ -350,97 +352,141 @@ struct SettingsView: View {
                     RoundedRectangle(cornerRadius: 18)
                 )
                 
-//                //MARK: Statistics
-//
-//                VStack(alignment: .leading, spacing: 12) {
-//
-//                    Text("Search Statistics")
-//                        .font(.headline)
-//
-//                    HStack {
-//
-//                        statistic(
-//                            title: "Requests",
-//                            value: "\(brute.statistics.requestsSent)"
-//                        )
-//
-//                        Spacer()
-//
-//                        statistic(
-//                            title: "Success",
-//                            value: String(
-//                                format: "%.1f%%",
-//                                brute.statistics.successRate * 100
-//                            )
-//                        )
-//
-//                    }
-//
-//                    HStack {
-//                        statistic(
-//                            title: "Latency",
-//                            value: String(
-//                                format: "%.0f ms",
-//                                brute.statistics.averageLatency * 1000
-//                            )
-//                        )
-//
-//                        Spacer()
-//                        statistic(
-//                            title: "Hits",
-//                            value: "\(brute.scanStatus.successCount)"
-//                        )
-//
-//                    }
-//
-//                }
-//                .padding()
-//                .background(.thinMaterial)
-//                .clipShape(
-//                    RoundedRectangle(cornerRadius: 18)
-//                )
+                //                //MARK: Statistics
+                //
+                //                VStack(alignment: .leading, spacing: 12) {
+                //
+                //                    Text("Search Statistics")
+                //                        .font(.headline)
+                //
+                //                    HStack {
+                //
+                //                        statistic(
+                //                            title: "Requests",
+                //                            value: "\(brute.statistics.requestsSent)"
+                //                        )
+                //
+                //                        Spacer()
+                //
+                //                        statistic(
+                //                            title: "Success",
+                //                            value: String(
+                //                                format: "%.1f%%",
+                //                                brute.statistics.successRate * 100
+                //                            )
+                //                        )
+                //
+                //                    }
+                //
+                //                    HStack {
+                //                        statistic(
+                //                            title: "Latency",
+                //                            value: String(
+                //                                format: "%.0f ms",
+                //                                brute.statistics.averageLatency * 1000
+                //                            )
+                //                        )
+                //
+                //                        Spacer()
+                //                        statistic(
+                //                            title: "Hits",
+                //                            value: "\(brute.scanStatus.successCount)"
+                //                        )
+                //
+                //                    }
+                //
+                //                }
+                //                .padding()
+                //                .background(.thinMaterial)
+                //                .clipShape(
+                //                    RoundedRectangle(cornerRadius: 18)
+                //                )
                 
                 /////////////////////////// MARK: Export
-                HStack(alignment: .center) {
-                #if os(iOS)
-                    Button("Export CSV") {
-                        exportCSV()
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 12) {
+                        
+                        Button {
+                            exportCSV()
+                        } label: {
+                            VStack(spacing: 4) {
+                                Image(systemName: "square.and.arrow.up")
+                                    .font(.headline)
+                                
+                                Text("Export CSV")
+                                    .font(.caption)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                            .buttonStyle(.bordered)
+                        }
+                        
+                        Button {
+                            exportLog()
+                        } label: {
+                            VStack(spacing: 4) {
+                                Image(systemName: "doc.badge.arrow.up")
+                                    .font(.headline)
+                                Text("Export Log")
+                                    .font(.caption)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                            .buttonStyle(.bordered)
+                        }
+                        
+                        Button {
+                            showAppStorage = true
+                        } label: {
+                            
+                            VStack(spacing: 4) {
+                                
+                                Image(systemName: "internaldrive.fill")
+                                    .font(.headline)
+                                
+                                Text("App Storage")
+                                    .font(.caption)
+                                    .multilineTextAlignment(.center)
+                                
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                            .buttonStyle(.bordered)
+                        }
                     }
-                    Button("Export Log") {
-                        exportLog()
-                    }
-                #else
-                    Button("Export CSV") {
-                        exportCSV()
-                    }
-                    Button("Export Log") {
-                        exportLog()
-                    }
-                #endif
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .controlSize(.regular)
                 }
-                .buttonStyle(.bordered)
                 .padding()
                 .background(.thinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 18)
+                .clipShape(
+                    RoundedRectangle(cornerRadius: 18)
                 )
-            }
-            .onChange(of: modeDiscovery.supportedModes) { _, modes in
-                guard !forceModeSelection else { return }
-
-                guard let first = availableModes.first else { return }
-
-                if !availableModes.contains(selectedMode) {
-                    selectedMode = first
+                .sheet(isPresented: $showAppStorage) {
+                    AppStorageViewer()
                 }
-                // Synchronize PID fields with new API
-                if let range = first.pidRange {
-                    let width = first.scanCapability.pidWidth
-                    startPID = String(format: "%0\(width)X", range.lowerBound)
-                    endPID = String(format: "%0\(width)X", range.upperBound)
-                } else {
-                    startPID = ""
-                    endPID = ""
+                .onChange(of: modeDiscovery.supportedModes) { _, modes in
+                    guard !forceModeSelection else { return }
+                    
+                    guard let first = availableModes.first else { return }
+                    
+                    if !availableModes.contains(selectedMode) {
+                        selectedMode = first
+                    }
+                    if let range = first.pidRange {
+                        let width = first.scanCapability.pidWidth
+                        startPID = String(format: "%0\(width)X", range.lowerBound)
+                        endPID = String(format: "%0\(width)X", range.upperBound)
+                    } else {
+                        startPID = ""
+                        endPID = ""
+                    }
                 }
+                .padding(.horizontal)
+                .padding(.top)
+                .padding(.bottom, 40)
             }
             .padding()
         }
