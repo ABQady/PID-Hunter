@@ -302,24 +302,29 @@ struct SettingsView: View {
                 //MARK: Search Engine Settings
                 
                 VStack(alignment: .leading, spacing: 12) {
-                    
-                    Text("Search Engine")
-                        .font(.headline)
-                    
-                    Picker("Algorithm", selection: $selectedSearchEngine) {
-                        ForEach(SearchEngineCatalog.all) { engine in
-                            Label(
-                                engine.displayName,
-                                systemImage: engine.icon
-                            )
-                            .tag(engine.type.rawValue)
+                    HStack{
+                        Text("Search Engine")
+                            .font(.headline)
+                        Spacer()
+                        Picker("Algorithm", selection: $selectedSearchEngine) {
+                            ForEach(SearchEngineCatalog.all) { engine in
+                                Label(
+                                    engine.displayName,
+                                    systemImage: engine.icon
+                                )
+                                .tag(engine.type.rawValue)
+                            }
                         }
+                        .pickerStyle(.menu)
                     }
-                    .pickerStyle(.menu)
                     if let engine = selectedEngine {
-                        Label(engine.description, systemImage: engine.icon)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        HStack(alignment: .center){
+                            Spacer()
+                            Label(engine.description, systemImage: engine.icon)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
                     }
                     
                     if isSmartEngineSelected {
@@ -343,8 +348,6 @@ struct SettingsView: View {
                         }
                         .font(.caption)
                     }
-                    
-                    Divider()
                 }
                 .padding()
                 .background(.thinMaterial)
@@ -352,109 +355,53 @@ struct SettingsView: View {
                     RoundedRectangle(cornerRadius: 18)
                 )
                 
-                //                //MARK: Statistics
-                //
-                //                VStack(alignment: .leading, spacing: 12) {
-                //
-                //                    Text("Search Statistics")
-                //                        .font(.headline)
-                //
-                //                    HStack {
-                //
-                //                        statistic(
-                //                            title: "Requests",
-                //                            value: "\(brute.statistics.requestsSent)"
-                //                        )
-                //
-                //                        Spacer()
-                //
-                //                        statistic(
-                //                            title: "Success",
-                //                            value: String(
-                //                                format: "%.1f%%",
-                //                                brute.statistics.successRate * 100
-                //                            )
-                //                        )
-                //
-                //                    }
-                //
-                //                    HStack {
-                //                        statistic(
-                //                            title: "Latency",
-                //                            value: String(
-                //                                format: "%.0f ms",
-                //                                brute.statistics.averageLatency * 1000
-                //                            )
-                //                        )
-                //
-                //                        Spacer()
-                //                        statistic(
-                //                            title: "Hits",
-                //                            value: "\(brute.scanStatus.successCount)"
-                //                        )
-                //
-                //                    }
-                //
-                //                }
-                //                .padding()
-                //                .background(.thinMaterial)
-                //                .clipShape(
-                //                    RoundedRectangle(cornerRadius: 18)
-                //                )
                 
                 /////////////////////////// MARK: Export
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(spacing: 12) {
-                        
+                VStack(alignment: .leading) {
+                    HStack(alignment: .center) {
+                        Spacer()
                         Button {
                             exportCSV()
                         } label: {
                             VStack(spacing: 4) {
                                 Image(systemName: "square.and.arrow.up")
-                                    .font(.headline)
-                                
+                                    .font(.headline.weight(.bold))
+                                    .frame(height: 28)
+
                                 Text("Export CSV")
-                                    .font(.caption)
-                                    .multilineTextAlignment(.center)
+                                    .font(.caption.bold())
                             }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 6)
-                            .buttonStyle(.bordered)
+
                         }
-                        
+                        Spacer()
                         Button {
                             exportLog()
                         } label: {
                             VStack(spacing: 4) {
                                 Image(systemName: "doc.badge.arrow.up")
-                                    .font(.headline)
+                                    .font(.headline.weight(.bold))
+                                    .frame(height: 28)
+
                                 Text("Export Log")
-                                    .font(.caption)
-                                    .multilineTextAlignment(.center)
+                                    .font(.caption.bold())
                             }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 6)
-                            .buttonStyle(.bordered)
                         }
-                        
+                        Spacer()
                         Button {
                             showAppStorage = true
                         } label: {
-                            
                             VStack(spacing: 4) {
-                                
                                 Image(systemName: "internaldrive.fill")
-                                    .font(.headline)
-                                
+                                    .font(.headline.weight(.bold))
+                                    .frame(height: 28)
+                                    .foregroundColor(.accentColor)
+                                    .frame(height: 28)
+
                                 Text("App Storage")
-                                    .font(.caption)
-                                    .multilineTextAlignment(.center)
-                                
+                                    .font(.caption.bold())
                             }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 6)
-                            .buttonStyle(.bordered)
                         }
+                        Spacer()
                     }
                     .frame(maxWidth: .infinity, alignment: .center)
                     .controlSize(.regular)
@@ -485,8 +432,7 @@ struct SettingsView: View {
                     }
                 }
                 .padding(.horizontal)
-                .padding(.top)
-                .padding(.bottom, 40)
+                //.padding(.bottom, 40)
             }
             .padding()
         }

@@ -103,7 +103,7 @@ struct TerminalView: View {
     
     private var terminalTab: some View {
         ScrollView(.vertical, showsIndicators: true) {
-                VStack(spacing: 18) {
+            VStack(spacing: isCompact ? 8 : 16) {
                     //MARK: Status Card
                     StatusCard(
                         bt: bt,
@@ -112,7 +112,6 @@ struct TerminalView: View {
                         showDisconnectConfirmation: $showDisconnectConfirmation,
                         isCompact: isCompact
                     )
-                    
                     
                     ProgressCard(
                         stats: stats,
@@ -159,9 +158,9 @@ struct TerminalView: View {
                         }
                     )
                     
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading) {
                         ScrollViewReader { proxy in
-                            VStack(spacing: 8) {
+                            VStack(spacing: 2) {
                                 TerminalHeader(
                                     title: "Terminal",
                                     status: isCompact ? compactStatusTitle : bt.status.title,

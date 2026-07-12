@@ -138,7 +138,7 @@ struct TerminalHeader: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal)
-                .padding(.vertical, 8)
+                //.padding(.vertical, 8)
             }
         }
     

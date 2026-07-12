@@ -55,14 +55,14 @@ struct ActionBar: View {
                             .disabled(!isConnected || isScanning)
                             
                         }
-                        .padding(.top, 6)
+                        .padding()
                         
                     } label: {
                         Label("Resume Available",
                               systemImage: "arrow.clockwise.circle")
                     }
                 }
-            }
+            } .padding(.horizontal)
             HStack(alignment: .center, spacing: 10) {
                 Button {
                     onClear()
