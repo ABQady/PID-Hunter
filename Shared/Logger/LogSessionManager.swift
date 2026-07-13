@@ -14,25 +14,24 @@ final class LogSessionManager {
     private let fileManager = FileManager.default
 
     private(set) var sessionFolderURL: URL?
-    private(set) var activeLogURL: URL?
+    private(set) var nextPreScanLogURL: URL?
 
-    private var sessionStarted = false
+    private(set) var isLoggingSessionActive = false
     private var currentMetadata: Metadata?
     private var sessionStartDate: Date?
 
-    var isSessionStarted: Bool {
-        sessionStarted
-    }
     
     private init() {}
 
-    private func prepareActiveLogLocked() throws {
+    // MARK: - Log File Helpers
+    private func createNextPreScanLogLocked() throws {
 
         guard let sessionFolderURL else {
             return
         }
 
-        let filename = Self.sessionFormatter.string(from: .now) + "_PreScan.log"
+        let timestamp = Self.sessionFormatter.string(from: .now)
+        let filename = "\(timestamp)_PreScan.log"
 
         let url = sessionFolderURL
             .appendingPathComponent(filename)
@@ -44,10 +43,11 @@ final class LogSessionManager {
             )
         }
 
-        activeLogURL = url
+        nextPreScanLogURL = url
     }
 
-    func beginLoggingSessionIfNeeded(
+    // MARK: - PreScan Session Lifecycle
+    func startInitialPreScanSessionIfNeeded(
         metadata: Metadata,
         logger: Logger
     ) async throws {
@@ -55,7 +55,7 @@ final class LogSessionManager {
         print("🚀 beginLoggingSessionIfNeeded entered")
         Logger.shared.verbose("beginLoggingSessionIfNeeded entered")
         
-        guard !sessionStarted else {
+        guard !isLoggingSessionActive else {
             return
         }
 
@@ -87,29 +87,26 @@ final class LogSessionManager {
         sessionFolderURL = sessionFolder
         print("✅ sessionFolderURL assigned")
         sessionStartDate = .now
-        sessionStarted = true
+        isLoggingSessionActive = true
 
-        try prepareActiveLogLocked()
+        try createNextPreScanLogLocked()
 
-        guard let activeLogURL else {
+        guard let preScanLogURL = nextPreScanLogURL else {
             throw CocoaError(.fileNoSuchFile)
         }
 
         currentMetadata = metadata
-        try await logger.startSessionImpl(fileURL: activeLogURL)
+        try await logger.startSessionImpl(fileURL: preScanLogURL)
         await writeMetadataHeader(metadata, logger: logger)
     }
 
-    func prepareActiveLog() throws {
-        try prepareActiveLogLocked()
+    func createNextPreScanLog() throws {
+        try createNextPreScanLogLocked()
     }
 
-    var hasActiveSession: Bool {
-        sessionStarted
-    }
 
-    var currentActiveLogURL: URL? {
-        activeLogURL
+    var pendingPreScanLogURL: URL? {
+        nextPreScanLogURL
     }
 
     struct Metadata {
@@ -133,36 +130,50 @@ final class LogSessionManager {
         let timeouts: Int
     }
 
-    func archiveActiveLog(as filename: String) throws {
 
-        guard
-            let sessionFolderURL,
-            let activeLogURL
-        else {
-            return
+    private func createScanLogURL(
+        mode: OBDMode,
+        header: String,
+        searchEngine: SearchEngineType
+    ) throws -> URL {
+        guard let sessionFolderURL else {
+            throw CocoaError(.fileNoSuchFile)
         }
 
-        let destination = sessionFolderURL
-            .appendingPathComponent(filename)
-
-        if fileManager.fileExists(atPath: destination.path) {
-            try fileManager.removeItem(at: destination)
-        }
-
-        try fileManager.moveItem(
-            at: activeLogURL,
-            to: destination
+        let filename = LogFileNaming.makeFilename(
+            mode: mode,
+            header: header,
+            searchEngine: searchEngine
         )
 
-        try prepareActiveLogLocked()
+        let url = sessionFolderURL.appendingPathComponent(filename)
+
+        if !fileManager.fileExists(atPath: url.path) {
+            fileManager.createFile(atPath: url.path, contents: nil)
+        }
+
+        return url
     }
 
-    func promoteCurrentSession(
+    // MARK: - Scan Session Lifecycle
+    func startScanSession(
         mode: OBDMode,
         header: String,
         searchEngine: SearchEngineType,
         logger: Logger
     ) async throws {
+
+        // Update currentMetadata with scan metadata
+        currentMetadata = Metadata(
+            appVersion: currentMetadata?.appVersion ?? "Unknown",
+            mode: mode,
+            header: header,
+            searchEngine: searchEngine,
+            requestDelay: currentMetadata?.requestDelay,
+            requestTimeout: currentMetadata?.requestTimeout,
+            autoPreflight: currentMetadata?.autoPreflight,
+            debugLogging: currentMetadata?.debugLogging
+        )
 
         let filename = LogFileNaming.makeFilename(
             mode: mode,
@@ -185,18 +196,43 @@ final class LogSessionManager {
             logger: logger
         )
 
-        try await finalizeCurrentLog(logger: logger)
+        try await closeCurrentLog(logger: logger)
 
-        // endLoggingSession() -- removed as per instructions
+        let scanLogURL = try createScanLogURL(
+            mode: mode,
+            header: header,
+            searchEngine: searchEngine
+        )
+        try await logger.startSessionImpl(fileURL: scanLogURL)
+        isLoggingSessionActive = true
 
-        try archiveActiveLog(as: filename)
+        if let metadata = currentMetadata {
+            await writeMetadataHeader(metadata, logger: logger)
+        }
+        // Do not create a new PreScan log here; preserve the original.
+    }
 
-        guard let activeLogURL else {
+    // Called immediately after a scan log has been closed to begin collecting
+    // post-scan activity until the next Scan/Resume command.
+    func startPreScanSession(logger: Logger) async throws {
+        currentMetadata = Metadata(
+            appVersion: currentMetadata?.appVersion ?? "Unknown",
+            mode: nil,
+            header: nil,
+            searchEngine: nil,
+            requestDelay: currentMetadata?.requestDelay,
+            requestTimeout: currentMetadata?.requestTimeout,
+            autoPreflight: currentMetadata?.autoPreflight,
+            debugLogging: currentMetadata?.debugLogging
+        )
+
+        try createNextPreScanLogLocked()
+
+        guard let preScanLogURL = nextPreScanLogURL else {
             throw CocoaError(.fileNoSuchFile)
         }
 
-        try await logger.startSessionImpl(fileURL: activeLogURL)
-        sessionStarted = true
+        try await logger.startSessionImpl(fileURL: preScanLogURL)
 
         if let metadata = currentMetadata {
             await writeMetadataHeader(metadata, logger: logger)
@@ -237,20 +273,20 @@ final class LogSessionManager {
         await logger.infoImpl("══════════════════════════════════")
     }
 
-    func finalizeCurrentLog(logger: Logger) async throws {
-        guard sessionStarted else { return }
+    func closeCurrentLog(logger: Logger) async throws {
+        guard isLoggingSessionActive else { return }
 
         await logger.finishSessionImpl()
     }
 
     func endLoggingSession() {
-        if let activeLogURL,
-           fileManager.fileExists(atPath: activeLogURL.path) {
+        if let nextPreScanLogURL,
+           fileManager.fileExists(atPath: nextPreScanLogURL.path) {
             // Keep the last active log inside the session folder. Do not delete or move it here.
         }
-        sessionStarted = false
+        isLoggingSessionActive = false
         sessionFolderURL = nil
-        activeLogURL = nil
+        nextPreScanLogURL = nil
         currentMetadata = nil
         sessionStartDate = nil
     }

@@ -95,7 +95,7 @@ final class BluetoothManager: NSObject, ObservableObject {
 
         // Start PreSession logging as soon as BLE scan begins
         Task {
-            if !LogSessionManager.shared.isSessionStarted {
+            if !LogSessionManager.shared.isLoggingSessionActive {
                 let metadata = LogSessionManager.Metadata(
                     appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown",
                     mode: nil,
@@ -108,7 +108,7 @@ final class BluetoothManager: NSObject, ObservableObject {
                 )
 
                 do {
-                    try await LogSessionManager.shared.beginLoggingSessionIfNeeded(
+                    try await LogSessionManager.shared.startInitialPreScanSessionIfNeeded(
                         metadata: metadata,
                         logger: Logger.shared
                     )
@@ -190,7 +190,7 @@ final class BluetoothManager: NSObject, ObservableObject {
 
         clearPendingRequest(resumingWith: BluetoothError.disconnected)
         Task {
-            if LogSessionManager.shared.isSessionStarted {
+            if LogSessionManager.shared.isLoggingSessionActive {
                 await closeLoggingSession()
             }
         }

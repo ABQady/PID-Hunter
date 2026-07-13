@@ -238,9 +238,13 @@ final class BruteForceScanner: ObservableObject {
         )
     }
     
+    // MARK: - Scan Lifecycle
     private func beginScan() {
         shouldStop = false
         statistics.reset()
+
+        // Runtime state only. Logger session management is intentionally handled outside
+        // the scanner so PreScan and Scan remain separate sessions.
 
         scanStatus.successCount =
             persistence.hasResumePoint
@@ -255,7 +259,8 @@ final class BruteForceScanner: ObservableObject {
     private func finishScan(completed: Bool) {
         scanStatus.isScanning = false
         scanStatus.currentRequest = ""
-
+        
+        // Flush all pending profile mutations before any session finalization.
         RequestOutcomeProcessor.shared.flushProfile()
         
         Logger.shared.info(
@@ -877,12 +882,13 @@ final class BruteForceScanner: ObservableObject {
         }
     }
 
+    // MARK: - Public Scan Entry Point
     func scan(
         mode: OBDMode,
         header: String,
         startPID: UInt16? = nil,
         endPID: UInt16? = nil
-    ) {
+    ) async {
         guard !scanStatus.isScanning else {
             Logger.shared.warning("Scan already running")
             return
@@ -903,18 +909,19 @@ final class BruteForceScanner: ObservableObject {
         session.mode = configuration.mode
         session.startPID = configuration.startPID
         session.endPID = configuration.endPID
-
         
+        // IMPORTANT:
+        // This method must never create or promote logger sessions directly.
+        // Session transitions are owned by ScanLauncher/LogSessionManager so that
+        // PreScan logging is finalized before the dedicated scan log begins.
         Logger.shared.info("Search engine: \(searchEngine)")
         Logger.shared.info(
             "Starting \(mode.rawValue) scan using header \(header)"
         )
-        
-        Task {
-            await executePIDScan(
-                configuration: configuration
-            )
-        }
+
+        await executePIDScan(
+            configuration: configuration
+        )
     }
     
     @discardableResult

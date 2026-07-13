@@ -42,6 +42,7 @@ final class ScanLauncher {
         )
     }
     
+    // MARK: - Scan Launch
     func start(
         bt: BluetoothManager,
         brute: BruteForceScanner,
@@ -118,6 +119,7 @@ final class ScanLauncher {
         }
 
         Task { @MainActor in
+            // MARK: - PreScan Session
             guard await prepareSession(
                 header: effectiveHeader,
                 loggingMetadata: loggingMetadata
@@ -125,18 +127,22 @@ final class ScanLauncher {
                 return
             }
             do {
-                try await LogSessionManager.shared.promoteCurrentSession(
+                try await LogSessionManager.shared.startScanSession(
                     mode: effectiveMode,
                     header: effectiveHeader,
                     searchEngine: brute.searchEngine,
                     logger: Logger.shared
                 )
+                // From this point onward, every log entry belongs to the dedicated scan log.
             } catch {
                 Logger.shared.error(
                     "Failed to promote log session: \(error)"
                 )
+                return
             }
 
+            // Strategy creation intentionally happens after session promotion so that
+            // strategy initialization logs never leak into the PreScan log.
             let strategy = ScanStrategyFactory.strategy(for: effectiveMode)
             Logger.shared.info("Launching \(effectiveMode.rawValue) using \(type(of: strategy))")
             await strategy.start(
@@ -144,6 +150,19 @@ final class ScanLauncher {
                 launcher: self,
                 context: context
             )
+
+            // The scan log has finished. Start collecting post-scan activity.
+            do {
+                try await LogSessionManager.shared.closeCurrentLog(
+                    logger: Logger.shared
+                )
+
+                try await LogSessionManager.shared.startPreScanSession(
+                    logger: Logger.shared
+                )
+            } catch {
+                assertionFailure("Failed to transition back to a new PreScan session: \(error)")
+            }
         }
     }
     
@@ -155,7 +174,7 @@ final class ScanLauncher {
 
         // Begin logging session with metadata
         do {
-            try await LogSessionManager.shared.beginLoggingSessionIfNeeded(
+            try await LogSessionManager.shared.startInitialPreScanSessionIfNeeded(
                 metadata: loggingMetadata,
                 logger: Logger.shared
             )
