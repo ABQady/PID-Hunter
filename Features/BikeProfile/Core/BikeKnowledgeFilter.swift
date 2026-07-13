@@ -4,6 +4,7 @@
 //
 //  Created by Ahmed Al Qady on 11/07/2026.
 //
+@MainActor
 struct BikeKnowledgeFilter {
     
    static func unknownRequests(
@@ -15,11 +16,9 @@ struct BikeKnowledgeFilter {
             return requests
         }
 
-        let header = profile.fingerprint.header
-
         return requests.filter { request in
             return !profile.discoveries.contains { record in
-                record.header == header &&
+                record.header == ECUInfo.shared.header &&
                 record.mode == mode.rawValue &&
                 record.request == request
             }

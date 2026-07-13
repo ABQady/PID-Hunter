@@ -7,7 +7,6 @@
 import Foundation
 
 struct BikeFingerprint: Codable, Hashable {
-    let header: String
     let protocolName: String
     let vinHex: String?
     let calibrationHex: String?
@@ -18,28 +17,50 @@ struct BikeFingerprint: Codable, Hashable {
             return "-"
         }
 
-        return value
+        let cleaned = value
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .uppercased()
+
+        return cleaned.isEmpty ? "-" : cleaned
     }
 
     var decodedVIN: String? {
         guard let vinHex else { return nil }
 
-        let cleaned = vinHex
+        let hex = vinHex
             .replacingOccurrences(of: " ", with: "")
             .uppercased()
 
-        guard !cleaned.isEmpty,
-              cleaned != String(repeating: "0", count: cleaned.count) else {
+        guard !hex.isEmpty,
+              hex.count.isMultiple(of: 2),
+              hex != String(repeating: "0", count: hex.count) else {
             return nil
         }
 
-        return cleaned
+        var result = ""
+        var index = hex.startIndex
+
+        while index < hex.endIndex {
+            let next = hex.index(index, offsetBy: 2)
+            let byteString = String(hex[index..<next])
+
+            guard let value = UInt8(byteString, radix: 16) else {
+                return vinHex
+            }
+
+            if value == 0 {
+                break
+            }
+
+            result.append(Character(UnicodeScalar(value)))
+            index = next
+        }
+
+        return result.isEmpty ? nil : result
     }
 
-    var decodedCalibrationID: String? {
-        guard let calibrationHex else { return nil }
+    var decodedCalibrationID: String {
+        guard let calibrationHex else { return "" }
 
         let hex = calibrationHex
             .replacingOccurrences(of: " ", with: "")
@@ -72,20 +93,17 @@ struct BikeFingerprint: Codable, Hashable {
 
     func debugDescription() -> String {
         """
-        header='\(header)'
         protocol='\(protocolName)'
-        vin='\(vinHex ?? "nil")'
-        calibration='\(calibrationHex ?? "nil")'
+        calibration='\(decodedCalibrationID)'
+        rawCalibration='\(calibrationHex ?? "nil")'
         supportedHeaders=\(supportedHeaders)
         """
     }
 
     var id: String {
         [
-            normalized(header),
             normalized(protocolName),
-            normalized(vinHex),
-            normalized(calibrationHex)
+            normalized(decodedCalibrationID)
         ]
         .joined(separator: "_")
         .replacingOccurrences(of: " ", with: "_")

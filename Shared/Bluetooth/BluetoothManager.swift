@@ -303,7 +303,23 @@ final class BluetoothManager: NSObject, ObservableObject {
         ECUInfo.shared.header = ELM327.shared.currentHeader
         ECUInfo.shared.status = "Connected"
         ECUInfo.shared.lastConnected = Date()
-        ELM327.shared.identifyECU()
+
+        // Reset transient ECU identification before collecting fresh values.
+        ECUInfo.shared.ecuIdentifier = ""
+        ECUInfo.shared.calibrationIdentifier = ""
+        ECUInfo.shared.vinIndentifier = ""
+        ECUInfo.shared.ecuName = ""
+
+        // Collect fresh ECU identification synchronously before building the fingerprint.
+        await ELM327.shared.identifyECU()
+
+        let fingerprint = ECUInfo.shared.fingerprint
+
+        if let profile = BikeProfileManager.shared.load(for: fingerprint) {
+            Logger.shared.success("Loaded bike profile: \(profile.displayName)")
+        } else {
+            Logger.shared.info("No matching bike profile found")
+        }
 
         Logger.shared.success("ELM initialization finished")
     }
@@ -579,6 +595,10 @@ extension BluetoothManager:
     private func updateECUInfo(from response: ELMResponse) {
         let upper = response.raw.uppercased()
 
+        if let header = response.header, !header.isEmpty {
+            ECUInfo.shared.header = header
+        }
+
         if upper.hasPrefix("ELM") {
             ECUInfo.shared.elmVersion = response.raw
         }
@@ -590,15 +610,15 @@ extension BluetoothManager:
             ECUInfo.shared.protocolName = response.raw
         }
 
-        if let vin = response.vin {
+        if let vin = response.vin, !vin.isEmpty {
             ECUInfo.shared.ecuIdentifier = vin
         }
 
-        if let calibration = response.calibrationID {
+        if let calibration = response.calibrationID, !calibration.isEmpty {
             ECUInfo.shared.calibrationIdentifier = calibration
         }
 
-        if let ecuName = response.ecuName {
+        if let ecuName = response.ecuName, !ecuName.isEmpty {
             ECUInfo.shared.ecuName = ecuName
         }
     }

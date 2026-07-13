@@ -35,7 +35,7 @@ struct BikeProfile: Codable, Hashable {
     ) {
         self.id = UUID()
         self.fingerprint = fingerprint
-        self.displayName = displayName ?? fingerprint.header
+        self.displayName = displayName ?? "Unknown Name"
         self.discoveries = discoveries
         self.headerDiscoveries = headerDiscoveries
         self.lastSeen = self.firstSeen

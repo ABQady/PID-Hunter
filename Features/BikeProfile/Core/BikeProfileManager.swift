@@ -80,11 +80,11 @@ final class BikeProfileManager {
             return vin
         }
 
-        if let calibration = fingerprint.decodedCalibrationID {
-            return calibration
+        if !fingerprint.decodedCalibrationID.isEmpty {
+            return fingerprint.decodedCalibrationID
         }
 
-        return fingerprint.header
+        return fingerprint.protocolName
     }
 
     // MARK: - Lifecycle
@@ -104,8 +104,10 @@ final class BikeProfileManager {
 
             selectedProfile = currentProfile
             reloadProfiles()
-            if currentProfile?.displayName.isEmpty == true {
-                currentProfile?.rename(to: defaultDisplayName(for: fingerprint))
+            if var profile = currentProfile,
+               profile.displayName.isEmpty {
+                profile.rename(to: defaultDisplayName(for: fingerprint))
+                currentProfile = profile
             }
             isDirty = false
             lastSaveDate = Date()
@@ -165,8 +167,10 @@ final class BikeProfileManager {
     }
 
     func createProfileFromCurrent(named name: String? = nil) {
-        guard let fingerprint = currentProfile?.fingerprint ?? selectedProfile?.fingerprint else {
-            Logger.shared.warning("⚠️ No ECU fingerprint available to create a Bike Profile.")
+        let fingerprint = ECUInfo.shared.fingerprint
+
+        if currentProfile != nil {
+            Logger.shared.info("Bike Profile already loaded.")
             return
         }
 
@@ -235,7 +239,7 @@ final class BikeProfileManager {
         request: String
     ) -> DiscoveryRecord? {
         currentProfile?.discoveries.first {
-            $0.header == currentProfile?.fingerprint.header &&
+            $0.header == ECUInfo.shared.header &&
             $0.mode == mode.rawValue &&
             $0.request == request
         }
@@ -246,7 +250,7 @@ final class BikeProfileManager {
         request: String
     ) -> Bool {
         currentProfile?.discoveries.contains {
-            $0.header == currentProfile?.fingerprint.header &&
+            $0.header == ECUInfo.shared.header &&
             $0.mode == mode.rawValue &&
             $0.request == request
         } ?? false
@@ -265,7 +269,7 @@ final class BikeProfileManager {
         guard var profile = currentProfile else { return }
 
         if let index = profile.discoveries.firstIndex(where: {
-            $0.header == profile.fingerprint.header &&
+            $0.header == ECUInfo.shared.header &&
             $0.mode == mode.rawValue &&
             $0.request == request
         }) {
@@ -291,7 +295,7 @@ final class BikeProfileManager {
         } else {
             profile.discoveries.append(
                 DiscoveryRecord(
-                    header: profile.fingerprint.header,
+                    header: ECUInfo.shared.header,
                     mode: mode.rawValue,
                     request: request,
                     response: response.raw,

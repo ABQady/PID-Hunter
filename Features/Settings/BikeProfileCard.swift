@@ -23,6 +23,11 @@ struct BikeProfileCard: View {
     @State private var showDeleteConfirmation = false
     @State private var isRenaming = false
 
+    // New state properties for profile creation prompt and ECU alert
+    @State private var showNewProfilePrompt = false
+    @State private var newProfileName = ""
+    @State private var showECUAlert = false
+
     let context: BikeProfileContext?
 
     var body: some View {
@@ -33,10 +38,9 @@ struct BikeProfileCard: View {
         DisclosureGroup(isExpanded: $rememberExpanded) {
             if let profile, let analytics {
                 VStack(alignment: .leading, spacing: 12) {
-                    infoRow("Header", profile.fingerprint.header)
                     infoRow("Protocol", profile.fingerprint.protocolName)
                     infoRow("VIN", profile.fingerprint.decodedVIN ?? "-")
-                    infoRow("Calibration", profile.fingerprint.decodedCalibrationID ?? "-")
+                    infoRow("Calibration", profile.fingerprint.decodedCalibrationID.isEmpty ? "-" : profile.fingerprint.decodedCalibrationID)
 
                     Divider()
 
@@ -55,7 +59,12 @@ struct BikeProfileCard: View {
 
                     HStack {
                         Button {
-                            manager.createProfileFromCurrent(named: displayName.isEmpty ? nil : displayName)
+                            if !BluetoothManager.shared.isConnected || ECUInfo.shared.fingerprint.id.isEmpty {
+                                showECUAlert = true
+                            } else {
+                                newProfileName = ""
+                                showNewProfilePrompt = true
+                            }
                         } label: {
                             Label("New", systemImage: "plus")
                                 .font(.caption)
@@ -141,11 +150,27 @@ struct BikeProfileCard: View {
                 .background(.regularMaterial)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
             } else {
-                ContentUnavailableView(
-                    "No Bike Profile",
-                    systemImage: "motorcycle",
-                    description: Text("Connect to a motorcycle to create and load its bike profile.")
-                )
+                VStack(spacing: 16) {
+                    ContentUnavailableView(
+                        "No Bike Profile",
+                        systemImage: "motorcycle",
+                        description: Text("Connect to a motorcycle to create your first Bike Profile.")
+                    )
+
+                    Button {
+                        if !BluetoothManager.shared.isConnected || ECUInfo.shared.fingerprint.id.isEmpty {
+                            showECUAlert = true
+                        } else {
+                            newProfileName = ""
+                            showNewProfilePrompt = true
+                        }
+                    } label: {
+                        Label("Create First Profile", systemImage: "plus.circle.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+                .padding()
             }
         } label: {
             HStack {
@@ -183,6 +208,26 @@ struct BikeProfileCard: View {
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .onAppear {
             manager.reloadProfiles()
+        }
+        .alert("No ECU Connected", isPresented: $showECUAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Connect to an ECU first before creating a new Bike Profile.")
+        }
+        .alert("New Bike Profile", isPresented: $showNewProfilePrompt) {
+            TextField("Bike Name", text: $newProfileName)
+            Button("Create") {
+                guard BluetoothManager.shared.isConnected,
+                      !ECUInfo.shared.fingerprint.id.isEmpty else {
+                    showECUAlert = true
+                    return
+                }
+                let trimmed = newProfileName.trimmingCharacters(in: .whitespacesAndNewlines)
+                manager.createProfileFromCurrent(named: trimmed.isEmpty ? nil : trimmed)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Enter a friendly name for this motorcycle.")
         }
         .confirmationDialog(
             "Delete Bike Profile?",
@@ -238,7 +283,6 @@ struct BikeProfileCard: View {
 #Preview {
     let previewProfile = BikeProfile(
         fingerprint: BikeFingerprint(
-            header: "81F111",
             protocolName: "ISO 14230-4",
             vinHex: "00000000000000000",
             calibrationHex: "4D344C2F3445433834313930"

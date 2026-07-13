@@ -33,6 +33,7 @@ final class ECUInfo: ObservableObject {
     @Published var protocolName = "-"
     @Published var ecuIdentifier = ""
     @Published var calibrationIdentifier = ""
+    @Published var vinIndentifier = ""
     @Published var header = "-"
     @Published var status = "-"
     @Published var services = SupportedServices()
@@ -46,6 +47,7 @@ final class ECUInfo: ObservableObject {
         protocolName = "-"
         ecuIdentifier = ""
         calibrationIdentifier = ""
+        vinIndentifier = ""
         header = "-"
         status = "-"
         services.removeAll()
@@ -78,15 +80,14 @@ final class ECUInfo: ObservableObject {
 
     var fingerprint: BikeFingerprint {
         BikeFingerprint(
-            header: normalized(header) ?? "",
             protocolName: normalized(protocolName) ?? "",
-            vinHex: normalized(ecuIdentifier),
+            vinHex: normalized(vinIndentifier),
             calibrationHex: normalized(calibrationIdentifier)
         )
     }
-    
+
     var hasFingerprint: Bool {
         normalized(protocolName) != nil &&
-        normalized(header) != nil
+        normalized(calibrationIdentifier) != nil
     }
 }

@@ -52,31 +52,15 @@ final class BikeProfileStore {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
-        let decodedProfile = try decoder.decode(BikeProfile.self, from: data)
-
-        let profile = decodedProfile
-
-        Logger.shared.info("📂 Loaded Bike Profile")
-        return profile
-    }
-
-    func loadOrCreate(
-        for fingerprint: BikeFingerprint
-    ) throws -> BikeProfile {
-
-        if exists(for: fingerprint) {
-            return try load(for: fingerprint)
+        let profile: BikeProfile
+        do {
+            profile = try decoder.decode(BikeProfile.self, from: data)
+        } catch {
+            Logger.shared.error("❌ Failed to decode Bike Profile: \(url.lastPathComponent)")
+            throw error
         }
 
-        let profile = BikeProfile(
-            fingerprint: fingerprint,
-            discoveries: []
-        )
-
-        try save(profile)
-
-        Logger.shared.info("🆕 Created Bike Profile")
-
+        Logger.shared.info("📂 Loaded Bike Profile")
         return profile
     }
 
@@ -95,12 +79,14 @@ final class BikeProfileStore {
 
         var profiles: [BikeProfile] = []
         for url in urls {
-            let data = try Data(contentsOf: url)
-            let decodedProfile = try decoder.decode(BikeProfile.self, from: data)
-
-            let profile = decodedProfile
-
-            profiles.append(profile)
+            do {
+                let data = try Data(contentsOf: url)
+                let profile = try decoder.decode(BikeProfile.self, from: data)
+                profiles.append(profile)
+            } catch {
+                Logger.shared.warning("⚠️ Skipping invalid Bike Profile: \(url.lastPathComponent)")
+                continue
+            }
         }
         return profiles.sorted { $0.lastSeen > $1.lastSeen }
     }

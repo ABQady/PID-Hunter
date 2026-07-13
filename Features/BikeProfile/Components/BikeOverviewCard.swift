@@ -41,10 +41,6 @@ struct BikeOverviewCard: View {
                             Text(profile.displayName)
                                 .font(.title2.weight(.bold))
 
-                            Text(profile.fingerprint.header)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-
                             HStack(spacing: 6) {
                                 Circle()
                                     .fill(bt.isConnected ? .green : .red)

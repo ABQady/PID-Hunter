@@ -21,6 +21,8 @@ struct ActionBar: View {
     let onTestECU: () -> Void
     let onDiscoverModes: () -> Void
 
+    @State private var showStartFreshConfirmation = false
+
     var body: some View {
         VStack{
             HStack{
@@ -75,13 +77,34 @@ struct ActionBar: View {
                 Spacer()
                 // Scan and Resume are mutually exclusive to avoid accidentally starting a fresh scan over a resumable session.
                 Button(role: .destructive) {
-                    onScan()
+                    if resumeMetadata != nil {
+                        showStartFreshConfirmation = true
+                    } else {
+                        onScan()
+                    }
                 } label: {
-                    Label("Scan",
-                          systemImage: "dot.radiowaves.up.forward")
+                    Label(
+                        resumeMetadata != nil ? "New Scan" : "Scan",
+                        systemImage: resumeMetadata != nil
+                            ? "arrow.counterclockwise.circle.fill"
+                            : "dot.radiowaves.up.forward"
+                    )
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(!isConnected || isScanning || resumeMetadata != nil)
+                .disabled(!isConnected || isScanning)
+                .confirmationDialog(
+                    "Start a new scan from the beginning?",
+                    isPresented: $showStartFreshConfirmation,
+                    titleVisibility: .visible
+                ) {
+                    Button("Start New Scan", role: .destructive) {
+                        onScan()
+                    }
+
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("A resumable scan is available. Starting a new scan will discard the saved progress. Are you sure you want to start from the beginning?")
+                }
                 
                 Button(role: .destructive)
                 {

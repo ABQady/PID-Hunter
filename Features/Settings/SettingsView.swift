@@ -107,7 +107,7 @@ struct SettingsView: View {
     private func exportLog() {
         Task {
             do {
-                let url = try  Logger.shared.exportCurrentLog()
+                let url = try await Logger.shared.exportCurrentLog()
 #if os(iOS)
                 await MainActor.run {
                     exportedFile = ExportedFile(url: url)
