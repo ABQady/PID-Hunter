@@ -1,4 +1,9 @@
+
 import UIKit
+
+#if targetEnvironment(macCatalyst)
+import AppKit
+#endif
 
 struct ActivityView: UIViewControllerRepresentable {
     let items: [Any]
@@ -147,9 +152,13 @@ struct AppStorageViewer: View {
 
     private func copy(_ file: StorageFile) {
 
-#if os(iOS)
-        UIPasteboard.general.string =
-            (try? String(contentsOf: file.url, encoding: .utf8)) ?? ""
+#if targetEnvironment(macCatalyst)
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.writeObjects([file.url as NSURL])
+
+#elseif os(iOS)
+        sharedItem = SharedItem(url: file.url)
 #endif
     }
 
@@ -176,11 +185,14 @@ struct AppStorageViewer: View {
 
                 try fm.copyItem(at: zippedURL, to: destination)
 
-                #if os(iOS)
-                UIPasteboard.general.url = destination
-                #endif
+#if targetEnvironment(macCatalyst)
+                let pasteboard = NSPasteboard.general
+                pasteboard.clearContents()
+                pasteboard.writeObjects([destination as NSURL])
 
+#elseif os(iOS)
                 sharedItem = SharedItem(url: destination)
+#endif
 
             } catch {
                 print("Failed to export ZIP: \(error)")
