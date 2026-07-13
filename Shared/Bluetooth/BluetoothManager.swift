@@ -93,6 +93,31 @@ final class BluetoothManager: NSObject, ObservableObject {
         rxCount = 0
         status = .scanningBLE
 
+        // Start PreSession logging as soon as BLE scan begins
+        Task {
+            if !LogSessionManager.shared.isSessionStarted {
+                let metadata = LogSessionManager.Metadata(
+                    appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown",
+                    mode: nil,
+                    header: nil,
+                    searchEngine: nil,
+                    requestDelay: nil,
+                    requestTimeout: nil,
+                    autoPreflight: nil,
+                    debugLogging: nil
+                )
+
+                do {
+                    try await LogSessionManager.shared.beginLoggingSessionIfNeeded(
+                        metadata: metadata,
+                        logger: Logger.shared
+                    )
+                } catch {
+                    Logger.shared.error("❌ Failed to start logging session: \(error.localizedDescription)")
+                }
+            }
+        }
+
         guard central.state == .poweredOn else { return }
 
         isConnected = false
@@ -131,17 +156,14 @@ final class BluetoothManager: NSObject, ObservableObject {
         Logger.shared.console("Scanning...")
         Logger.shared.info("Scanning...")
     }
-    func stopScan() {
+    private func stopBLEScan() {
         guard isScanning else { return }
-
         central.stopScan()
         isScanning = false
+    }
 
-        Task {
-            if LogSessionManager.shared.isSessionStarted {
-                await closeLoggingSession()
-            }
-        }
+    func stopScan() {
+        stopBLEScan()
     }
     // MARK: Connection
     func connect(
@@ -155,7 +177,7 @@ final class BluetoothManager: NSObject, ObservableObject {
         )
     }
     func disconnect() {
-        stopScan()
+        stopBLEScan()
         guard let peripheral = elmPeripheral else {
             return
         }
@@ -167,6 +189,11 @@ final class BluetoothManager: NSObject, ObservableObject {
         ECUInfo.shared.clear()
 
         clearPendingRequest(resumingWith: BluetoothError.disconnected)
+        Task {
+            if LogSessionManager.shared.isSessionStarted {
+                await closeLoggingSession()
+            }
+        }
     }
     // MARK: TX - SEND
     func send(
@@ -350,7 +377,7 @@ extension BluetoothManager:
                         (name.contains("elm") || name.contains("obd")) {
                         
                         Logger.shared.console("🚀 Auto connecting to \(name)")
-                        stopScan()
+                        stopBLEScan()
                         status = .connecting
                         connect(to: peripheral)
                     }
@@ -365,7 +392,7 @@ extension BluetoothManager:
         Task { @MainActor in
             Logger.shared.console("Connected to \(peripheral.name ?? "Unknown")")
             Logger.shared.success("Connected to \(peripheral.name ?? "Unknown")")
-            stopScan()
+            stopBLEScan()
             peripheral.discoverServices(nil)
         }
     }
@@ -394,7 +421,7 @@ extension BluetoothManager:
 
             self.discoveredDevices.removeAll()
 
-            self.stopScan()
+            self.stopBLEScan()
             ECUInfo.shared.clear()
 
             Logger.shared.console("Disconnected")
@@ -405,10 +432,7 @@ extension BluetoothManager:
             }
 
             clearPendingRequest(resumingWith: BluetoothError.disconnected)
-            
-            if LogSessionManager.shared.isSessionStarted {
-                await closeLoggingSession()
-            }        }
+        }
     }
 }
 // ======================================================

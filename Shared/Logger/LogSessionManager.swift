@@ -52,6 +52,9 @@ final class LogSessionManager {
         logger: Logger
     ) async throws {
 
+        print("🚀 beginLoggingSessionIfNeeded entered")
+        Logger.shared.verbose("beginLoggingSessionIfNeeded entered")
+        
         guard !sessionStarted else {
             return
         }
@@ -68,7 +71,8 @@ final class LogSessionManager {
             at: logsFolder,
             withIntermediateDirectories: true
         )
-
+        print("📁 Logs folder:", logsFolder.path)
+        
         let folderName = Self.sessionFormatter.string(from: .now)
 
         let sessionFolder = logsFolder
@@ -78,8 +82,10 @@ final class LogSessionManager {
             at: sessionFolder,
             withIntermediateDirectories: true
         )
+        print("📂 Session folder:", sessionFolder.path)
 
         sessionFolderURL = sessionFolder
+        print("✅ sessionFolderURL assigned")
         sessionStartDate = .now
         sessionStarted = true
 
@@ -108,13 +114,13 @@ final class LogSessionManager {
 
     struct Metadata {
         let appVersion: String
-        let mode: OBDMode
-        let header: String
-        let searchEngine: SearchEngineType
-        let requestDelay: Double
-        let requestTimeout: Double
-        let autoPreflight: Bool
-        let debugLogging: Bool
+        let mode: OBDMode?
+        let header: String?
+        let searchEngine: SearchEngineType?
+        let requestDelay: TimeInterval?
+        let requestTimeout: TimeInterval?
+        let autoPreflight: Bool?
+        let debugLogging: Bool?
     }
 
     struct Summary {
@@ -179,7 +185,8 @@ final class LogSessionManager {
             logger: logger
         )
 
-        await logger.finishSessionImpl()
+        try await finalizeCurrentLog(logger: logger)
+
         // endLoggingSession() -- removed as per instructions
 
         try archiveActiveLog(as: filename)
@@ -204,13 +211,13 @@ final class LogSessionManager {
         await logger.infoImpl("════════════════════════════════════════")
         await logger.infoImpl("PID Hunter v\(metadata.appVersion)")
         await logger.infoImpl("Session        : \(Self.sessionFormatter.string(from: sessionStartDate ?? .now))")
-        await logger.infoImpl("Mode           : \(metadata.mode.rawValue)")
-        await logger.infoImpl("Header         : \(metadata.header)")
-        await logger.infoImpl("Search Engine  : \(metadata.searchEngine.rawValue)")
-        await logger.infoImpl(String(format: "Request Delay  : %.0f ms", metadata.requestDelay * 1000))
-        await logger.infoImpl(String(format: "Timeout        : %.0f ms", metadata.requestTimeout * 1000))
-        await logger.infoImpl("Auto Preflight : \(metadata.autoPreflight ? "ON" : "OFF")")
-        await logger.infoImpl("Debug Logging  : \(metadata.debugLogging ? "ON" : "OFF")")
+        await logger.infoImpl("Mode           : \(metadata.mode?.rawValue ?? "Unknown")")
+        await logger.infoImpl("Header         : \(metadata.header ?? "Unknown")")
+        await logger.infoImpl("Search Engine  : \(metadata.searchEngine?.rawValue ?? "Unknown")")
+        await logger.infoImpl("Request Delay  : \(metadata.requestDelay.map { "\(Int($0 * 1000)) ms" } ?? "Unknown")")
+        await logger.infoImpl("Timeout        : \(metadata.requestTimeout.map { "\(Int($0 * 1000)) ms" } ?? "Unknown")")
+        await logger.infoImpl("Auto Preflight : \(metadata.autoPreflight.map { $0 ? "ON" : "OFF" } ?? "Unknown")")
+        await logger.infoImpl("Debug Logging  : \(metadata.debugLogging.map { $0 ? "ON" : "OFF" } ?? "Unknown")")
         await logger.infoImpl("════════════════════════════════════════")
     }
 
@@ -230,7 +237,17 @@ final class LogSessionManager {
         await logger.infoImpl("══════════════════════════════════")
     }
 
+    func finalizeCurrentLog(logger: Logger) async throws {
+        guard sessionStarted else { return }
+
+        await logger.finishSessionImpl()
+    }
+
     func endLoggingSession() {
+        if let activeLogURL,
+           fileManager.fileExists(atPath: activeLogURL.path) {
+            // Keep the last active log inside the session folder. Do not delete or move it here.
+        }
         sessionStarted = false
         sessionFolderURL = nil
         activeLogURL = nil

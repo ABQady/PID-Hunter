@@ -134,7 +134,7 @@ actor Logger {
         }
         if text.isEmpty { return }
         let timestamp = timestampFormatter.string(from: .now)
-        console(text)
+        print(text)
         let line = makeLogLine(
             text: "\(timestamp) \(text)",
             style: style
@@ -198,7 +198,9 @@ actor Logger {
 
     @inline(__always)
     nonisolated func console(_ text: String) {
-        print(text)
+        Task {
+            await self.infoImpl(text)
+        }
     }
 
     // MARK: - Maintenance
@@ -299,4 +301,3 @@ actor Logger {
         }
     }
 }
-
