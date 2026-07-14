@@ -76,7 +76,12 @@ struct ActionBar: View {
                 .buttonStyle(.bordered)
                 .disabled(!hasLines)
                 Spacer()
-                // Scan and Resume are mutually exclusive to avoid accidentally starting a fresh scan over a resumable session.
+                // A new scan always starts a brand-new scan session.
+                // The scan pipeline is responsible for resetting all runtime state
+                // (statistics, timers, discoveries, counters, telemetry, resume state, etc.)
+                // and then reading the current Header / Mode / PID range from Settings.
+                // ActionBar intentionally delegates all of that work through onScan().
+                // Resume remains a separate action.
                 Button(role: .destructive) {
                     if resumeMetadata != nil {
                         showStartFreshConfirmation = true

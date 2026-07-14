@@ -182,14 +182,14 @@ final class BruteForceScanner: ObservableObject {
             context: requestContext,
             timeout: requestTimeout
         ) {
-        case .success(let response, let classification, let latency):
+        case .success(let context, let response, let classification, let latency):
             processSuccessfulResponse(
                 response,
                 classification: classification,
                 latency: latency,
-                mode: mode,
+                mode: context.mode,
                 request: request,
-                pid: 0,
+                pid: context.pid,
                 header: context.header,
                 consecutiveTimeouts: &consecutiveTimeouts
             )
@@ -430,6 +430,13 @@ final class BruteForceScanner: ObservableObject {
         header: String,
         consecutiveTimeouts: inout Int
     ) {
+        Logger.shared.error("""
+        🧪 PROCESS RESPONSE
+        Request        : \(request)
+        Classification : \(classification)
+        Request Header : \(header)
+        Response Header: \(response.header ?? "nil")
+        """)
         // Move partial frame handling before handleSuccess
         statistics.record(
             result: classification,
@@ -876,15 +883,15 @@ final class BruteForceScanner: ObservableObject {
                 context: context,
                 timeout: requestTimeout
             ) {
-            case .success(let response, let classification, let latency):
+            case .success(let context, let response, let classification, let latency):
                 processSuccessfulResponse(
                     response,
                     classification: classification,
                     latency: latency,
-                    mode: configuration.mode,
+                    mode: context.mode,
                     request: req,
-                    pid: nextPID,
-                    header: header,
+                    pid: context.pid,
+                    header: context.header,
                     consecutiveTimeouts: &consecutiveTimeouts
                 )
                 await applyDelay()

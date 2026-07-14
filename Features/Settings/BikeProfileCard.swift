@@ -33,7 +33,6 @@ struct BikeProfileCard: View {
     var body: some View {
         let profile = context?.profile
         let analytics = context?.analytics
-        let isConnected = BluetoothManager.shared.isConnected
 
         DisclosureGroup(isExpanded: $rememberExpanded) {
             if let profile, let analytics {
@@ -177,29 +176,21 @@ struct BikeProfileCard: View {
                 Image(systemName: "motorcycle")
                 Text("Bike Profile")
                 Spacer()
-                if isConnected {
-                    Text(manager.displayedProfile?.displayName ?? "No Bike Profile")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                } else {
-                    Picker("", selection: Binding(
-                        get: { manager.displayedProfile?.fingerprint.id ?? "" },
-                        set: { selectedID in
-                            if let selected = manager.availableProfiles.first(where: { $0.fingerprint.id == selectedID }) {
-                                manager.selectProfile(selected)
-                            }
-                        }
-                    )) {
-                        ForEach(manager.availableProfiles, id: \.fingerprint.id) { profile in
-                            Text(profile.displayName)
-                                .tag(profile.fingerprint.id)
+                Picker("", selection: Binding(
+                    get: { manager.displayedProfile?.fingerprint.id ?? "" },
+                    set: { selectedID in
+                        if let selected = manager.availableProfiles.first(where: { $0.fingerprint.id == selectedID }) {
+                            manager.selectProfile(selected)
                         }
                     }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
+                )) {
+                    ForEach(manager.availableProfiles, id: \.fingerprint.id) { profile in
+                        Text(profile.displayName)
+                            .tag(profile.fingerprint.id)
+                    }
                 }
+                .labelsHidden()
+                .pickerStyle(.menu)
             }
             .font(.headline)
         }

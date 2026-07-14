@@ -71,6 +71,7 @@ struct PartialFrameRetryEngine {
             switch execution {
 
             case .success(
+                let context,
                 let response,
                 let classification,
                 let latency

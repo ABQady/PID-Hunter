@@ -16,6 +16,19 @@ final class BikeProfileStore {
 
     private init() {}
 
+    private var decoder: JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }
+
+    private var encoder: JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }
+
     private var profilesDirectory: URL {
         let base = fileManager.urls(
             for: .applicationSupportDirectory,
@@ -37,24 +50,42 @@ final class BikeProfileStore {
         return directory
     }
 
-    private func fileURL(for fingerprint: BikeFingerprint) -> URL {
-        profilesDirectory.appendingPathComponent("\(fingerprint.id).json")
+    private func fileURLs(for fingerprint: BikeFingerprint) -> [URL] {
+        (try? fileManager.contentsOfDirectory(
+            at: profilesDirectory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ))?
+        .filter {
+            $0.pathExtension.lowercased() == "json" &&
+            $0.deletingPathExtension().lastPathComponent.hasPrefix("\(fingerprint.id)_")
+        } ?? []
+    }
+
+    private func fileURL(for profile: BikeProfile) -> URL {
+        let shortID = String(profile.id.uuidString.prefix(8))
+        let filename = "\(profile.fingerprint.id)_\(shortID).json"
+        return profilesDirectory.appendingPathComponent(filename)
+    }
+
+    private func loadProfile(from url: URL) throws -> BikeProfile {
+        let data = try Data(contentsOf: url)
+        return try decoder.decode(BikeProfile.self, from: data)
     }
 
     func exists(for fingerprint: BikeFingerprint) -> Bool {
-        fileManager.fileExists(atPath: fileURL(for: fingerprint).path)
+        !fileURLs(for: fingerprint).isEmpty
     }
 
     func load(for fingerprint: BikeFingerprint) throws -> BikeProfile {
-        let url = fileURL(for: fingerprint)
-        let data = try Data(contentsOf: url)
-
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        let urls = fileURLs(for: fingerprint)
+        guard let url = urls.first else {
+            throw CocoaError(.fileNoSuchFile)
+        }
 
         let profile: BikeProfile
         do {
-            profile = try decoder.decode(BikeProfile.self, from: data)
+            profile = try loadProfile(from: url)
         } catch {
             Logger.shared.error("❌ Failed to decode Bike Profile: \(url.lastPathComponent)")
             throw error
@@ -74,14 +105,10 @@ final class BikeProfileStore {
         )
         .filter { $0.pathExtension.lowercased() == "json" }
 
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-
         var profiles: [BikeProfile] = []
         for url in urls {
             do {
-                let data = try Data(contentsOf: url)
-                let profile = try decoder.decode(BikeProfile.self, from: data)
+                let profile = try loadProfile(from: url)
                 profiles.append(profile)
             } catch {
                 Logger.shared.warning("⚠️ Skipping invalid Bike Profile: \(url.lastPathComponent)")
@@ -93,15 +120,18 @@ final class BikeProfileStore {
 
     func save(_ profile: BikeProfile) throws {
         _ = profilesDirectory
-        let url = fileURL(for: profile.fingerprint)
+        let url = fileURL(for: profile)
 
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
-
-        let data = try encoder.encode(profile)
+        let data = try self.encoder.encode(profile)
         try data.write(to: url, options: .atomic)
         Logger.shared.info("💾 Saved Bike Profile")
+        Logger.shared.verbose("""
+        💾 SAVE
+        UUID        : \(profile.id)
+        Discoveries : \(profile.discoveries.count)
+        Object      : \(ObjectIdentifier(profile as AnyObject))
+        File        : \(url.lastPathComponent)
+        """)
     }
 
     func delete(_ profile: BikeProfile) throws {
@@ -112,12 +142,8 @@ final class BikeProfileStore {
         )
         .filter { $0.pathExtension.lowercased() == "json" }
 
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-
         for url in urls {
-            let data = try Data(contentsOf: url)
-            let stored = try decoder.decode(BikeProfile.self, from: data)
+            let stored = try loadProfile(from: url)
 
             if stored.fingerprint == profile.fingerprint,
                stored.displayName == profile.displayName {
@@ -131,6 +157,8 @@ final class BikeProfileStore {
     }
 
     func delete(for fingerprint: BikeFingerprint) throws {
-        try fileManager.removeItem(at: fileURL(for: fingerprint))
+        for url in fileURLs(for: fingerprint) {
+            try fileManager.removeItem(at: url)
+        }
     }
 }

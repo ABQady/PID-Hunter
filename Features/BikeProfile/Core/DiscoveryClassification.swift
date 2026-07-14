@@ -20,31 +20,37 @@ enum DiscoveryClassification: String, Codable {
 
 extension DiscoveryClassification {
 
-    init(from responseType: ELMResponseType) {
+    @inline(__always)
+    private static func map(_ responseType: ELMResponseType) -> DiscoveryClassification {
         switch responseType {
         case .positive:
-            self = .positive
+            return .positive
         case .negative:
-            self = .negative
+            return .negative
         case .noData:
-            self = .noData
+            return .noData
         case .busError:
-            self = .busError
+            return .busError
         case .unableToConnect:
-            self = .unableToConnect
+            return .unableToConnect
+        case .partialFrame:
+            return .partialFrame
         case .searching,
              .stopped,
              .atResponse,
              .unknown:
-            self = .unknown
-        case .partialFrame:
-            self = .partialFrame
+            return .unknown
         }
+    }
+
+    init(from responseType: ELMResponseType) {
+        self = Self.map(responseType)
     }
 }
 
 extension DiscoveryClassification {
 
+    @inline(__always)
     var title: String {
         switch self {
         case .positive: "Positive"
@@ -58,6 +64,7 @@ extension DiscoveryClassification {
         }
     }
 
+    @inline(__always)
     var icon: String {
         switch self {
         case .positive: "checkmark.circle.fill"
@@ -71,6 +78,7 @@ extension DiscoveryClassification {
         }
     }
 
+    @inline(__always)
     var color: Color {
         switch self {
         case .positive: .green

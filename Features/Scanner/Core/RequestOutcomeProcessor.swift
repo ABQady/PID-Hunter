@@ -10,7 +10,6 @@ import Foundation
 /// Represents the result of processing a successful scan response.
 struct ScanProcessingResult {
     let shouldPersist: Bool
-    let profileUpdated: Bool
 }
 
 /// Represents the result of processing a timeout event during scanning.
@@ -32,34 +31,65 @@ final class RequestOutcomeProcessor {
     private init() {}
 
     @discardableResult
+    private func recordOutcome(
+        response: ELMResponse,
+        latency: TimeInterval,
+        mode: OBDMode,
+        requestHeader: String,
+        request: String,
+        source: RecordSource,
+        logAction: () -> Void,
+        shouldPersist: Bool,
+        consecutiveTimeouts: inout Int
+    ) -> RequestOutcome {
+        // Reset timeout state.
+        consecutiveTimeouts = 0
+
+        // Persist the discovery into the active bike profile.
+        BikeProfileManager.shared.record(
+            header: requestHeader,
+            mode: mode,
+            request: request,
+            response: response,
+            latency: latency,
+            source: source
+        )
+
+        // Emit outcome-specific logging.
+        logAction()
+
+        // Return the scanner-facing processing result.
+        return .success(
+            ScanProcessingResult(
+                shouldPersist: shouldPersist
+            )
+        )
+    }
+
+    @discardableResult
     func recordRetryPositive(
         response: ELMResponse,
         classification: SearchResult,
         latency: TimeInterval,
         mode: OBDMode,
+        requestHeader: String,
         request: String,
         consecutiveTimeouts: inout Int
     ) -> RequestOutcome {
-
-        consecutiveTimeouts = 0
-
-        BikeProfileManager.shared.record(
-            mode: mode,
-            request: request,
+        return recordOutcome(
             response: response,
             latency: latency,
-            source: .retryPositive
-        )
-
-        Logger.shared.success(
-            "🟢 Retry Positive | \(mode.rawValue) | \(request) | \(Int(latency * 1000)) ms"
-        )
-
-        return .success(
-            ScanProcessingResult(
-                shouldPersist: classification.shouldPersist,
-                profileUpdated: true
-            )
+            mode: mode,
+            requestHeader: requestHeader,
+            request: request,
+            source: .retryPositive,
+            logAction: {
+                Logger.shared.success(
+                    "🟢 Retry Positive | \(mode.rawValue) | \(request) | \(Int(latency * 1000)) ms"
+                )
+            },
+            shouldPersist: classification.shouldPersist,
+            consecutiveTimeouts: &consecutiveTimeouts
         )
     }
     
@@ -72,27 +102,33 @@ final class RequestOutcomeProcessor {
         latency: TimeInterval,
         mode: OBDMode,
         request: String,
+        requestHeader: String,
         consecutiveTimeouts: inout Int
     ) -> RequestOutcome {
-
-        consecutiveTimeouts = 0
-        let shouldPersist = classification.shouldPersist
-        BikeProfileManager.shared.record(
-            mode: mode,
-            request: request,
+        return recordOutcome(
             response: response,
             latency: latency,
-            source: .discovery
-        )
-
-        Logger.shared.verbose(
-            "📦 Outcome → \(classification) | Persist=\(shouldPersist) | \(request) | \(Int(latency * 1000)) ms"
-        )
-        return .success(
-            ScanProcessingResult(
-                shouldPersist: shouldPersist,
-                profileUpdated: true
-            )
+            mode: mode,
+            requestHeader: requestHeader,
+            request: request,
+            source: .discovery,
+            logAction: {
+                Logger.shared.verbose(
+                    """
+📦 Outcome
+Classification : \(classification)
+Persist        : \(classification.shouldPersist)
+Request Header : \(requestHeader)
+Response Header: \(response.header ?? "nil")
+Request        : \(request)
+Response PID   : \(response.pid.map { String(format: "%04X", $0) } ?? "nil")
+Latency        : \(Int(latency * 1000)) ms
+Raw Response   : \(response.raw)
+"""
+                )
+            },
+            shouldPersist: classification.shouldPersist,
+            consecutiveTimeouts: &consecutiveTimeouts
         )
     }
 
@@ -104,29 +140,24 @@ final class RequestOutcomeProcessor {
         classification: SearchResult,
         latency: TimeInterval,
         mode: OBDMode,
+        requestHeader: String,
         request: String,
         consecutiveTimeouts: inout Int
     ) -> RequestOutcome {
-
-        consecutiveTimeouts = 0
-
-        BikeProfileManager.shared.record(
-            mode: mode,
-            request: request,
+        return recordOutcome(
             response: response,
             latency: latency,
-            source: .confirmedNegative
-        )
-
-        Logger.shared.info(
-            "🔴 Confirmed Negative | \(mode.rawValue) | \(request) | \(classification) | \(Int(latency * 1000)) ms"
-        )
-
-        return .success(
-            ScanProcessingResult(
-                shouldPersist: false,
-                profileUpdated: true
-            )
+            mode: mode,
+            requestHeader: requestHeader,
+            request: request,
+            source: .confirmedNegative,
+            logAction: {
+                Logger.shared.info(
+                    "🔴 Confirmed Negative | \(mode.rawValue) | \(request) | \(classification) | \(Int(latency * 1000)) ms"
+                )
+            },
+            shouldPersist: false,
+            consecutiveTimeouts: &consecutiveTimeouts
         )
     }
 
@@ -147,6 +178,7 @@ final class RequestOutcomeProcessor {
             )
         )
     }
+
     func flushProfile() {
         BikeProfileManager.shared.flush()
     }

@@ -128,14 +128,26 @@ struct DiscoveryRecord: Hashable, Codable {
 }
 
 extension DiscoveryRecord {
+    @inline(__always)
+    private func updatedAverageLatency(
+        with latency: TimeInterval
+    ) -> TimeInterval {
+        (averageLatency * Double(hitCount - 1) + latency) / Double(hitCount)
+    }
     mutating func record(response: String, responseType: ELMResponseType, latency: TimeInterval) {
         hitCount += 1
         lastSeen = .now
         self.response = response
-        classification = DiscoveryClassification(from: responseType)
+        Logger.shared.info("""
+📄 Discovery Update
+Request        : \(request)
+Stored Class   : \(classification)
+Incoming Class : \(DiscoveryClassification(from: responseType))
+Hit Count      : \(hitCount)
+""")
         if !notes.contains(response) {
             notes.append(response)
         }
-        averageLatency = (averageLatency * Double(hitCount - 1) + latency) / Double(hitCount)
+        averageLatency = updatedAverageLatency(with: latency)
     }
 }

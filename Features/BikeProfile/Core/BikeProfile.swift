@@ -9,6 +9,17 @@ import Foundation
 struct BikeProfile: Codable, Hashable {
     let id: UUID
 
+    enum CodingKeys: String, CodingKey {
+        case id
+        case fingerprint
+        case schemaVersion
+        case displayName
+        case firstSeen
+        case lastSeen
+        case discoveries
+        case headerDiscoveries
+    }
+
     static let currentSchemaVersion = 1
     var fingerprint: BikeFingerprint
     var schemaVersion: Int = BikeProfile.currentSchemaVersion
@@ -40,19 +51,75 @@ struct BikeProfile: Codable, Hashable {
         self.headerDiscoveries = headerDiscoveries
         self.lastSeen = self.firstSeen
     }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        id = try container.decode(UUID.self, forKey: .id)
+        fingerprint = try container.decode(BikeFingerprint.self, forKey: .fingerprint)
+        schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? Self.currentSchemaVersion
+        displayName = try container.decodeIfPresent(String.self, forKey: .displayName) ?? "Unknown Name"
+        firstSeen = try container.decodeIfPresent(Date.self, forKey: .firstSeen) ?? .now
+        lastSeen = try container.decodeIfPresent(Date.self, forKey: .lastSeen) ?? firstSeen
+        discoveries = try container.decodeIfPresent([DiscoveryRecord].self, forKey: .discoveries) ?? []
+        headerDiscoveries = try container.decodeIfPresent([HeaderDiscoveryResult].self, forKey: .headerDiscoveries) ?? []
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+
+        try container.encode(id, forKey: .id)
+        try container.encode(fingerprint, forKey: .fingerprint)
+        try container.encode(schemaVersion, forKey: .schemaVersion)
+        try container.encode(displayName, forKey: .displayName)
+        try container.encode(firstSeen, forKey: .firstSeen)
+        try container.encode(lastSeen, forKey: .lastSeen)
+        try container.encode(discoveries, forKey: .discoveries)
+        try container.encode(headerDiscoveries, forKey: .headerDiscoveries)
+    }
 }
+// MARK: - Discovery Queries
 extension BikeProfile {
+
+    @inline(__always)
+    private func sortedDiscoveries(
+        matching predicate: (DiscoveryRecord) -> Bool
+    ) -> [DiscoveryRecord] {
+        discoveries
+            .filter(predicate)
+            .sorted { $0.request < $1.request }
+    }
+
+    @inline(__always)
+    private func discoveries(
+        where predicate: (DiscoveryRecord) -> Bool
+    ) -> [DiscoveryRecord] {
+        sortedDiscoveries(matching: predicate)
+    }
 
     func discoveries(
         classifiedAs classification: DiscoveryClassification
     ) -> [DiscoveryRecord] {
+        discoveries { $0.classification == classification }
+    }
 
-        discoveries
-            .filter {
-                $0.classification == classification
-            }
-            .sorted {
-                $0.request < $1.request
-            }
+    func positiveDiscoveries() -> [DiscoveryRecord] {
+        discoveries(classifiedAs: .positive)
+    }
+
+    func negativeDiscoveries() -> [DiscoveryRecord] {
+        discoveries(classifiedAs: .negative)
+    }
+
+    func partialFrameDiscoveries() -> [DiscoveryRecord] {
+        discoveries(classifiedAs: .partialFrame)
+    }
+
+    func noDataDiscoveries() -> [DiscoveryRecord] {
+        discoveries(classifiedAs: .noData)
+    }
+
+    func unknownDiscoveries() -> [DiscoveryRecord] {
+        discoveries(classifiedAs: .unknown)
     }
 }

@@ -39,34 +39,47 @@ struct BikeLearningCard: View {
                     if let profile,
                        !profile.headerDiscoveries.isEmpty {
 
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("Discovered Headers")
-                                .font(.subheadline.weight(.semibold))
+                        DisclosureGroup {
+                            VStack(alignment: .leading, spacing: 10) {
+                                ForEach(profile.headerDiscoveries, id: \.header) { discovery in
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        HStack {
+                                            Text(discovery.header)
+                                                .font(.headline.monospaced())
 
-                            ForEach(profile.headerDiscoveries, id: \.header) { discovery in
-                                VStack(alignment: .leading, spacing: 6) {
-                                    HStack {
-                                        Text(discovery.header)
-                                            .font(.headline.monospaced())
+                                            Spacer()
 
-                                        Spacer()
+                                            Text("\(discovery.supportedModes.count) modes")
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
 
-                                        Text("\(discovery.supportedModes.count) modes")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
+                                        LazyVGrid(
+                                            columns: [GridItem(.adaptive(minimum: 70), spacing: 8)],
+                                            alignment: .leading,
+                                            spacing: 8
+                                        ) {
+                                            ForEach(discovery.supportedModes, id: \.rawValue) { mode in
+                                                Label(mode.title, systemImage: "checkmark.circle.fill")
+                                                    .font(.caption.weight(.medium))
+                                                    .foregroundStyle(.green)
+                                                    .padding(.horizontal, 8)
+                                                    .padding(.vertical, 4)
+                                                    .background(.green.opacity(0.12))
+                                                    .clipShape(Capsule())
+                                            }
+                                        }
                                     }
-
-                                    Text(discovery.supportedModes
-                                        .map { $0.title }
-                                        .joined(separator: " • "))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(10)
+                                    .background(.thinMaterial)
+                                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                                 }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(10)
-                                .background(.thinMaterial)
-                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                             }
+                            .padding(.top, 8)
+                        } label: {
+                            Label("Discovered Headers", systemImage: "point.3.connected.trianglepath.dotted")
+                                .font(.subheadline.weight(.semibold))
                         }
 
                         Divider()

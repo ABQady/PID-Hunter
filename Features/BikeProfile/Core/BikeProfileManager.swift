@@ -27,13 +27,26 @@ final class BikeProfileManager {
 
     private let store = BikeProfileStore.shared
 
+    private let lastSelectedProfileKey = "LastSelectedBikeProfileID"
+
+    private var lastSelectedProfileID: String {
+        get {
+            UserDefaults.standard.string(forKey: lastSelectedProfileKey) ?? ""
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: lastSelectedProfileKey)
+        }
+    }
+
     private var lastSaveDate = Date.distantPast
     private let autosaveInterval: TimeInterval = 20
 
     private init() {}
 
+    // During an active scan, currentProfile is the authoritative model.
+    // selectedProfile is only used for browsing when there is no active profile.
     var displayedProfile: BikeProfile? {
-        selectedProfile ?? currentProfile
+        currentProfile ?? selectedProfile
     }
 
     var context: BikeProfileContext? {
@@ -41,9 +54,19 @@ final class BikeProfileManager {
             return nil
         }
 
+        let analytics = BikeAnalytics(profile: profile)
+
+        Logger.shared.info("""
+        📊 Context
+        Profile UUID : \(profile.id)
+        Discoveries  : \(profile.discoveries.count)
+        Total        : \(analytics.totalRequests)
+        Coverage     : \(analytics.coverage)
+        """)
+
         return BikeProfileContext(
             profile: profile,
-            analytics: BikeAnalytics(profile: profile)
+            analytics: analytics
         )
     }
 
@@ -56,14 +79,9 @@ final class BikeProfileManager {
                 currentProfile = refreshed
             }
 
-            if let selected = selectedProfile,
-               let refreshed = availableProfiles.first(where: { $0.id == selected.id }) {
-                selectedProfile = refreshed
-            }
-
-            if selectedProfile == nil {
-                selectedProfile = availableProfiles.first
-            }
+            selectedProfile = availableProfiles.first {
+                $0.id.uuidString == lastSelectedProfileID
+            } ?? currentProfile ?? availableProfiles.first
         } catch {
             Logger.shared.error("❌ Failed to load Bike Profiles: \(error.localizedDescription)")
             availableProfiles = []
@@ -72,6 +90,7 @@ final class BikeProfileManager {
 
     func selectProfile(_ profile: BikeProfile) {
         selectedProfile = profile
+        lastSelectedProfileID = profile.id.uuidString
     }
     
     // Helper to generate a default display name based on fingerprint
@@ -96,13 +115,21 @@ final class BikeProfileManager {
                current.fingerprint != fingerprint {
                 reset()
             }
-            currentProfile = try store.load(for: fingerprint)
+            let profiles = try store.loadAll()
+                .filter { $0.fingerprint.id == fingerprint.id }
 
-            if currentProfile == nil {
+            currentProfile = profiles.first {
+                $0.id.uuidString == lastSelectedProfileID
+            } ?? profiles.first
+
+            if profiles.isEmpty {
                 Logger.shared.warning("⚠️ No Bike Profile exists for this ECU. Create one manually.")
             }
 
             selectedProfile = currentProfile
+            if let currentProfile {
+                lastSelectedProfileID = currentProfile.id.uuidString
+            }
             reloadProfiles()
             if var profile = currentProfile,
                profile.displayName.isEmpty {
@@ -136,6 +163,7 @@ final class BikeProfileManager {
             try store.save(profile)
             currentProfile = profile
             selectedProfile = profile
+            lastSelectedProfileID = profile.id.uuidString
             reloadProfiles()
             isDirty = false
             lastSaveDate = Date()
@@ -168,12 +196,6 @@ final class BikeProfileManager {
 
     func createProfileFromCurrent(named name: String? = nil) {
         let fingerprint = ECUInfo.shared.fingerprint
-
-        if currentProfile != nil {
-            Logger.shared.info("Bike Profile already loaded.")
-            return
-        }
-
         _ = createProfile(for: fingerprint, named: name)
     }
 
@@ -217,15 +239,8 @@ final class BikeProfileManager {
 
         profile.rename(to: trimmed)
         try? store.save(profile)
-        currentProfile = profile
-        if let index = availableProfiles.firstIndex(where: { $0.id == profile.id }) {
-            availableProfiles[index] = profile
-        }
-        if selectedProfile?.id == profile.id {
-            selectedProfile = profile
-        }
-        isDirty = true
-        autosaveIfNeeded()
+
+        commitProfile(profile)
     }
 
     func renameSelectedProfile(to newName: String) {
@@ -234,31 +249,56 @@ final class BikeProfileManager {
 
     // MARK: - Knowledge
 
-    func knowledge(
+    @inline(__always)
+    private func discoveryIndex(
+        in profile: BikeProfile,
+        header: String,
         mode: OBDMode,
         request: String
-    ) -> DiscoveryRecord? {
-        currentProfile?.discoveries.first {
-            $0.header == ECUInfo.shared.header &&
+    ) -> Int? {
+        profile.discoveries.firstIndex {
+            $0.header == header &&
             $0.mode == mode.rawValue &&
             $0.request == request
         }
     }
 
-    func isKnown(
-        mode: OBDMode,
-        request: String
-    ) -> Bool {
-        currentProfile?.discoveries.contains {
-            $0.header == ECUInfo.shared.header &&
-            $0.mode == mode.rawValue &&
-            $0.request == request
-        } ?? false
+    @inline(__always)
+    private func resolvedSource(
+        current: RecordSource,
+        incoming: RecordSource
+    ) -> RecordSource {
+        switch (current, incoming) {
+        case (.confirmedNegative, .discovery):
+            return current
+        case (.retryPositive, .discovery):
+            return current
+        default:
+            return incoming
+        }
     }
 
     private(set) var isDirty = false
     
+    private func commitProfile(_ profile: BikeProfile, markDirty: Bool = true) {
+        currentProfile = profile
+
+        if selectedProfile?.id == profile.id {
+            selectedProfile = profile
+        }
+
+        if let index = availableProfiles.firstIndex(where: { $0.id == profile.id }) {
+            availableProfiles[index] = profile
+        }
+
+        if markDirty {
+            isDirty = true
+            autosaveIfNeeded()
+        }
+    }
+    
     func record(
+        header: String,
         mode: OBDMode,
         request: String,
         response: ELMResponse,
@@ -266,36 +306,53 @@ final class BikeProfileManager {
         source: RecordSource = .discovery,
         hadPartialResponse: Bool = false
     ) {
-        guard var profile = currentProfile else { return }
+        guard var profile = currentProfile else {
+            Logger.shared.error("❌ record(): currentProfile is nil. Dropping discovery \(mode.rawValue) \(request) @ \(header)")
+            return
+        }
 
-        if let index = profile.discoveries.firstIndex(where: {
-            $0.header == ECUInfo.shared.header &&
-            $0.mode == mode.rawValue &&
-            $0.request == request
-        }) {
+        let requestKey = "\(header) | \(mode.rawValue) | \(request)"
+
+        Logger.shared.info("""
+📝 Record Request
+Request Key  : \(requestKey)
+Response HDR : \(response.header ?? "-")
+Response     : \(response.raw)
+Source       : \(source)
+Before Count : \(profile.discoveries.count)
+""")
+
+        Logger.shared.info("""
+🔍 Persistence Decision
+Request Header : \(header)
+Response Header: \(response.header ?? "-")
+Lookup Key     : \(requestKey)
+""")
+
+        if let index = discoveryIndex(
+            in: profile,
+            header: header,
+            mode: mode,
+            request: request
+        ) {
+            Logger.shared.info("♻️ Updating discovery: \(requestKey)")
             profile.discoveries[index].record(
                 response: response.raw,
                 responseType: response.type,
                 latency: latency
             )
-            switch (profile.discoveries[index].source, source) {
-            case (.confirmedNegative, .discovery):
-                // Keep the stronger knowledge.
-                break
-
-            case (.retryPositive, .discovery):
-                // Do not downgrade a retry-confirmed discovery.
-                break
-
-            default:
-                profile.discoveries[index].source = source
-            }
+            Logger.shared.info("📄 Existing classification: \(profile.discoveries[index].classification)")
+            profile.discoveries[index].source = resolvedSource(
+                current: profile.discoveries[index].source,
+                incoming: source
+            )
             profile.discoveries[index].hadPartialResponse =
                 profile.discoveries[index].hadPartialResponse || hadPartialResponse
         } else {
+            Logger.shared.info("➕ Adding discovery: \(requestKey)")
             profile.discoveries.append(
                 DiscoveryRecord(
-                    header: ECUInfo.shared.header,
+                    header: header,
                     mode: mode.rawValue,
                     request: request,
                     response: response.raw,
@@ -309,15 +366,20 @@ final class BikeProfileManager {
                     hadPartialResponse: hadPartialResponse
                 )
             )
+            if let added = profile.discoveries.last {
+                Logger.shared.info("📄 Stored classification: \(added.classification)")
+            }
+            Logger.shared.info("📈 Discovery count after append: \(profile.discoveries.count)")
         }
 
+        let discoveryCount = profile.discoveries.count
         profile.touch()
-        currentProfile = profile
-        if selectedProfile?.id == profile.id {
-            selectedProfile = profile
-        }
-        isDirty = true
-        autosaveIfNeeded()
+        Logger.shared.info("""
+💾 Committing Bike Profile
+Discoveries : \(discoveryCount)
+Dirty        : true
+""")
+        commitProfile(profile)
     }
 
     var knownRequestCount: Int {
@@ -338,6 +400,7 @@ final class BikeProfileManager {
         lastSaveDate = .distantPast
         Logger.shared.info("🧹 Bike Profile Reset")
         currentProfile = nil
+        selectedProfile = nil
         // Keep selectedProfile so the UI can continue browsing the last loaded bike while offline.
         reloadProfiles()
     }
@@ -354,17 +417,13 @@ final class BikeProfileManager {
 
         if !discoveries.isEmpty {
             profile.headerDiscoveries = discoveries
-        }
-        currentProfile = profile
-        if selectedProfile?.id == profile.id {
-            selectedProfile = profile
+            profile.touch()
+            lastSaveDate = .distantPast
+            commitProfile(profile)
         }
 
-        do {
-            try store.save(profile)
-            Logger.shared.info("✅ Saved \(discoveries.count) header discoveries.")
-        } catch {
-            Logger.shared.error("❌ Failed to save header discoveries: \(error.localizedDescription)")
-        }
+        save()
+        reloadProfiles()
+        Logger.shared.info("✅ Saved \(discoveries.count) header discoveries.")
     }
 }

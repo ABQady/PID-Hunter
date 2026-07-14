@@ -29,9 +29,9 @@ struct BikeView: View {
         }
         .navigationTitle("Bike")
         .navigationBarTitleDisplayMode(.large)
-        .onAppear {
-            manager.reloadProfiles()
-        }
+//        .onAppear {
+//            manager.reloadProfiles()
+//        }
     }
 }
 

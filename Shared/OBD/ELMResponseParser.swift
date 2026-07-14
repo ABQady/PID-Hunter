@@ -314,27 +314,7 @@ extension ELMResponse {
 extension ELMResponse {
 
     @inline(__always)
-    private func printableASCIIBytes(
-        droppingLeadingBytes count: Int
-    ) -> [UInt8] {
-        var result: [UInt8] = []
-
-        for byte in payload.dropFirst(count) {
-            switch byte {
-            case 0x20...0x7E:
-                result.append(byte)
-            default:
-                continue
-            }
-        }
-
-        return result
-    }
-
-    @inline(__always)
-    private func asciiPayload(
-        droppingLeadingBytes count: Int = 0
-    ) -> String? {
+    private func asciiPayload() -> String? {
         Logger.shared.info("""
 🔎 ASCII Payload
 Service : \(service.map { String(format: "%02X", $0) } ?? "-")
@@ -342,19 +322,13 @@ PID     : \(pid.map { String(format: "%04X", $0) } ?? "-")
 Payload : \(payload.map { String(format: "%02X", $0) }.joined(separator: " "))
 """)
 
-        guard payload.count > count else {
+        let printable = payload.filter { 0x20...0x7E ~= $0 }
+
+        guard !printable.isEmpty else {
             return nil
         }
 
-        let bytes = printableASCIIBytes(
-            droppingLeadingBytes: count
-        )
-
-        guard !bytes.isEmpty else {
-            return nil
-        }
-
-        let decoded = String(bytes: bytes, encoding: .ascii)?
+        let decoded = String(bytes: printable, encoding: .ascii)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         Logger.shared.info("🔎 ASCII Decoded: \(decoded ?? "nil")")
@@ -366,31 +340,25 @@ Payload : \(payload.map { String(format: "%02X", $0) }.joined(separator: " "))
         asciiPayload()
     }
 
-    @inline(__always)
-    private func isMode09PID(_ expectedPID: UInt16) -> Bool {
-        service == 0x09 && pid == expectedPID
-    }
-
-    @inline(__always)
-    private func decodedMode09ASCII(expectedPID: UInt16) -> String? {
-        guard isMode09PID(expectedPID) else {
+    var vin: String? {
+        guard service == 0x09, pid == 0x02 else {
             return nil
         }
-
-        // Some ECUs prepend a frame counter before the ASCII payload.
-        return asciiPayload(droppingLeadingBytes: 1) ?? asciiPayload()
-    }
-
-    var vin: String? {
-        decodedMode09ASCII(expectedPID: 0x02)
+        return asciiPayload()
     }
 
     var calibrationID: String? {
-        decodedMode09ASCII(expectedPID: 0x04)
+        guard service == 0x09, pid == 0x04 else {
+            return nil
+        }
+        return asciiPayload()
     }
 
     var ecuName: String? {
-        decodedMode09ASCII(expectedPID: 0x0A)
+        guard service == 0x09, pid == 0x0A else {
+            return nil
+        }
+        return asciiPayload()
     }
 }
 extension String {

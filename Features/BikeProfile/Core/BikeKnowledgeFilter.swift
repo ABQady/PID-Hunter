@@ -7,6 +7,25 @@
 @MainActor
 struct BikeKnowledgeFilter {
     
+    @inline(__always)
+    private static func isKnownRequest(
+        _ request: String,
+        mode: OBDMode,
+        header: String,
+        profile: BikeProfile
+    ) -> Bool {
+        profile.discoveries.contains {
+            $0.header == header &&
+            $0.mode == mode.rawValue &&
+            $0.request == request
+        }
+    }
+    
+    @inline(__always)
+    private static func requestHeader() -> String {
+        ECUInfo.shared.header
+    }
+    
    static func unknownRequests(
         mode: OBDMode,
         from requests: [String],
@@ -16,29 +35,36 @@ struct BikeKnowledgeFilter {
             return requests
         }
 
-        return requests.filter { request in
-            return !profile.discoveries.contains { record in
-                record.header == ECUInfo.shared.header &&
-                record.mode == mode.rawValue &&
-                record.request == request
-            }
+        let header = requestHeader()
+
+        let shouldScan: (String) -> Bool = {
+            !isKnownRequest(
+                $0,
+                mode: mode,
+                header: header,
+                profile: profile
+            )
         }
+
+        return requests.filter(shouldScan)
     }
     
     static func buildQueue(
         for mode: OBDMode,
         profile: BikeProfile?
     ) -> [String] {
-        let queue = unknownRequests(
+        let pendingRequests = unknownRequests(
             mode: mode,
             from: mode.runtimeRequests,
             profile: profile
         )
 
-    Logger.shared.info(
-            "🧠 Bike Profile filtered \(mode.runtimeRequests.count - queue.count) known request(s)"
+        let skippedRequests = mode.runtimeRequests.count - pendingRequests.count
+
+        Logger.shared.info(
+            "🧠 Bike Profile skipped \(skippedRequests) known request(s)"
         )
 
-        return queue
+        return pendingRequests
     }
 }
