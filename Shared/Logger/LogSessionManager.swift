@@ -175,11 +175,6 @@ final class LogSessionManager {
             debugLogging: currentMetadata?.debugLogging
         )
 
-        let filename = LogFileNaming.makeFilename(
-            mode: mode,
-            header: header,
-            searchEngine: searchEngine
-        )
 
         let stats = await MainActor.run { ScanStatistics.shared }
 

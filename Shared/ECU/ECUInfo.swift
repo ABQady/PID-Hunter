@@ -28,12 +28,13 @@ final class ECUInfo: ObservableObject {
 
     static let shared = ECUInfo()
 
-    @Published var ecuName = "Unknown"
+    @Published var adapterDescription = "-"
     @Published var elmVersion = "-"
+    @Published var ecuName = "-"
     @Published var protocolName = "-"
-    @Published var ecuIdentifier = ""
-    @Published var calibrationIdentifier = ""
-    @Published var vinIndentifier = ""
+    @Published var ecuIdentifier = "-"
+    @Published var calibrationIdentifier = "-"
+    @Published var vinIndentifier = "-"
     @Published var header = "-"
     @Published var status = "-"
     @Published var services = SupportedServices()
@@ -42,12 +43,13 @@ final class ECUInfo: ObservableObject {
     private init() {}
 
     func clear() {
-        ecuName = "Unknown"
+        ecuName = "-"
+        adapterDescription = "-"
         elmVersion = "-"
         protocolName = "-"
-        ecuIdentifier = ""
-        calibrationIdentifier = ""
-        vinIndentifier = ""
+        ecuIdentifier = "-"
+        calibrationIdentifier = "-"
+        vinIndentifier = "-"
         header = "-"
         status = "-"
         services.removeAll()
@@ -79,10 +81,25 @@ final class ECUInfo: ObservableObject {
     }
 
     var fingerprint: BikeFingerprint {
-        BikeFingerprint(
-            protocolName: normalized(protocolName) ?? "",
-            vinHex: normalized(vinIndentifier),
-            calibrationHex: normalized(calibrationIdentifier)
+        let normalizedProtocol = normalized(protocolName) ?? ""
+        let normalizedVIN = normalized(vinIndentifier)
+        let normalizedCalibration = normalized(calibrationIdentifier)
+
+        Logger.shared.info("""
+        🧬 Fingerprint
+        Raw Protocol        = '\(protocolName)'
+        Raw VIN             = '\(vinIndentifier)'
+        Raw Calibration     = '\(calibrationIdentifier)'
+
+        Normalized Protocol = '\(normalizedProtocol)'
+        Normalized VIN      = '\(normalizedVIN ?? "nil")'
+        Normalized Calib    = '\(normalizedCalibration ?? "nil")'
+        """)
+
+        return BikeFingerprint(
+            protocolName: normalizedProtocol,
+            vinHex: normalizedVIN,
+            calibrationHex: normalizedCalibration
         )
     }
 

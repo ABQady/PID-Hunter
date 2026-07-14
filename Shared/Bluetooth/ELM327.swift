@@ -189,6 +189,21 @@ final class ELM327: ObservableObject {
     }
 
     // MARK: - ECU Identification
+    @inline(__always)
+    private func assignIfPresent<T>(
+        _ value: T?,
+        description: String,
+        assign: (T) -> Void
+    ) {
+        guard let value else {
+            Logger.shared.warning("❌ Failed to parse \(description)")
+            return
+        }
+
+        assign(value)
+        Logger.shared.info("✅ \(description) = \(value)")
+    }
+
     func identifyECU() async {
         let identificationCommands: [(command: String, description: String)] = [
             ("ATI",   "ELM Version"),
@@ -232,7 +247,7 @@ final class ELM327: ObservableObject {
                         .trimmingCharacters(in: .whitespacesAndNewlines)
 
                 case "AT@1":
-                    ECUInfo.shared.ecuName = result.response.raw
+                    ECUInfo.shared.adapterDescription = result.response.raw
                         .replacingOccurrences(of: "AT@1", with: "")
                         .trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -243,17 +258,29 @@ final class ELM327: ObservableObject {
 
                 case "0902":
                     if case .positive = result.response.type {
-                        ECUInfo.shared.ecuIdentifier = result.response.raw
+                        Logger.shared.info("🔎 0902 RAW: \(result.response.raw)")
+                        let parsedVIN = result.response.vin
+                        Logger.shared.info("🔎 0902 Parsed VIN: \(parsedVIN ?? "nil")")
+                        assignIfPresent(parsedVIN, description: "ECUInfo VIN") {
+                            ECUInfo.shared.vinIndentifier = $0
+                        }
                     }
 
                 case "0904":
                     if case .positive = result.response.type {
-                        ECUInfo.shared.calibrationIdentifier = result.response.raw
+                        Logger.shared.info("🔎 0904 RAW: \(result.response.raw)")
+                        let parsedCalibration = result.response.calibrationID
+                        Logger.shared.info("🔎 0904 Parsed Calibration: \(parsedCalibration ?? "nil")")
+                        assignIfPresent(parsedCalibration, description: "ECUInfo Calibration") {
+                            ECUInfo.shared.calibrationIdentifier = $0
+                        }
                     }
 
                 case "090A":
                     if case .positive = result.response.type {
-                        ECUInfo.shared.ecuName = result.response.raw
+                        assignIfPresent(result.response.ecuName, description: "ECU Name") {
+                            ECUInfo.shared.ecuName = $0
+                        }
                     }
 
                 default:
@@ -271,5 +298,13 @@ final class ELM327: ObservableObject {
 
             try? await Task.sleep(for: .milliseconds(300))
         }
+
+        Logger.shared.info("""
+        📘 ECU Identification Summary
+        VIN          : \(ECUInfo.shared.vinIndentifier)
+        Calibration  : \(ECUInfo.shared.calibrationIdentifier)
+        ECU Name     : \(ECUInfo.shared.ecuName)
+        Protocol     : \(ECUInfo.shared.protocolName)
+        """)
     }
 }

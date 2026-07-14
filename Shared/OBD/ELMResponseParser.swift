@@ -20,6 +20,7 @@ struct ELMResponse {
     }
     let pid: UInt16?
     let payload: [UInt8]
+    
 }
 
 
@@ -44,6 +45,8 @@ enum ELMResponseParser {
         "SEARCHING...",
         "SEARCHING",
     ]
+
+
 
     static func parse(_ text: String) -> ELMResponse {
 
@@ -201,19 +204,12 @@ enum ELMResponseParser {
             let requestService = responseService - 0x40
             service = requestService
 
+            let definition = ProtocolDefinition.kwp
+            let pidLength = definition.identifierLength(for: requestService)
+
             type = .positive(service: requestService)
             
-            let pidLength: Int
 
-            switch requestService {
-            case 0x22:
-                pidLength = 2
-            case 0x01, 0x21:
-                pidLength = 1
-            default:
-                pidLength = 0
-            }
-            
             if pidLength == 1 {
                 if tokens.indices.contains(index + 1) {
                     pid = UInt16(tokens[index + 1], radix: 16)
@@ -225,10 +221,40 @@ enum ELMResponseParser {
                     pid = (high << 8) | low
                 }
             }
-            payload = tokens
-                .dropFirst(index + 1 + pidLength)
-                .compactMap { UInt8($0, radix: 16) }
+
+            Logger.shared.info("""
+🔎 Parsed Response
+Service : \(String(format: "%02X", requestService))
+PID Len : \(pidLength)
+PID     : \(pid.map { String(format: "%04X", $0) } ?? "-")
+""")
+
             
+
+            let identifier = Array(
+                tokens
+                    .dropFirst(index + 1)
+                    .prefix(pidLength)
+                    .compactMap { UInt8($0, radix: 16) }
+            )
+
+            let frames = ProtocolFrameParser.parse(
+                tokens: tokens,
+                requestService: requestService,
+                definition: definition
+            )
+
+            Logger.shared.info("🔎 Parsed \(frames.count) response frame(s)")
+
+            payload = ProtocolFrameParser.assemblePayload(
+                from: frames,
+                identifier: identifier
+            )
+
+            Logger.shared.info(
+                "🔎 Parsed Payload: \(payload.map { String(format: "%02X", $0) }.joined(separator: " "))"
+            )
+
             Logger.shared.verbose(
                 "Parser → \(type) | Header=\(header ?? "-") | Service=\(service.map { String(format: "%02X", $0) } ?? "-") | PID=\(pid.map { String(format: "%04X", $0) } ?? "-")"
             )
@@ -287,57 +313,84 @@ extension ELMResponse {
 }
 extension ELMResponse {
 
+    @inline(__always)
+    private func printableASCIIBytes(
+        droppingLeadingBytes count: Int
+    ) -> [UInt8] {
+        var result: [UInt8] = []
+
+        for byte in payload.dropFirst(count) {
+            switch byte {
+            case 0x20...0x7E:
+                result.append(byte)
+            default:
+                continue
+            }
+        }
+
+        return result
+    }
+
+    @inline(__always)
     private func asciiPayload(
         droppingLeadingBytes count: Int = 0
     ) -> String? {
+        Logger.shared.info("""
+🔎 ASCII Payload
+Service : \(service.map { String(format: "%02X", $0) } ?? "-")
+PID     : \(pid.map { String(format: "%04X", $0) } ?? "-")
+Payload : \(payload.map { String(format: "%02X", $0) }.joined(separator: " "))
+""")
 
         guard payload.count > count else {
             return nil
         }
 
-        let bytes = payload
-            .dropFirst(count)
-            .filter { $0 >= 0x20 && $0 <= 0x7E }
+        let bytes = printableASCIIBytes(
+            droppingLeadingBytes: count
+        )
 
         guard !bytes.isEmpty else {
             return nil
         }
 
-        return String(bytes: bytes, encoding: .ascii)?
+        let decoded = String(bytes: bytes, encoding: .ascii)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        Logger.shared.info("🔎 ASCII Decoded: \(decoded ?? "nil")")
+
+        return decoded
     }
 
     var asciiString: String? {
         asciiPayload()
     }
 
-    var vin: String? {
-        guard service == 0x09,
-              pid == 0x02 else {
+    @inline(__always)
+    private func isMode09PID(_ expectedPID: UInt16) -> Bool {
+        service == 0x09 && pid == expectedPID
+    }
+
+    @inline(__always)
+    private func decodedMode09ASCII(expectedPID: UInt16) -> String? {
+        guard isMode09PID(expectedPID) else {
             return nil
         }
 
-        // Temporary decoder.
-        // Many ECUs prepend a frame index before the VIN characters.
+        // Some ECUs prepend a frame counter before the ASCII payload.
         return asciiPayload(droppingLeadingBytes: 1) ?? asciiPayload()
+    }
+
+    var vin: String? {
+        decodedMode09ASCII(expectedPID: 0x02)
     }
 
     var calibrationID: String? {
-        guard service == 0x09,
-              pid == 0x04 else {
-            return nil
-        }
-
-        return asciiPayload(droppingLeadingBytes: 1) ?? asciiPayload()
+        decodedMode09ASCII(expectedPID: 0x04)
     }
 
     var ecuName: String? {
-        guard service == 0x09,
-              pid == 0x0A else {
-            return nil
-        }
-
-        return asciiPayload(droppingLeadingBytes: 1) ?? asciiPayload()
+        decodedMode09ASCII(expectedPID: 0x0A)
     }
 }
 extension String {
