@@ -18,6 +18,7 @@ final class PIDScanStrategy: ScanStrategy {
     func start(
         mode: OBDMode,
         launcher: ScanLauncher,
+        brute: BruteForceScanner,
         context: ScanLauncher.ScanContext
     ) async {
 
@@ -31,7 +32,7 @@ final class PIDScanStrategy: ScanStrategy {
         )
 
         await launcher.startPIDScan(
-            mode: mode,
+            brute: brute,
             context: context
         )
     }

@@ -81,7 +81,6 @@ struct TerminalView: View {
         ScanLauncher.shared.start(
             bt: bt,
             brute: brute,
-            stats: stats,
             mode: selectedMode,
             startPID: startPID,
             endPID: endPID,

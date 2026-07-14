@@ -16,6 +16,7 @@ protocol ScanStrategy: AnyObject {
     func start(
         mode: OBDMode,
         launcher: ScanLauncher,
+        brute: BruteForceScanner,
         context: ScanLauncher.ScanContext
     ) async
 }

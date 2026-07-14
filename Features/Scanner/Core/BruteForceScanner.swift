@@ -44,13 +44,6 @@ struct ScanStatus {
     var isScanning = false
 }
 
-struct ScanConfiguration {
-    let mode: OBDMode
-    let pidWidth: Int
-    let startPID: Int
-    let endPID: Int
-    let header: String
-}
 
 @MainActor
 final class BruteForceScanner: ObservableObject {
@@ -102,7 +95,17 @@ final class BruteForceScanner: ObservableObject {
         persistence.hasResumePoint
     }
     
-    private func scanRuntimeRequests(
+    // MARK: - Runtime Request Engine Helpers
+    private func buildRuntimeRequestQueue(
+        mode: OBDMode
+    ) -> [String] {
+        BikeKnowledgeFilter.buildQueue(
+            for: mode,
+            profile: BikeProfileManager.shared.currentProfile
+        )
+    }
+
+    private func runRuntimeRequestEngine(
         mode: OBDMode,
         context: ScanLauncher.ScanContext
     ) async {
@@ -110,8 +113,6 @@ final class BruteForceScanner: ObservableObject {
             Logger.shared.warning("Scan already running")
             return
         }
-
-        beginScan()
 
         defer {
             if shouldStop {
@@ -122,31 +123,31 @@ final class BruteForceScanner: ObservableObject {
             }
         }
 
-        guard await ensureConnection(header: context.header, mode: mode) else {
-            return
-        }
+        enterScanningState()
 
-        do {
-            try await ELM327.shared.setHeader(context.header)
-        } catch {
-            Logger.shared.error("Failed to set header \(context.header): \(error)")
-            return
-        }
+        guard await ensureConnection(header: context.header, mode: mode) else { return }
+        guard await prepareTransport(header: context.header) else { return }
 
-        let requests = BikeKnowledgeFilter.buildQueue(
-            for: mode,
-            profile: BikeProfileManager.shared.currentProfile
-        )
-
+        let requests = buildRuntimeRequestQueue(mode: mode)
         stats.begin(totalRequests: requests.count)
 
-        var completed = 0
+        await runRuntimeRequestLoop(
+            requests: requests,
+            mode: mode,
+            context: context
+        )
+    }
 
+    private func runRuntimeRequestLoop(
+        requests: [String],
+        mode: OBDMode,
+        context: ScanLauncher.ScanContext
+    ) async {
+        var completed = 0
         for request in requests {
             if shouldStop { break }
 
             await scanSingleRequest(
-                mode: mode,
                 request: request,
                 context: context
             )
@@ -157,11 +158,10 @@ final class BruteForceScanner: ObservableObject {
     }
 
     private func scanSingleRequest(
-        mode: OBDMode,
         request: String,
         context: ScanLauncher.ScanContext
     ) async {
-        guard await ensureConnection(header: context.header, mode: mode) else {
+        guard await ensureConnection(header: context.header, mode: context.mode) else {
             return
         }
 
@@ -170,7 +170,7 @@ final class BruteForceScanner: ObservableObject {
         var consecutiveTimeouts = 0
 
         let requestContext = RequestContext(
-            mode: mode,
+            mode: context.mode,
             pid: 0,
             header: context.header,
             retryCount: 0,
@@ -208,7 +208,7 @@ final class BruteForceScanner: ObservableObject {
         case .connectionLost:
             guard await handleConnectionLoss(
                 header: context.header,
-                mode: mode,
+                mode: context.mode,
                 consecutiveTimeouts: &consecutiveTimeouts
             ) else {
                 finishScan(completed: false)
@@ -223,7 +223,7 @@ final class BruteForceScanner: ObservableObject {
         mode: OBDMode,
         context: ScanLauncher.ScanContext
     ) async {
-        await scanRuntimeRequests(
+        await runRuntimeRequestEngine(
             mode: mode,
             context: context
         )
@@ -233,25 +233,18 @@ final class BruteForceScanner: ObservableObject {
         mode: OBDMode,
         context: ScanLauncher.ScanContext
     ) async {
-        await scanRuntimeRequests(
+        await runRuntimeRequestEngine(
             mode: mode,
             context: context
         )
     }
     
     // MARK: - Scan Lifecycle
-    private func beginScan() {
-        shouldStop = false
-        statistics.reset()
-
+    private func enterScanningState() {
         // Runtime state only. Logger session management is intentionally handled outside
         // the scanner so PreScan and Scan remain separate sessions.
 
-        scanStatus.successCount =
-            persistence.hasResumePoint
-            ? session.results.count
-            : 0
-        
+        scanStatus.successCount = session.results.count
         scanStatus.isScanning = true
         scanStatus.progress = 0
         scanStatus.currentRequest = ""
@@ -286,13 +279,9 @@ final class BruteForceScanner: ObservableObject {
         shouldStop = false
     }
     
-    func startFresh() {
-
+    private func resetRuntimeState() {
         shouldStop = false
-        scanStatus.progress = 0
-        scanStatus.currentRequest = ""
-        scanStatus.isScanning = false
-        
+
         session.currentPID = 0
         session.header = ""
         session.mode = nil
@@ -302,33 +291,27 @@ final class BruteForceScanner: ObservableObject {
         session.searchStrategy.reset()
 
         session.results.removeAll()
+        session.seen.removeAll()
+
         partialFrames.removeAll()
         partialFrameCount = 0
-        
-        session.seen.removeAll()
-        results = session.results
-        scanStatus.successCount = 0
 
-        persistence.clearSavedResults()
-        Logger.shared.clear()
+        results.removeAll()
+
+        scanStatus = ScanStatus()
+
         statistics.reset()
         ScanStatistics.shared.reset()
+    }
+
+    func startFresh() {
+        resetRuntimeState()
+
+        persistence.clearSavedResults()
         persistence.clearResumePoint(session: session)
-        scanStatus.currentRequest = ""
     }
     
     // hasResumePoint is now a published property, no longer a computed property.
-    
-    private func clearResults() {
-        session.results.removeAll()
-        partialFrames.removeAll()
-        partialFrameCount = 0
-        session.seen.removeAll()
-        results = session.results
-        scanStatus.successCount = 0
-
-        persistence.clearSavedResults()
-    }
 
     private func ensureConnection(
         header: String,
@@ -397,9 +380,22 @@ final class BruteForceScanner: ObservableObject {
     }
 
     private func updateProgress(done: Int, total: Int) {
+        updateUIProgress(done: done, total: total)
+        updateExecutionStatistics(total: total)
+        checkpointResumeState()
+    }
+
+    // MARK: - Progress & Checkpointing
+
+    private func updateUIProgress(done: Int, total: Int) {
         scanStatus.progress = Double(done) / Double(total)
+    }
+
+    private func updateExecutionStatistics(total: Int) {
         stats.totalRequests = total
-        
+    }
+
+    private func checkpointResumeState() {
         persistence.saveResumePoint(
             session: session,
             statistics: statistics,
@@ -419,6 +415,76 @@ final class BruteForceScanner: ObservableObject {
     }
 
     // MARK: - Response Processing
+    // MARK: - Response Processing Helpers
+    private func recordResponseStatistics(
+        classification: SearchResult,
+        latency: Double
+    ) {
+        statistics.record(
+            result: classification,
+            latency: latency
+        )
+        switch classification {
+        case .positive:
+            stats.recordPositiveResponse()
+        case .negative:
+            stats.recordNegativeResponse()
+        case .noData:
+            stats.recordNoData()
+        case .partialFrame:
+            stats.recordPartialFrame()
+        case .adapter, .unknown:
+            stats.recordBusError()
+        case .timeout:
+            stats.recordTimeout()
+        }
+    }
+
+    private func handlePartialFrame(
+        response: ELMResponse,
+        classification: SearchResult,
+        latency: Double,
+        mode: OBDMode,
+        request: String,
+        pid: UInt16,
+        header: String
+    ) -> Bool {
+        if case .partialFrame = classification {
+            let pidString = formattedPID(pid, for: mode)
+            partialFrames.append(
+                PartialFrame(
+                    header: header,
+                    mode: mode.rawValue,
+                    pid: pid == 0 ? "" : pidString,
+                    request: request,
+                    rawResponse: response.raw
+                )
+            )
+            partialFrameCount = partialFrames.count
+            learnSearchEngine(
+                pid: pid,
+                classification: classification,
+                latency: latency
+            )
+            Logger.shared.warning("🟡 Partial frame detected: \(request) -> \(response.raw)")
+            return true
+        }
+        return false
+    }
+
+    private func learnSearchEngine(
+        pid: UInt16,
+        classification: SearchResult,
+        latency: Double
+    ) {
+        session.searchStrategy.registerResult(
+            pid: pid,
+            result: classification,
+            latency: latency
+        )
+    }
+
+
     // TODO: Move statistics updates into a dedicated ScanResultProcessor once learning and analytics are fully separated.
     private func processSuccessfulResponse(
         _ response: ELMResponse,
@@ -437,52 +503,21 @@ final class BruteForceScanner: ObservableObject {
         Request Header : \(header)
         Response Header: \(response.header ?? "nil")
         """)
-        // Move partial frame handling before handleSuccess
-        statistics.record(
-            result: classification,
+        recordResponseStatistics(
+            classification: classification,
             latency: latency
         )
-        switch classification {
-        case .positive:
-            stats.recordPositiveResponse()
 
-        case .negative:
-            stats.recordNegativeResponse()
-
-        case .noData:
-            stats.recordNoData()
-
-        case .partialFrame:
-            stats.recordPartialFrame()
-
-        case .adapter, .unknown:
-            stats.recordBusError()
-
-        case .timeout:
-            stats.recordTimeout()
-        }
-
-        if case .partialFrame = classification {
-            let pidString = formattedPID(pid, for: mode)
-
-            partialFrames.append(
-                PartialFrame(
-                    header: header,
-                    mode: mode.rawValue,
-                    pid: pid == 0 ? "" : pidString,
-                    request: request,
-                    rawResponse: response.raw
-                )
-            )
-            partialFrameCount = partialFrames.count
-
-            session.searchStrategy.registerResult(
-                pid: pid,
-                result: classification,
-                latency: latency
-            )
-
-            Logger.shared.warning("🟡 Partial frame detected: \(request) -> \(response.raw)")
+        if handlePartialFrame(
+            response: response,
+            classification: classification,
+            latency: latency,
+            mode: mode,
+            request: request,
+            pid: pid,
+            header: header
+        ) {
+            // Partial frame handled and search engine learned.
             return
         }
 
@@ -520,9 +555,9 @@ final class BruteForceScanner: ObservableObject {
         }
 
         // Feed the search engine regardless of persistence so adaptive strategies learn from every outcome.
-        session.searchStrategy.registerResult(
+        learnSearchEngine(
             pid: pid,
-            result: classification,
+            classification: classification,
             latency: latency
         )
     }
@@ -683,91 +718,82 @@ final class BruteForceScanner: ObservableObject {
         scanStatus.currentRequest = "Stopping..."
         stats.complete()
     }
-    
-    // MARK: - Search Strategy Preparation
-    private func prepareStrategy(startPID: Int, endPID: Int, resumePID: Int) {
+
+    // MARK: - Execution Preparation
+
+    /// Restores execution state (resume position, discovered results and seen cache)
+    /// before the PID engine starts.
+    private func prepareScanSession(
+        _ context: ScanLauncher.ScanContext
+    ) {
+        session.header = context.header
+        session.mode = context.mode
+        session.startPID = Int(context.startPID)
+        session.endPID = Int(context.endPID)
+
+        if let metadata = context.resumeMetadata {
+            session.currentPID = metadata.currentPID
+        } else {
+            session.currentPID = Int(context.startPID)
+        }
+
+        session.results = context.resumeResults
+        results = context.resumeResults
+        session.seen = Set(context.resumeResults.map(\.id))
+        scanStatus.successCount = context.resumeResults.count
+    }
+
+    /// Initializes execution statistics for either a fresh scan or a resumed scan.
+    private func prepareExecutionStatistics(
+        _ context: ScanLauncher.ScanContext
+    ) {
+        let totalRequests = Int(context.endPID) - Int(context.startPID) + 1
+        if context.resumeMetadata != nil {
+            stats.totalRequests = totalRequests
+            if stats.startedAt == nil {
+                stats.start()
+            }
+        } else {
+            stats.begin(totalRequests: totalRequests)
+        }
+    }
+
+    /// Creates and fast-forwards the search strategy so execution resumes at the
+    /// first PID that still needs to be scanned.
+    private func prepareSearchStrategy(
+        rangeStartPID: Int,
+        rangeEndPID: Int,
+        firstPIDToExecute: Int
+    ) {
         session.searchStrategy = SearchEngineFactory.make(
             type: searchEngine,
-            start: UInt16(startPID),
-            end: UInt16(endPID)
+            start: UInt16(rangeStartPID),
+            end: UInt16(rangeEndPID)
         )
-        session.currentPID = resumePID
+        session.currentPID = firstPIDToExecute
         Logger.shared.info("Search Engine = \(searchEngine)")
         Logger.shared.info(
             "Scanner using \(session.searchStrategy.engineType)"
         )
-        while let pid = session.searchStrategy.nextPID(), pid < UInt16(resumePID) {
+        while let pid = session.searchStrategy.nextPID(), pid < UInt16(firstPIDToExecute) {
             // Advance the strategy until it reaches the resume PID.
         }
     }
 
-    // MARK: - PID Scan Engine
-    
-    private func restoreScanState(
-        configuration: ScanConfiguration
-    ) {
-        persistence.loadResumePoint(
-            into: session,
-            scanStatistics: stats
-        )
-
-        if session.currentPID < configuration.startPID ||
-            session.currentPID > configuration.endPID {
-            session.currentPID = configuration.startPID
-        }
-        
-        // Resume should only validate against the persisted session selected by
-        // ScanLauncher. At this point configuration already contains the
-        // restored header/mode. Only restart if there is no valid resume point.
-        if !persistence.hasResumePoint {
-            session.currentPID = configuration.startPID
-            clearResults()
-        }
-
-        if session.currentPID == configuration.startPID {
-            clearResults()
-        } else {
-            session.results = persistence.loadResults()
-            results = session.results
-        }
-
-        // Rebuild the duplicate filter after loading persisted discoveries.
-        session.seen = Set(session.results.map(\.id))
-
-        scanStatus.successCount = session.results.count
-    }
-    
-    private func prepareStatistics(
-        configuration: ScanConfiguration
+    // MARK: - Execution Progress
+    private func calculateExecutionProgress(
+        context: ScanLauncher.ScanContext
     ) -> (total: Int, done: Int) {
-
-        let count =
-            configuration.endPID -
-            configuration.startPID + 1
-
-        let total = count
-
-        let done =
-            session.currentPID - configuration.startPID
-
-        if session.currentPID == configuration.startPID {
-            stats.begin(totalRequests: total)
-        } else {
-            stats.totalRequests = total
-            if stats.startedAt == nil {
-                stats.start()
-            }
-        }
-
+        let total = Int(context.endPID) - Int(context.startPID) + 1
+        let done = session.currentPID - Int(context.startPID)
         return (total, done)
     }
-    
 
-    // This method contains the complete PID brute-force execution pipeline.
-    // It is intentionally isolated so it can be moved into PIDScanEngine
-    // during the next refactoring step without changing behavior.
-    private func executePIDScan(
-        configuration: ScanConfiguration
+    // MARK: - PID Scan Engine
+    // Executes the complete brute-force scan pipeline after ScanLauncher has
+    // finished all launch preparation. This method owns execution only.
+    private func runPIDScanEngine(
+        context: ScanLauncher.ScanContext
     ) async {
         defer {
             if shouldStop {
@@ -778,66 +804,38 @@ final class BruteForceScanner: ObservableObject {
             }
         }
 
-        beginScan()
-        
-        restoreScanState(configuration: configuration)
-        
-        prepareStrategy(
-            startPID: configuration.startPID,
-            endPID: configuration.endPID,
-            resumePID: session.currentPID
-        )
+        // Enter execution state
+        enterScanningState()
 
-        do {
-            try await ELM327.shared.setHeader(configuration.header)
-        } catch {
-            Logger.shared.error("Failed to set header \(configuration.header): \(error)")
+        // Prepare execution context
+        prepareScanSession(context)
+        prepareExecutionStatistics(context)
+        prepareSearchStrategy(
+            rangeStartPID: Int(context.startPID),
+            rangeEndPID: Int(context.endPID),
+            firstPIDToExecute: session.currentPID
+        )
+        guard await prepareTransport(header: context.header) else {
             return
         }
 
-        var progress = prepareStatistics(configuration: configuration)
+        // Execute
+        var executionProgress = calculateExecutionProgress(context: context)
         var consecutiveTimeouts = 0
 
-        await scanHeader(
-            header: configuration.header,
-            configuration: configuration,
-            total: progress.total,
-            done: &progress.done,
+        await runPIDScanLoop(
+            context: context,
+            total: executionProgress.total,
+            done: &executionProgress.done,
             consecutiveTimeouts: &consecutiveTimeouts
         )
 
+        // Retry unresolved transport frames
         if !shouldStop && !partialFrames.isEmpty {
-            Logger.shared.info("Retrying partial frames...")
-
-            let retryResults = await PartialFrameRetryEngine().retryPendingFrames(
-                using: requestExecutor,
-                frames: partialFrames,
-                makeContext: { frame in
-                    RequestContext(
-                        mode: OBDMode(rawValue: frame.mode) ?? configuration.mode,
-                        pid: UInt16(frame.pid, radix: 16) ?? 0,
-                        header: frame.header,
-                        retryCount: frame.attempts,
-                        searchEngine: session.searchStrategy.engineType
-                    )
-                },
-                timeout: requestTimeout
+            await runPartialFrameRetryPass(
+                context: context,
+                consecutiveTimeouts: &consecutiveTimeouts
             )
-
-            Logger.shared.info(
-                "Partial retry pass completed. \(retryResults.count) frame(s) processed."
-            )
-
-            for retryResult in retryResults {
-                await processRetryResult(
-                    retryResult,
-                    consecutiveTimeouts: &consecutiveTimeouts
-                )
-            }
-
-            partialFrameCount = partialFrames.filter {
-                $0.resolution == .pending
-            }.count
         }
 
         if shouldStop {
@@ -845,12 +843,24 @@ final class BruteForceScanner: ObservableObject {
         }
     }
 
+    // MARK: - Transport Preparation
+    private func prepareTransport(
+        header: String
+    ) async -> Bool {
+        do {
+            try await ELM327.shared.setHeader(header)
+            return true
+        } catch {
+            Logger.shared.error("Failed to set header \(header): \(error)")
+            return false
+        }
+    }
+
     
     /////////////////////////////////////////////
-    // MARK: - PID Header Execution
-    private func scanHeader(
-        header: String,
-        configuration: ScanConfiguration,
+    // MARK: - PID Scan Loop
+    private func runPIDScanLoop(
+        context: ScanLauncher.ScanContext,
         total: Int,
         done: inout Int,
         consecutiveTimeouts: inout Int
@@ -861,26 +871,26 @@ final class BruteForceScanner: ObservableObject {
                 return
             }
 
-            let pid = formattedPID(nextPID, for: configuration.mode)
-            let req = makeRequest(mode: configuration.mode, pid: pid)
+            let pid = formattedPID(nextPID, for: context.mode)
+            let req = makeRequest(mode: context.mode, pid: pid)
             scanStatus.currentRequest = req
 
             if !BluetoothManager.shared.isConnected {
-                guard await ensureConnection(header: header, mode: configuration.mode) else {
+                guard await ensureConnection(header: context.header, mode: context.mode) else {
                     continue
                 }
             }
 
-            let context = RequestContext(
-                mode: configuration.mode,
+            let requestContext = RequestContext(
+                mode: context.mode,
                 pid: nextPID,
-                header: header,
+                header: context.header,
                 retryCount: 0,
                 searchEngine: session.searchStrategy.engineType
             )
             switch await requestExecutor.execute(
                 request: req,
-                context: context,
+                context: requestContext,
                 timeout: requestTimeout
             ) {
             case .success(let context, let response, let classification, let latency):
@@ -905,8 +915,8 @@ final class BruteForceScanner: ObservableObject {
                 }
             case .connectionLost:
                 guard await handleConnectionLoss(
-                    header: header,
-                    mode: configuration.mode,
+                    header: context.header,
+                    mode: context.mode,
                     consecutiveTimeouts: &consecutiveTimeouts
                 ) else {
                     continue
@@ -923,12 +933,46 @@ final class BruteForceScanner: ObservableObject {
         }
     }
 
+    private func runPartialFrameRetryPass(
+        context: ScanLauncher.ScanContext,
+        consecutiveTimeouts: inout Int
+    ) async {
+        Logger.shared.info("Retrying partial frames...")
+
+        let retryResults = await PartialFrameRetryEngine().retryPendingFrames(
+            using: requestExecutor,
+            frames: partialFrames,
+            makeContext: { frame in
+                RequestContext(
+                    mode: OBDMode(rawValue: frame.mode) ?? context.mode,
+                    pid: UInt16(frame.pid, radix: 16) ?? 0,
+                    header: frame.header,
+                    retryCount: frame.attempts,
+                    searchEngine: session.searchStrategy.engineType
+                )
+            },
+            timeout: requestTimeout
+        )
+
+        Logger.shared.info(
+            "Partial retry pass completed. \(retryResults.count) frame(s) processed."
+        )
+
+        for retryResult in retryResults {
+            await processRetryResult(
+                retryResult,
+                consecutiveTimeouts: &consecutiveTimeouts
+            )
+        }
+
+        partialFrameCount = partialFrames.filter {
+            $0.resolution == .pending
+        }.count
+    }
+
     // MARK: - Public Scan Entry Point
     func scan(
-        mode: OBDMode,
-        header: String,
-        startPID: UInt16? = nil,
-        endPID: UInt16? = nil
+        context: ScanLauncher.ScanContext
     ) async {
         guard !scanStatus.isScanning else {
             Logger.shared.warning("Scan already running")
@@ -936,32 +980,18 @@ final class BruteForceScanner: ObservableObject {
         }
         shouldStop = false
         session.searchStrategy.reset()
-        
-        let configuration = ScanConfiguration(
-            mode: mode,
-            pidWidth: mode.scanCapability.pidWidth,
-            startPID: startPID.map(Int.init) ?? mode.pidRange?.lowerBound ?? 0,
-            endPID: endPID.map(Int.init) ?? mode.pidRange?.upperBound ?? 0,
-            header: header
-        )
-        
-        // Persist session metadata for Resume Session.
-        session.header = configuration.header
-        session.mode = configuration.mode
-        session.startPID = configuration.startPID
-        session.endPID = configuration.endPID
-        
+
         // IMPORTANT:
         // This method must never create or promote logger sessions directly.
         // Session transitions are owned by ScanLauncher/LogSessionManager so that
         // PreScan logging is finalized before the dedicated scan log begins.
         Logger.shared.info("Search engine: \(searchEngine)")
         Logger.shared.info(
-            "Starting \(mode.rawValue) scan using header \(header)"
+            "Starting \(context.mode.rawValue) scan using header \(context.header)"
         )
 
-        await executePIDScan(
-            configuration: configuration
+        await runPIDScanEngine(
+            context: context
         )
     }
     

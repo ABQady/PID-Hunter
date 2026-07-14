@@ -10,23 +10,30 @@ import Foundation
 final class ScanLauncher {
 
     static let shared = ScanLauncher()
+    private typealias ResumeMetadata = ScanPersistence.ResumeMetadata
 
     private init() {}
     
     struct ScanContext {
-        let brute: BruteForceScanner
-        let stats: ScanStatistics
         let mode: OBDMode
         let header: String
-        let startPID: String
-        let endPID: String
+        let startPID: UInt16
+        let endPID: UInt16
+        let resumeMetadata: ScanPersistence.ResumeMetadata?
+        let resumeResults: [ScanResult]
+    }
+    
+    private struct PreparedScan {
+        let context: ScanContext
+        let loggingMetadata: LogSessionManager.Metadata
     }
     
     func startFixedCommandScan(
         mode: OBDMode,
+        brute: BruteForceScanner,
         context: ScanContext
     ) async {
-        await context.brute.scanFixedCommands(
+        await brute.scanFixedCommands(
             mode: mode,
             context: context
         )
@@ -34,46 +41,196 @@ final class ScanLauncher {
 
     func startInfoTypeScan(
         mode: OBDMode,
+        brute: BruteForceScanner,
         context: ScanContext
     ) async {
-        await context.brute.scanInfoType(
+        await brute.scanInfoType(
             mode: mode,
             context: context
         )
     }
     
+    /// Builds the immutable ScanContext from already-resolved launch state.
+    /// It must not read global runtime state or persistence.
     private func resolveScanContext(
         mode: OBDMode,
         header: String,
         startPID: String,
         endPID: String,
-        brute: BruteForceScanner,
-        stats: ScanStatistics
+        resumeMetadata: ResumeMetadata?,
+        resumeResults: [ScanResult]
     ) -> ScanContext {
-        let hasResume = ScanPersistence.shared.hasResumePoint
-        let metadata = hasResume ? ScanPersistence.shared.loadResumeMetadata() : nil
+        let effectiveHeader: String
+        if let resumeMetadata,
+           !resumeMetadata.header.isEmpty {
+            effectiveHeader = resumeMetadata.header
+        } else {
+            effectiveHeader = header
+        }
 
-        let effectiveHeader = hasResume && !(metadata?.header.isEmpty ?? true)
-            ? metadata!.header
-            : header
+        let effectiveMode = resumeMetadata?.mode ?? mode
 
-        let effectiveMode = metadata?.mode ?? mode
-
-        let effectiveStartPID = hasResume
-            ? String(format: "%04X", metadata!.startPID)
-            : startPID
-
-        let effectiveEndPID = hasResume
-            ? String(format: "%04X", metadata!.endPID)
-            : endPID
+        let effectiveStartPID: UInt16
+        let effectiveEndPID: UInt16
+        if let resumeMetadata = resumeMetadata {
+            guard let start = UInt16(exactly: resumeMetadata.startPID),
+                  let end = UInt16(exactly: resumeMetadata.endPID) else {
+                preconditionFailure("Resume metadata contains invalid PID range")
+            }
+            effectiveStartPID = start
+            effectiveEndPID = end
+        } else {
+            guard let start = UInt16(startPID, radix: 16),
+                  let end = UInt16(endPID, radix: 16) else {
+                preconditionFailure("Invalid PID range after launch validation")
+            }
+            effectiveStartPID = start
+            effectiveEndPID = end
+        }
 
         return ScanContext(
-            brute: brute,
-            stats: stats,
             mode: effectiveMode,
             header: effectiveHeader,
             startPID: effectiveStartPID,
-            endPID: effectiveEndPID
+            endPID: effectiveEndPID,
+            resumeMetadata: resumeMetadata,
+            resumeResults: resumeResults
+        )
+    }
+    
+    // MARK: - Launch Preparation
+    private func prepareFreshScan(brute: BruteForceScanner) {
+        Logger.shared.info("🧹 Preparing fresh scan session")
+
+        brute.startFresh()
+
+        ScanPersistence.shared.clearResumePoint(
+            session: brute.session
+        )    }
+    
+    // MARK: - Resume Resolution
+    private func resolveResumeState() -> (
+        hasResume: Bool,
+        metadata: ResumeMetadata?,
+        results: [ScanResult]
+    ) {
+        let hasResume = ScanPersistence.shared.hasResumePoint
+        let metadata = hasResume ? ScanPersistence.shared.loadResumeMetadata() : nil
+        let results = hasResume ? ScanPersistence.shared.loadResults() : []
+        return (
+            hasResume: hasResume,
+            metadata: metadata,
+            results: results
+        )
+    }
+
+    // MARK: - Launch Preparation
+    private func prepareScan(
+        mode: OBDMode,
+        startPID: String,
+        endPID: String,
+        cleanHeader: String,
+        brute: BruteForceScanner
+    ) -> PreparedScan? {
+        let headerValue = cleanHeader
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+
+        guard headerValue.count == 6,
+              headerValue.allSatisfy({ $0.isHexDigit }) else {
+            Logger.shared.error("Invalid header: \(headerValue)")
+            return nil
+        }
+
+        let startPIDNormalized = startPID
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+
+        let endPIDNormalized = endPID
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+
+        guard let startPIDValue = UInt16(startPIDNormalized, radix: 16),
+              let endPIDValue = UInt16(endPIDNormalized, radix: 16),
+              startPIDValue <= endPIDValue else {
+            Logger.shared.error("Invalid PID range")
+            return nil
+        }
+
+        // Read resume state exactly once using helper
+        let resume = resolveResumeState()
+
+        prepareLaunchState(
+            hasResume: resume.hasResume,
+            brute: brute
+        )
+
+        let context = resolveScanContext(
+            mode: mode,
+            header: headerValue,
+            startPID: startPIDNormalized,
+            endPID: endPIDNormalized,
+            resumeMetadata: resume.metadata,
+            resumeResults: resume.results
+        )
+
+        Logger.shared.info("Resume Results: \(resume.results.count)")
+
+        logLaunchContext(context, hasResume: resume.hasResume)
+
+        let loggingMetadata = buildLoggingMetadata(
+            context: context,
+            brute: brute
+        )
+
+        return PreparedScan(
+            context: context,
+            loggingMetadata: loggingMetadata
+        )
+    }
+
+    // MARK: - Launch State
+    private func prepareLaunchState(
+        hasResume: Bool,
+        brute: BruteForceScanner
+    ) {
+        if hasResume {
+            return
+        }
+
+        Logger.shared.clear()
+        prepareFreshScan(brute: brute)
+    }
+
+    // MARK: - Launch Logging
+    private func logLaunchContext(
+        _ context: ScanContext,
+        hasResume: Bool
+    ) {
+        Logger.shared.info("""
+🚀 Scan Context
+Resume    : \(hasResume)
+Mode      : \(context.mode.rawValue)
+Header    : \(context.header)
+Start PID : \(context.startPID)
+End PID   : \(context.endPID)
+""")
+    }
+
+    // MARK: - Logging Metadata
+    private func buildLoggingMetadata(
+        context: ScanContext,
+        brute: BruteForceScanner
+    ) -> LogSessionManager.Metadata {
+        return LogSessionManager.Metadata(
+            appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown",
+            mode: context.mode,
+            header: context.header,
+            searchEngine: brute.searchEngine,
+            requestDelay: brute.delayMs / 1000.0,
+            requestTimeout: UserDefaults.standard.double(forKey: "requestTimeout"),
+            autoPreflight: UserDefaults.standard.bool(forKey: "enableAutoPreflight"),
+            debugLogging: UserDefaults.standard.bool(forKey: "enableDebugLogging")
         )
     }
 
@@ -81,7 +238,6 @@ final class ScanLauncher {
     func start(
         bt: BluetoothManager,
         brute: BruteForceScanner,
-        stats: ScanStatistics,
         mode: OBDMode,
         startPID: String,
         endPID: String,
@@ -92,105 +248,50 @@ final class ScanLauncher {
             Logger.shared.info("Connect to ELM first")
             return
         }
-        if !ScanPersistence.shared.hasResumePoint {
-            Logger.shared.clear()
-        }
         
-        let headerValue = cleanHeader
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .uppercased()
-        
-        guard headerValue.count == 6,
-              headerValue.allSatisfy({ $0.isHexDigit }) else {
-            Logger.shared.error("Invalid header: \(headerValue)")
+        guard let prepared = prepareScan(
+            mode: mode,
+            startPID: startPID,
+            endPID: endPID,
+            cleanHeader: cleanHeader,
+            brute: brute
+        ) else {
             return
         }
         
-        let context = resolveScanContext(
-            mode: mode,
-            header: headerValue,
-            startPID: startPID,
-            endPID: endPID,
-            brute: brute,
-            stats: stats
-        )
-
-        let hasResume = ScanPersistence.shared.hasResumePoint
-
-        // Build logging metadata
-        let loggingMetadata = LogSessionManager.Metadata(
-            appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown",
-            mode: context.mode,
-            header: context.header,
-            searchEngine: brute.searchEngine,
-            requestDelay: brute.delayMs / 1000.0,
-            requestTimeout: UserDefaults.standard.double(forKey: "requestTimeout"),
-            autoPreflight: UserDefaults.standard.bool(forKey: "enableAutoPreflight"),
-            debugLogging: UserDefaults.standard.bool(forKey: "enableDebugLogging")
-        )
-
         onPrepareUI()
 
-        if !hasResume {
-            brute.startFresh()
-        }
-
         Task { @MainActor in
-            // MARK: - PreScan Session
             guard await prepareSession(
-                context: context,
-                loggingMetadata: loggingMetadata
+                context: prepared.context,
+                loggingMetadata: prepared.loggingMetadata
             ) else {
                 return
             }
-            do {
-                try await LogSessionManager.shared.startScanSession(
-                    mode: context.mode,
-                    header: context.header,
-                    searchEngine: brute.searchEngine,
-                    logger: Logger.shared
-                )
-                // From this point onward, every log entry belongs to the dedicated scan log.
-            } catch {
-                Logger.shared.error(
-                    "Failed to promote log session: \(error)"
-                )
+            guard await promoteScanLog(context: prepared.context, brute: brute) else {
                 return
             }
-
-            // Strategy creation intentionally happens after session promotion so that
-            // strategy initialization logs never leak into the PreScan log.
-            let strategy = ScanStrategyFactory.strategy(for: context.mode)
-            Logger.shared.info("Launching \(context.mode.rawValue) using \(type(of: strategy))")
-            await strategy.start(
-                mode: context.mode,
-                launcher: self,
-                context: context
-            )
-
-            // The scan log has finished. Start collecting post-scan activity.
-            do {
-                try await LogSessionManager.shared.closeCurrentLog(
-                    logger: Logger.shared
-                )
-
-                try await LogSessionManager.shared.startPreScanSession(
-                    logger: Logger.shared
-                )
-            } catch {
-                Logger.shared.error("Failed to restore PreScan session: \(error)")
-                assertionFailure("Failed to restore PreScan session")
-            }
+            await runStrategy(brute: brute, context: prepared.context)
+            await restorePreScanLog()
         }
     }
     
+    // MARK: - Scan Session Preparation
     @MainActor
     private func prepareSession(
         context: ScanContext,
         loggingMetadata: LogSessionManager.Metadata
     ) async -> Bool {
+        guard await prepareLoggingSession(loggingMetadata) else { return false }
+        guard await runPreflight(context) else { return false }
+        guard prepareBikeProfile() else { return false }
+        return true
+    }
 
-        // Begin logging session with metadata
+    // MARK: - Logging Preparation
+    private func prepareLoggingSession(
+        _ loggingMetadata: LogSessionManager.Metadata
+    ) async -> Bool {
         do {
             try await LogSessionManager.shared.startInitialPreScanSessionIfNeeded(
                 metadata: loggingMetadata,
@@ -200,85 +301,102 @@ final class ScanLauncher {
             Logger.shared.error("❌ Failed to start logging session: \(error)")
             return false
         }
+        return true
+    }
 
+    // MARK: - ECU Preparation
+    private func runPreflight(
+        _ context: ScanContext
+    ) async -> Bool {
         Logger.shared.info("Running preflight using header \(context.header)")
-
         let ok = await Preflight.shared.run(
             header: context.header,
             mode: context.mode
         )
-
         guard !Task.isCancelled else {
             return false
         }
-
         guard ok else {
             Logger.shared.error("❌ Preflight Failed")
             return false
         }
+        return true
+    }
 
+    // MARK: - Bike Profile Preparation
+    private func prepareBikeProfile() -> Bool {
         let fingerprint = ECUInfo.shared.fingerprint
-
         guard let profile = BikeProfileManager.shared.load(for: fingerprint) else {
             Logger.shared.error("❌ Failed to prepare Bike Profile")
             return false
         }
-
         Logger.shared.info("🆔 Fingerprint: \(fingerprint.id)")
         Logger.shared.info("📘 Bike Profile Ready")
         Logger.shared.info("Known Requests: \(profile.discoveries.count)")
-
         return true
     }
     
-    func startPIDScan(
-        mode: OBDMode,
+    // MARK: - Scan Log Lifecycle
+    private func promoteScanLog(
         context: ScanContext,
-    ) async {
-
-        switch mode.scanCapability {
-
-        case .pid8:
-            guard !Task.isCancelled else { return }
-            await context.brute.scan(
-                mode: mode,
-                header: context.header
-            )
-
-        case .pid16:
-            let startText = context.startPID
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .uppercased()
-
-            let endText = context.endPID
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .uppercased()
-
-            guard let start = UInt16(startText, radix: 16),
-                  let end = UInt16(endText, radix: 16) else {
-                Logger.shared.info("Invalid PID range")
-                return
-            }
-
-            guard start <= end else {
-                Logger.shared.info("Start PID must be <= End PID")
-                return
-            }
-
-            guard !Task.isCancelled else { return }
-            
-            await context.brute.scan(
-                mode: mode,
+        brute: BruteForceScanner
+    ) async -> Bool {
+        do {
+            try await LogSessionManager.shared.startScanSession(
+                mode: context.mode,
                 header: context.header,
-                startPID: start,
-                endPID: end
+                searchEngine: brute.searchEngine,
+                logger: Logger.shared
             )
-        case .fixedCommand:
-            assertionFailure("FixedCommandStrategy must call startFixedCommandScan().")
+            // From this point onward, every log entry belongs to the dedicated scan log.
+        } catch {
+            Logger.shared.error(
+                "Failed to promote log session: \(error)"
+            )
+            return false
+        }
+        return true
+    }
 
-        case .infoType:
-            assertionFailure("InfoTypeStrategy must call startInfoTypeScan().")
+    private func restorePreScanLog() async {
+        do {
+            try await LogSessionManager.shared.closeCurrentLog(
+                logger: Logger.shared
+            )
+
+            try await LogSessionManager.shared.startPreScanSession(
+                logger: Logger.shared
+            )
+        } catch {
+            Logger.shared.error("Failed to restore PreScan session: \(error)")
+            assertionFailure("Failed to restore PreScan session")
         }
     }
+
+    // MARK: - Strategy Execution
+    private func runStrategy(
+        brute: BruteForceScanner,
+        context: ScanContext
+    ) async {
+        let strategy = ScanStrategyFactory.strategy(for: context.mode)
+        Logger.shared.info("Launching \(context.mode.rawValue) using \(type(of: strategy))")
+        await strategy.start(
+            mode: context.mode,
+            launcher: self,
+            brute: brute,
+            context: context
+        )
+    }
+    
+    
+    // MARK: - Strategy Dispatch
+    func startPIDScan(
+        brute: BruteForceScanner,
+        context: ScanContext
+    ) async {
+        guard !Task.isCancelled else { return }
+        await brute.scan(context: context)
+    }
+    
     
 }
