@@ -33,7 +33,7 @@ final class HeaderDiscovery {
 
     ]
     
-    func discover(probe: String) async -> [HeaderDiscoveryResult] {
+    func discover() async -> [HeaderDiscoveryResult] {
 
         Logger.shared.info("Starting header discovery...")
 
@@ -41,43 +41,44 @@ final class HeaderDiscovery {
 
         for header in candidateHeaders {
             do {
-                await ELM327.shared.send("ATSH\(header)")
-
-                let result = try await ELM327.shared.request(
-                    command: probe,
-                    timeout: .seconds(3)
-                )
-
-                switch result.response.type {
-                case .positive, .negative:
-                    Logger.shared.info("Discovered header: \(header)")
-                    Logger.shared.info("Running mode discovery on \(header)...")
-                    let modes = await ModeDiscovery.shared.discover(on: header)
-                    let modeNames = modes.map { $0.title }.joined(separator: ", ")
-                    Logger.shared.info("Header \(header) supports: \(modeNames)")
-                    discoveries.append(
-                        HeaderDiscoveryResult(
-                            header: header,
-                            supportedModes: modes
-                        )
-                    )
-                default:
-                    break
-                }
-            } catch BluetoothManager.BluetoothError.timeout {
-                continue
+                try await ELM327.shared.setHeader(header)
             } catch {
-                Logger.shared.debug("Header discovery failed for \(header): \(error.localizedDescription)")
+                Logger.shared.error("❌ Failed to set header \(header): \(error.localizedDescription)")
+                continue
+            }
+
+            Logger.shared.info("Running mode discovery on \(header)...")
+
+            let modes = await ModeDiscovery.shared.discover(on: header)
+
+            if !modes.isEmpty {
+                let modeNames = modes.map { $0.title }.joined(separator: ", ")
+                Logger.shared.info("Discovered header: \(header)")
+                Logger.shared.info("Header \(header) supports: \(modeNames)")
+
+                discoveries.append(
+                    HeaderDiscoveryResult(
+                        header: header,
+                        supportedModes: modes
+                    )
+                )
             }
         }
         
-        if !discoveries.isEmpty {
-            await  BikeProfileManager.shared.updateHeaderDiscoveries(discoveries)
-        }
-        
-        Logger.shared.info(
-            "💾 Persisted \(discoveries.count) header discoveries."
+        let uniqueDiscoveries = Dictionary(
+            discoveries.map { ($0.header.uppercased(), $0) },
+            uniquingKeysWith: { _, newest in newest }
         )
+        .values
+        .sorted { $0.header < $1.header }
+
+        if !uniqueDiscoveries.isEmpty {
+            await BikeProfileManager.shared.updateHeaderDiscoveries(uniqueDiscoveries)
+
+            Logger.shared.info(
+                "💾 Persisted \(uniqueDiscoveries.count) header discoveries."
+            )
+        }
 
         Logger.shared.info(
             "Header discovery complete. Found \(discoveries.count) supported headers."

@@ -20,6 +20,7 @@ struct ActionBar: View {
     let onResume: () -> Void
     let onTestECU: () -> Void
     let onDiscoverModes: () -> Void
+    let onDiscoverHeaders: () -> Void
 
     @State private var showStartFreshConfirmation = false
 
@@ -127,6 +128,13 @@ struct ActionBar: View {
                     onDiscoverModes()
                 } label: {
                     Label("Discover Modes", systemImage: "dot.scope")
+                }
+                .buttonStyle(.bordered)
+
+                Button {
+                    onDiscoverHeaders()
+                } label: {
+                    Label("Discover Headers", systemImage: "point.3.connected.trianglepath.dotted")
                 }
                 .buttonStyle(.bordered)
             }

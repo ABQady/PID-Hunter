@@ -614,13 +614,16 @@ extension BluetoothManager:
             ECUInfo.shared.ecuIdentifier = vin
         }
 
-        if let calibration = response.calibrationID, !calibration.isEmpty {
+        if let calibration = response.calibrationID {
+            Logger.shared.info("📥 updateECUInfo Calibration = '\(calibration)'")
             ECUInfo.shared.calibrationIdentifier = calibration
         }
 
         if let ecuName = response.ecuName, !ecuName.isEmpty {
             ECUInfo.shared.ecuName = ecuName
         }
+        
+        
     }
 
     private func logResponse(_ raw: String) {

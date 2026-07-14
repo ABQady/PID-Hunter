@@ -42,6 +42,41 @@ final class ScanLauncher {
         )
     }
     
+    private func resolveScanContext(
+        mode: OBDMode,
+        header: String,
+        startPID: String,
+        endPID: String,
+        brute: BruteForceScanner,
+        stats: ScanStatistics
+    ) -> ScanContext {
+        let hasResume = ScanPersistence.shared.hasResumePoint
+        let metadata = hasResume ? ScanPersistence.shared.loadResumeMetadata() : nil
+
+        let effectiveHeader = hasResume && !(metadata?.header.isEmpty ?? true)
+            ? metadata!.header
+            : header
+
+        let effectiveMode = metadata?.mode ?? mode
+
+        let effectiveStartPID = hasResume
+            ? String(format: "%04X", metadata!.startPID)
+            : startPID
+
+        let effectiveEndPID = hasResume
+            ? String(format: "%04X", metadata!.endPID)
+            : endPID
+
+        return ScanContext(
+            brute: brute,
+            stats: stats,
+            mode: effectiveMode,
+            header: effectiveHeader,
+            startPID: effectiveStartPID,
+            endPID: effectiveEndPID
+        )
+    }
+
     // MARK: - Scan Launch
     func start(
         bt: BluetoothManager,
@@ -71,40 +106,22 @@ final class ScanLauncher {
             return
         }
         
-        let hasResume = ScanPersistence.shared.hasResumePoint
-
-        let metadata = hasResume
-            ? ScanPersistence.shared.loadResumeMetadata()
-            : nil
-
-        let effectiveHeader = hasResume && !(metadata?.header.isEmpty ?? true)
-            ? metadata!.header
-            : headerValue
-
-        let effectiveMode = metadata?.mode ?? mode
-
-        let effectiveStartPID = hasResume
-            ? String(format: "%04X", metadata!.startPID)
-            : startPID
-
-        let effectiveEndPID = hasResume
-            ? String(format: "%04X", metadata!.endPID)
-            : endPID
-        
-        let context = ScanContext(
+        let context = resolveScanContext(
+            mode: mode,
+            header: headerValue,
+            startPID: startPID,
+            endPID: endPID,
             brute: brute,
-            stats: stats,
-            mode: effectiveMode,
-            header: effectiveHeader,
-            startPID: effectiveStartPID,
-            endPID: effectiveEndPID
+            stats: stats
         )
+
+        let hasResume = ScanPersistence.shared.hasResumePoint
 
         // Build logging metadata
         let loggingMetadata = LogSessionManager.Metadata(
             appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown",
-            mode: effectiveMode,
-            header: effectiveHeader,
+            mode: context.mode,
+            header: context.header,
             searchEngine: brute.searchEngine,
             requestDelay: brute.delayMs / 1000.0,
             requestTimeout: UserDefaults.standard.double(forKey: "requestTimeout"),
@@ -121,15 +138,15 @@ final class ScanLauncher {
         Task { @MainActor in
             // MARK: - PreScan Session
             guard await prepareSession(
-                header: effectiveHeader,
+                context: context,
                 loggingMetadata: loggingMetadata
             ) else {
                 return
             }
             do {
                 try await LogSessionManager.shared.startScanSession(
-                    mode: effectiveMode,
-                    header: effectiveHeader,
+                    mode: context.mode,
+                    header: context.header,
                     searchEngine: brute.searchEngine,
                     logger: Logger.shared
                 )
@@ -143,10 +160,10 @@ final class ScanLauncher {
 
             // Strategy creation intentionally happens after session promotion so that
             // strategy initialization logs never leak into the PreScan log.
-            let strategy = ScanStrategyFactory.strategy(for: effectiveMode)
-            Logger.shared.info("Launching \(effectiveMode.rawValue) using \(type(of: strategy))")
+            let strategy = ScanStrategyFactory.strategy(for: context.mode)
+            Logger.shared.info("Launching \(context.mode.rawValue) using \(type(of: strategy))")
             await strategy.start(
-                mode: effectiveMode,
+                mode: context.mode,
                 launcher: self,
                 context: context
             )
@@ -161,14 +178,15 @@ final class ScanLauncher {
                     logger: Logger.shared
                 )
             } catch {
-                assertionFailure("Failed to transition back to a new PreScan session: \(error)")
+                Logger.shared.error("Failed to restore PreScan session: \(error)")
+                assertionFailure("Failed to restore PreScan session")
             }
         }
     }
     
     @MainActor
     private func prepareSession(
-        header: String,
+        context: ScanContext,
         loggingMetadata: LogSessionManager.Metadata
     ) async -> Bool {
 
@@ -183,9 +201,12 @@ final class ScanLauncher {
             return false
         }
 
-        Logger.shared.info("Running preflight using header \(header)")
+        Logger.shared.info("Running preflight using header \(context.header)")
 
-        let ok = await Preflight.shared.run(header: header)
+        let ok = await Preflight.shared.run(
+            header: context.header,
+            mode: context.mode
+        )
 
         guard !Task.isCancelled else {
             return false
@@ -219,7 +240,7 @@ final class ScanLauncher {
 
         case .pid8:
             guard !Task.isCancelled else { return }
-            context.brute.scan(
+            await context.brute.scan(
                 mode: mode,
                 header: context.header
             )
@@ -246,7 +267,7 @@ final class ScanLauncher {
 
             guard !Task.isCancelled else { return }
             
-            context.brute.scan(
+            await context.brute.scan(
                 mode: mode,
                 header: context.header,
                 startPID: start,

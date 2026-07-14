@@ -155,6 +155,11 @@ struct TerminalView: View {
                             Task {
                                 await ModeDiscovery.shared.discover()
                             }
+                        },
+                        onDiscoverHeaders: {
+                            Task {
+                                await HeaderDiscovery.shared.discover()
+                            }
                         }
                     )
                     

@@ -57,4 +57,14 @@ enum ProbeRequest: CaseIterable {
     var description: String {
         mode.title
     }
+    static func forMode(_ mode: OBDMode) -> ProbeRequest? {
+        allCases.first { $0.mode == mode }
+    }
+
+    var responseService: String {
+        guard let service = UInt8(mode.rawValue, radix: 16) else {
+            return ""
+        }
+        return String(format: "%02X", service + 0x40)
+    }
 }

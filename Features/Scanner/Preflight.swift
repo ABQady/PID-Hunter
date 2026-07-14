@@ -12,16 +12,12 @@ final class Preflight {
 
     static let shared = Preflight()
 
-    private static let positiveServices: Set<String> = [
-        "41", "61", "62"
-    ]
-
     private enum Timing {
-        static let headerSettle = Duration.milliseconds(100)
-        static let retryDelay = Duration.milliseconds(500)
-        static let headerTimeout = Duration.seconds(1)
-        static let ecuTimeout = Duration.seconds(2)
-        static let protocolTimeout = Duration.seconds(2)
+        static let headerSettle = Duration.milliseconds(750)
+        static let retryDelay = Duration.milliseconds(750)
+        static let headerTimeout = Duration.seconds(3)
+        static let ecuTimeout = Duration.seconds(3)
+        static let protocolTimeout = Duration.seconds(3)
     }
 
     private let maxECURetries = 2
@@ -42,7 +38,7 @@ final class Preflight {
             .uppercased()
     }
 
-    func run(header: String) async -> Bool {
+    func run(header: String, mode: OBDMode) async -> Bool {
 
         Logger.shared.info("========== PREFLIGHT ==========")
 
@@ -75,6 +71,11 @@ final class Preflight {
         guard normalizedHeader.count == 6,
               normalizedHeader.allSatisfy(\.isHexDigit) else {
             Logger.shared.error("❌ Invalid Header")
+            return false
+        }
+
+        guard let probe = ProbeRequest.forMode(mode) else {
+            Logger.shared.error("❌ No probe defined for selected mode")
             return false
         }
 
@@ -124,13 +125,13 @@ final class Preflight {
             do {
 
                 let result = try await BluetoothManager.shared.sendAndWait(
-                    "0100",
+                    probe.request,
                     timeout: Timing.ecuTimeout
                 )
 
                 let rx = result.response.raw.uppercased()
 
-                if Self.positiveServices.contains(where: rx.contains) {
+                if rx.contains(probe.responseService) {
 
                     if attempt > 1 {
                         Logger.shared.info("Recovered after retry")

@@ -122,7 +122,7 @@ final class BruteForceScanner: ObservableObject {
             }
         }
 
-        guard await ensureConnection(header: context.header) else {
+        guard await ensureConnection(header: context.header, mode: mode) else {
             return
         }
 
@@ -161,7 +161,7 @@ final class BruteForceScanner: ObservableObject {
         request: String,
         context: ScanLauncher.ScanContext
     ) async {
-        guard await ensureConnection(header: context.header) else {
+        guard await ensureConnection(header: context.header, mode: mode) else {
             return
         }
 
@@ -208,6 +208,7 @@ final class BruteForceScanner: ObservableObject {
         case .connectionLost:
             guard await handleConnectionLoss(
                 header: context.header,
+                mode: mode,
                 consecutiveTimeouts: &consecutiveTimeouts
             ) else {
                 finishScan(completed: false)
@@ -329,7 +330,10 @@ final class BruteForceScanner: ObservableObject {
         persistence.clearSavedResults()
     }
 
-    private func ensureConnection(header: String) async -> Bool {
+    private func ensureConnection(
+        header: String,
+        mode: OBDMode
+    ) async -> Bool {
         if BluetoothManager.shared.isConnected {
             return true
         }
@@ -338,10 +342,13 @@ final class BruteForceScanner: ObservableObject {
 
         await BluetoothManager.shared.reconnect()
         try? await Task.sleep(for: .milliseconds(500))
-        
+
         let ok: Bool
         if enableAutoPreflight {
-            ok = await Preflight.shared.run(header: header)
+            ok = await Preflight.shared.run(
+                header: header,
+                mode: mode
+            )
         } else {
             ok = BluetoothManager.shared.isConnected
         }
@@ -357,7 +364,7 @@ final class BruteForceScanner: ObservableObject {
             Logger.shared.error("Failed to restore header \(header): \(error)")
             return false
         }
-        
+
         return true
     }
 
@@ -374,10 +381,14 @@ final class BruteForceScanner: ObservableObject {
     }
 
     @discardableResult
-    private func handleConnectionLoss(header: String, consecutiveTimeouts: inout Int) async -> Bool {
+    private func handleConnectionLoss(
+        header: String,
+        mode: OBDMode,
+        consecutiveTimeouts: inout Int
+    ) async -> Bool {
         Logger.shared.error("Connection lost")
 
-        guard await ensureConnection(header: header) else {
+        guard await ensureConnection(header: header, mode: mode) else {
             return false
         }
         resetTimeoutCounter(&consecutiveTimeouts)
@@ -400,6 +411,13 @@ final class BruteForceScanner: ObservableObject {
         mode.rawValue + pid
     }
 
+    /// Formats a PID as an uppercase hex string with the correct width for the given mode.
+    @inline(__always)
+    private func formattedPID(_ pid: UInt16, for mode: OBDMode) -> String {
+        let width = mode.scanCapability.pidWidth
+        return String(format: "%0*X", width, pid)
+    }
+
     // MARK: - Response Processing
     // TODO: Move statistics updates into a dedicated ScanResultProcessor once learning and analytics are fully separated.
     private func processSuccessfulResponse(
@@ -417,11 +435,28 @@ final class BruteForceScanner: ObservableObject {
             result: classification,
             latency: latency
         )
+        switch classification {
+        case .positive:
+            stats.recordPositiveResponse()
+
+        case .negative:
+            stats.recordNegativeResponse()
+
+        case .noData:
+            stats.recordNoData()
+
+        case .partialFrame:
+            stats.recordPartialFrame()
+
+        case .adapter, .unknown:
+            stats.recordBusError()
+
+        case .timeout:
+            stats.recordTimeout()
+        }
 
         if case .partialFrame = classification {
-            let pidString = mode.scanCapability.pidWidth == 2
-                ? String(format: "%02X", pid)
-                : String(format: "%04X", pid)
+            let pidString = formattedPID(pid, for: mode)
 
             partialFrames.append(
                 PartialFrame(
@@ -450,6 +485,7 @@ final class BruteForceScanner: ObservableObject {
             latency: latency,
             mode: mode,
             request: request,
+            requestHeader: header,
             consecutiveTimeouts: &consecutiveTimeouts
         )
 
@@ -458,22 +494,12 @@ final class BruteForceScanner: ObservableObject {
             return
         }
 
-        // statistics.record(...) already called above, so remove below.
-
-        // Remove old partial frame handling block below.
-
-        guard processing.profileUpdated else {
-            Logger.shared.warning("Bike Profile update skipped")
-            return
-        }
-
         guard processing.shouldPersist else {
             return
         }
 
-        let pidString = mode.scanCapability.pidWidth == 2
-            ? String(format: "%02X", pid)
-            : String(format: "%04X", pid)
+        // Persist scanner discoveries into the scan session after the bike profile has already been updated.
+        let pidString = formattedPID(pid, for: mode)
 
         if appendResponse(
             header: header,
@@ -486,6 +512,7 @@ final class BruteForceScanner: ObservableObject {
             // statistics.recordDiscovery() // No longer tracked
         }
 
+        // Feed the search engine regardless of persistence so adaptive strategies learn from every outcome.
         session.searchStrategy.registerResult(
             pid: pid,
             result: classification,
@@ -513,6 +540,7 @@ final class BruteForceScanner: ObservableObject {
             result: SearchResult.timeout,
             latency: requestTimeout
         )
+        stats.recordTimeout()
 
         if outcome.shouldAbortScan {
             Logger.shared.error(
@@ -572,6 +600,7 @@ final class BruteForceScanner: ObservableObject {
                     classification: classification,
                     latency: latency,
                     mode: mode,
+                    requestHeader: frame.header,
                     request: frame.request,
                     consecutiveTimeouts: &consecutiveTimeouts
                 )
@@ -616,6 +645,7 @@ final class BruteForceScanner: ObservableObject {
                     classification: classification,
                     latency: latency,
                     mode: mode,
+                    requestHeader: frame.header,
                     request: frame.request,
                     consecutiveTimeouts: &consecutiveTimeouts
                 )
@@ -824,12 +854,12 @@ final class BruteForceScanner: ObservableObject {
                 return
             }
 
-            let pid = String(format: "%0*X", configuration.pidWidth, Int(nextPID))
+            let pid = formattedPID(nextPID, for: configuration.mode)
             let req = makeRequest(mode: configuration.mode, pid: pid)
             scanStatus.currentRequest = req
 
             if !BluetoothManager.shared.isConnected {
-                guard await ensureConnection(header: header) else {
+                guard await ensureConnection(header: header, mode: configuration.mode) else {
                     continue
                 }
             }
@@ -867,7 +897,11 @@ final class BruteForceScanner: ObservableObject {
                     return
                 }
             case .connectionLost:
-                guard await handleConnectionLoss(header: header, consecutiveTimeouts: &consecutiveTimeouts) else {
+                guard await handleConnectionLoss(
+                    header: header,
+                    mode: configuration.mode,
+                    consecutiveTimeouts: &consecutiveTimeouts
+                ) else {
                     continue
                 }
                 continue
@@ -947,18 +981,13 @@ final class BruteForceScanner: ObservableObject {
             request: request,
             response: response.raw
         )
-        let key = result.id
+        let resultID = result.id
 
-        guard !session.seen.contains(key) else {
+        guard session.seen.insert(resultID).inserted else {
             return false
         }
 
-        session.seen.insert(key)
         session.results.append(result)
-        //        session.results.sort {
-        //            ($0.header, $0.mode, $0.request) <
-        //            ($1.header, $1.mode, $1.request)
-        //        }
         results = session.results
 
         scanStatus.successCount = session.results.count
