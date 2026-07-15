@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import UIKit
 
 @MainActor
 final class StorageOperations: ObservableObject {
@@ -86,6 +87,51 @@ final class StorageOperations: ObservableObject {
             at: url,
             to: destination
         )
+    }
+
+    // MARK: - Share
+
+    func shareableURL(for url: URL) -> URL {
+
+        var isDirectory: ObjCBool = false
+
+        guard fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory),
+              isDirectory.boolValue
+        else {
+            return url
+        }
+
+        let coordinator = NSFileCoordinator()
+        var coordinationError: NSError?
+        var result = url
+
+        coordinator.coordinate(
+            readingItemAt: url,
+            options: .forUploading,
+            error: &coordinationError
+        ) { zippedURL in
+            do {
+                let destination = fileManager.temporaryDirectory
+                    .appendingPathComponent(url.deletingPathExtension().lastPathComponent)
+                    .appendingPathExtension("zip")
+
+                if fileManager.fileExists(atPath: destination.path) {
+                    try fileManager.removeItem(at: destination)
+                }
+
+                try fileManager.copyItem(at: zippedURL, to: destination)
+                result = destination
+
+            } catch {
+                Logger.shared.error("Failed to create ZIP for sharing: \(error.localizedDescription)")
+            }
+        }
+
+        if let coordinationError {
+            Logger.shared.error("ZIP coordination failed: \(coordinationError.localizedDescription)")
+        }
+
+        return result
     }
 
     // MARK: - Helpers

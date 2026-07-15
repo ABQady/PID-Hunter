@@ -305,7 +305,7 @@ enum SortDirection: String {
             }
         }
         .sheet(item: $shareItem) { item in
-            ShareSheet(activityItems: [item.url])
+            ShareSheet(activityItems: shareURLs(for: item))
         }
         .alert(
             "Delete Item",
@@ -533,8 +533,29 @@ enum SortDirection: String {
     }
 
     private func share(_ item: StorageItem) {
-        selection = [item.id]
+        if !selection.contains(item.id) {
+            selection = [item.id]
+        }
         shareItem = item
+    }
+
+    private func shareURLs(for item: StorageItem) -> [URL] {
+        // Build the list of items to share: selected items if multiple, otherwise just the single item.
+        let itemsToShare: [StorageItem]
+        if selection.count <= 1 {
+            itemsToShare = [item]
+        } else {
+            itemsToShare = storage.items.filter { selection.contains($0.id) }
+        }
+        return itemsToShare.map { shareURL(for: $0) }
+    }
+
+    // Helper to create a shareable URL for a single item.
+    private func shareURL(for item: StorageItem) -> URL {
+        // Reuse the same Apple-provided ZIP mechanism used previously in AppStorageView.
+        // This likely uses FileWrapper to wrap folders into a ZIP archive for sharing.
+        // We'll delegate to StorageOperations.shared.shareableURL(for:) as done in AppStorageView.
+        return StorageOperations.shared.shareableURL(for: item.url)
     }
 
     private func rename(_ item: StorageItem) {
@@ -628,8 +649,10 @@ private extension View {
                 }
                 .swipeActions(edge: .leading, allowsFullSwipe: false) {
                     Button {
-                        shareItem.wrappedValue = item
-                        selection.wrappedValue = [item.id]
+                        if !selection.wrappedValue.contains(item.id) {
+                                selection.wrappedValue = [item.id]
+                            }
+                            shareItem.wrappedValue = item
                     } label: {
                         Label("Share", systemImage: "square.and.arrow.up")
                     }
