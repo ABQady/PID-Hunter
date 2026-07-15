@@ -11,6 +11,7 @@ import UIKit
 
 struct SettingsView: View {
     @State private var showAppStorage = false
+    @State private var initialStorageLocation: AppStorageViewer.InitialLocation?
     
     @Environment(BikeProfileManager.self)
     private var manager
@@ -90,6 +91,57 @@ struct SettingsView: View {
     #if os(iOS)
     @State private var exportedFile: ExportedFile?
     #endif
+
+    // MARK: - Storage
+
+    private struct StorageUsage {
+        let applicationSupport: Int64
+        let documents: Int64
+        let caches: Int64
+
+        var total: Int64 {
+            applicationSupport + documents + caches
+        }
+    }
+
+    private var storageUsage: StorageUsage {
+        let fm = FileManager.default
+
+        func folderSize(_ directory: FileManager.SearchPathDirectory) -> Int64 {
+            guard let url = try? fm.url(
+                for: directory,
+                in: .userDomainMask,
+                appropriateFor: nil,
+                create: true
+            ) else {
+                return 0
+            }
+
+            var total: Int64 = 0
+
+            if let enumerator = fm.enumerator(
+                at: url,
+                includingPropertiesForKeys: [.fileSizeKey],
+                options: [.skipsHiddenFiles]
+            ) {
+                for case let fileURL as URL in enumerator {
+                    if let values = try? fileURL.resourceValues(forKeys: [.fileSizeKey]),
+                       let size = values.fileSize {
+                        total += Int64(size)
+                    }
+                }
+            }
+
+            return total
+        }
+
+        return StorageUsage(
+            applicationSupport: folderSize(.applicationSupportDirectory),
+            documents: folderSize(.documentDirectory),
+            caches: folderSize(.cachesDirectory)
+        )
+    }
+
 
     // MARK: - Export
 
@@ -356,6 +408,25 @@ struct SettingsView: View {
                 )
                 
                 
+                StorageUsageCard(
+                    storage: .init(
+                        profiles: storageUsage.applicationSupport,
+                        logs: storageUsage.documents,
+                        cache: storageUsage.caches
+                    ),
+                    openLocation: { location in
+                        switch location {
+                        case .profiles:
+                            initialStorageLocation = .applicationSupport
+                        case .logs:
+                            initialStorageLocation = .documents
+                        case .cache:
+                            initialStorageLocation = .caches
+                        }
+                        showAppStorage = true
+                    }
+                )
+
                 /////////////////////////// MARK: Export
                 VStack(alignment: .leading) {
                     HStack(alignment: .center) {
@@ -388,6 +459,7 @@ struct SettingsView: View {
                         }
                         Spacer()
                         Button {
+                            initialStorageLocation = nil
                             showAppStorage = true
                         } label: {
                             VStack(spacing: 4) {
@@ -412,7 +484,7 @@ struct SettingsView: View {
                     RoundedRectangle(cornerRadius: 18)
                 )
                 .sheet(isPresented: $showAppStorage) {
-                    AppStorageViewer()
+                    AppStorageViewer(initialLocation: initialStorageLocation)
                 }
                 .onChange(of: modeDiscovery.supportedModes) { _, modes in
                     guard !forceModeSelection else { return }
@@ -449,19 +521,3 @@ struct SettingsView: View {
     }
 }
 
-@ViewBuilder
-private func statistic(
-    title: String,
-    value: String
-) -> some View {
-
-    VStack(alignment: .leading, spacing: 2) {
-
-        Text(title)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-
-        Text(value)
-            .font(.headline)
-    }
-}

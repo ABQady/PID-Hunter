@@ -37,6 +37,18 @@ struct AppStorageViewer: View {
 
     @Environment(\.dismiss) private var dismiss
 
+    enum InitialLocation {
+        case documents
+        case applicationSupport
+        case caches
+    }
+
+    let initialLocation: InitialLocation?
+
+    init(initialLocation: InitialLocation? = nil) {
+        self.initialLocation = initialLocation
+    }
+
     @State private var nodes: [StorageNode] = []
     @State private var selectedFile: StorageFile?
     @State private var textDocument: TextDocument?
@@ -111,10 +123,14 @@ struct AppStorageViewer: View {
     private func reload() {
         let fm = FileManager.default
         var newNodes: [StorageNode] = []
+        var documentsURL: URL?
+        var supportURL: URL?
+        var cachesURL: URL?
         if let documents = fm.urls(
             for: .documentDirectory,
             in: .userDomainMask
         ).first {
+            documentsURL = documents
             newNodes.append(
                 makeTree(
                     url: documents,
@@ -126,6 +142,7 @@ struct AppStorageViewer: View {
             for: .applicationSupportDirectory,
             in: .userDomainMask
         ).first {
+            supportURL = support
             newNodes.append(
                 makeTree(
                     url: support,
@@ -133,7 +150,35 @@ struct AppStorageViewer: View {
                 )
             )
         }
+        if let caches = fm.urls(
+            for: .cachesDirectory,
+            in: .userDomainMask
+        ).first {
+            cachesURL = caches
+            newNodes.append(
+                makeTree(
+                    url: caches,
+                    displayName: "Caches"
+                )
+            )
+        }
         nodes = newNodes
+        guard let initialLocation else { return }
+
+        switch initialLocation {
+        case .documents:
+            if let documentsURL {
+                expandedFolders.insert(documentsURL)
+            }
+        case .applicationSupport:
+            if let supportURL {
+                expandedFolders.insert(supportURL)
+            }
+        case .caches:
+            if let cachesURL {
+                expandedFolders.insert(cachesURL)
+            }
+        }
         // Do not clear expandedFolders; preserve expansion state.
     }
     private func preview(_ file: StorageFile) {
@@ -446,3 +491,4 @@ private struct StorageNodeRow: View {
         }
     }
 }
+
