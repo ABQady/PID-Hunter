@@ -23,6 +23,32 @@ final class LogSessionManager {
     
     private init() {}
 
+    // MARK: - Settings
+    private enum Settings {
+        private static let defaults = UserDefaults.standard
+
+        static var requestTimeout: TimeInterval {
+            guard defaults.object(forKey: "requestTimeout") != nil else {
+                return 2.0
+            }
+            return defaults.double(forKey: "requestTimeout")
+        }
+
+        static var autoPreflight: Bool {
+            guard defaults.object(forKey: "enableAutoPreflight") != nil else {
+                return true
+            }
+            return defaults.bool(forKey: "enableAutoPreflight")
+        }
+
+        static var debugLogging: Bool {
+            guard defaults.object(forKey: "enableDebugLogging") != nil else {
+                return false
+            }
+            return defaults.bool(forKey: "enableDebugLogging")
+        }
+    }
+
     // MARK: - Log File Helpers
     private func createNextPreScanLogLocked() throws {
 
@@ -48,7 +74,6 @@ final class LogSessionManager {
 
     // MARK: - PreScan Session Lifecycle
     func startInitialPreScanSessionIfNeeded(
-        metadata: Metadata,
         logger: Logger
     ) async throws {
 
@@ -95,9 +120,20 @@ final class LogSessionManager {
             throw CocoaError(.fileNoSuchFile)
         }
 
-        currentMetadata = metadata
+        currentMetadata = Metadata(
+            appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown",
+            mode: nil,
+            header: nil,
+            searchEngine: nil,
+            requestDelay: nil,
+            requestTimeout: Settings.requestTimeout,
+            autoPreflight: Settings.autoPreflight,
+            debugLogging: Settings.debugLogging
+        )
         try await logger.startSessionImpl(fileURL: preScanLogURL)
-        await writeMetadataHeader(metadata, logger: logger)
+        if let metadata = currentMetadata {
+            await writeMetadataHeader(metadata, logger: logger)
+        }
     }
 
     func createNextPreScanLog() throws {
@@ -118,6 +154,28 @@ final class LogSessionManager {
         let requestTimeout: TimeInterval?
         let autoPreflight: Bool?
         let debugLogging: Bool?
+    }
+
+    private func updatedMetadata(
+        mode: OBDMode? = nil,
+        header: String? = nil,
+        searchEngine: SearchEngineType? = nil,
+        requestDelay: TimeInterval? = nil
+    ) -> Metadata? {
+        guard let current = currentMetadata else {
+            return nil
+        }
+
+        return Metadata(
+            appVersion: current.appVersion,
+            mode: mode,
+            header: header,
+            searchEngine: searchEngine,
+            requestDelay: requestDelay ?? current.requestDelay,
+            requestTimeout: current.requestTimeout,
+            autoPreflight: current.autoPreflight,
+            debugLogging: current.debugLogging
+        )
     }
 
     struct Summary {
@@ -160,19 +218,15 @@ final class LogSessionManager {
         mode: OBDMode,
         header: String,
         searchEngine: SearchEngineType,
+        requestDelay: TimeInterval,
         logger: Logger
     ) async throws {
 
-        // Update currentMetadata with scan metadata
-        currentMetadata = Metadata(
-            appVersion: currentMetadata?.appVersion ?? "Unknown",
+        currentMetadata = updatedMetadata(
             mode: mode,
             header: header,
             searchEngine: searchEngine,
-            requestDelay: currentMetadata?.requestDelay,
-            requestTimeout: currentMetadata?.requestTimeout,
-            autoPreflight: currentMetadata?.autoPreflight,
-            debugLogging: currentMetadata?.debugLogging
+            requestDelay: requestDelay
         )
 
 
@@ -210,16 +264,7 @@ final class LogSessionManager {
     // Called immediately after a scan log has been closed to begin collecting
     // post-scan activity until the next Scan/Resume command.
     func startPreScanSession(logger: Logger) async throws {
-        currentMetadata = Metadata(
-            appVersion: currentMetadata?.appVersion ?? "Unknown",
-            mode: nil,
-            header: nil,
-            searchEngine: nil,
-            requestDelay: currentMetadata?.requestDelay,
-            requestTimeout: currentMetadata?.requestTimeout,
-            autoPreflight: currentMetadata?.autoPreflight,
-            debugLogging: currentMetadata?.debugLogging
-        )
+        currentMetadata = updatedMetadata()
 
         try createNextPreScanLogLocked()
 

@@ -23,11 +23,6 @@ final class ScanLauncher {
         let resumeResults: [ScanResult]
     }
     
-    private struct PreparedScan {
-        let context: ScanContext
-        let loggingMetadata: LogSessionManager.Metadata
-    }
-    
     func startFixedCommandScan(
         mode: OBDMode,
         brute: BruteForceScanner,
@@ -98,6 +93,17 @@ final class ScanLauncher {
         )
     }
     
+    // MARK: - Settings
+    private func isAutoPreflightEnabled() -> Bool {
+        let defaults = UserDefaults.standard
+
+        guard defaults.object(forKey: "enableAutoPreflight") != nil else {
+            return true
+        }
+
+        return defaults.bool(forKey: "enableAutoPreflight")
+    }
+
     // MARK: - Launch Preparation
     private func prepareFreshScan(brute: BruteForceScanner) {
         Logger.shared.info("🧹 Preparing fresh scan session")
@@ -131,7 +137,7 @@ final class ScanLauncher {
         endPID: String,
         cleanHeader: String,
         brute: BruteForceScanner
-    ) -> PreparedScan? {
+    ) -> ScanContext? {
         let headerValue = cleanHeader
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .uppercased()
@@ -178,15 +184,7 @@ final class ScanLauncher {
 
         logLaunchContext(context, hasResume: resume.hasResume)
 
-        let loggingMetadata = buildLoggingMetadata(
-            context: context,
-            brute: brute
-        )
-
-        return PreparedScan(
-            context: context,
-            loggingMetadata: loggingMetadata
-        )
+        return context
     }
 
     // MARK: - Launch State
@@ -217,23 +215,6 @@ End PID   : \(context.endPID)
 """)
     }
 
-    // MARK: - Logging Metadata
-    private func buildLoggingMetadata(
-        context: ScanContext,
-        brute: BruteForceScanner
-    ) -> LogSessionManager.Metadata {
-        return LogSessionManager.Metadata(
-            appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown",
-            mode: context.mode,
-            header: context.header,
-            searchEngine: brute.searchEngine,
-            requestDelay: brute.delayMs / 1000.0,
-            requestTimeout: UserDefaults.standard.double(forKey: "requestTimeout"),
-            autoPreflight: UserDefaults.standard.bool(forKey: "enableAutoPreflight"),
-            debugLogging: UserDefaults.standard.bool(forKey: "enableDebugLogging")
-        )
-    }
-
     // MARK: - Scan Launch
     func start(
         bt: BluetoothManager,
@@ -249,7 +230,7 @@ End PID   : \(context.endPID)
             return
         }
         
-        guard let prepared = prepareScan(
+        guard let context = prepareScan(
             mode: mode,
             startPID: startPID,
             endPID: endPID,
@@ -263,15 +244,15 @@ End PID   : \(context.endPID)
 
         Task { @MainActor in
             guard await prepareSession(
-                context: prepared.context,
-                loggingMetadata: prepared.loggingMetadata
+                context: context,
+                brute: brute
             ) else {
                 return
             }
-            guard await promoteScanLog(context: prepared.context, brute: brute) else {
+            guard await promoteScanLog(context: context, brute: brute) else {
                 return
             }
-            await runStrategy(brute: brute, context: prepared.context)
+            await runStrategy(brute: brute, context: context)
             await restorePreScanLog()
         }
     }
@@ -280,9 +261,9 @@ End PID   : \(context.endPID)
     @MainActor
     private func prepareSession(
         context: ScanContext,
-        loggingMetadata: LogSessionManager.Metadata
+        brute: BruteForceScanner
     ) async -> Bool {
-        guard await prepareLoggingSession(loggingMetadata) else { return false }
+        guard await prepareLoggingSession(context: context, brute: brute) else { return false }
         guard await runPreflight(context) else { return false }
         guard prepareBikeProfile() else { return false }
         return true
@@ -290,11 +271,11 @@ End PID   : \(context.endPID)
 
     // MARK: - Logging Preparation
     private func prepareLoggingSession(
-        _ loggingMetadata: LogSessionManager.Metadata
+        context: ScanContext,
+        brute: BruteForceScanner
     ) async -> Bool {
         do {
             try await LogSessionManager.shared.startInitialPreScanSessionIfNeeded(
-                metadata: loggingMetadata,
                 logger: Logger.shared
             )
         } catch {
@@ -308,6 +289,10 @@ End PID   : \(context.endPID)
     private func runPreflight(
         _ context: ScanContext
     ) async -> Bool {
+        guard isAutoPreflightEnabled() else {
+            Logger.shared.info("⏭️ Auto Preflight Disabled")
+            return true
+        }
         Logger.shared.info("Running preflight using header \(context.header)")
         let ok = await Preflight.shared.run(
             header: context.header,
@@ -346,6 +331,7 @@ End PID   : \(context.endPID)
                 mode: context.mode,
                 header: context.header,
                 searchEngine: brute.searchEngine,
+                requestDelay: brute.delayMs / 1000.0,
                 logger: Logger.shared
             )
             // From this point onward, every log entry belongs to the dedicated scan log.

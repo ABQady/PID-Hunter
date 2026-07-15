@@ -109,7 +109,6 @@ final class BluetoothManager: NSObject, ObservableObject {
 
                 do {
                     try await LogSessionManager.shared.startInitialPreScanSessionIfNeeded(
-                        metadata: metadata,
                         logger: Logger.shared
                     )
                 } catch {

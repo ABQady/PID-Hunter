@@ -29,6 +29,9 @@ struct BikeView: View {
         }
         .navigationTitle("Bike")
         .navigationBarTitleDisplayMode(.large)
+        // ⚠️ Never reload BikeProfile while a scan is running.
+        // This once caused one of the nastiest data consistency bugs
+        // in the entire project.
 //        .onAppear {
 //            manager.reloadProfiles()
 //        }
