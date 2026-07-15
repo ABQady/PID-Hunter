@@ -15,6 +15,7 @@ struct BikeLearningCard: View {
     @State
     private var selectedClassification: DiscoveryClassification?
 
+
     @State
     private var isShowingPartialResponsesSheet = false
 
@@ -40,48 +41,41 @@ struct BikeLearningCard: View {
                        !profile.headerDiscoveries.isEmpty {
 
                         DisclosureGroup {
-                            VStack(alignment: .leading, spacing: 10) {
+                            VStack(alignment: .leading, spacing: 2) {
                                 ForEach(profile.headerDiscoveries, id: \.header) { discovery in
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        HStack {
-                                            Text(discovery.header)
-                                                .font(.headline.monospaced())
-
-                                            Spacer()
-
-                                            Text("\(discovery.supportedModes.count) modes")
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                        }
-
+                                    DisclosureGroup {
                                         LazyVGrid(
-                                            columns: [GridItem(.adaptive(minimum: 70), spacing: 8)],
+                                            columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4),
                                             alignment: .leading,
-                                            spacing: 8
+                                            spacing: 12
                                         ) {
-                                            ForEach(discovery.supportedModes, id: \.rawValue) { mode in
-                                                Label(mode.title, systemImage: "checkmark.circle.fill")
-                                                    .font(.caption.weight(.medium))
-                                                    .foregroundStyle(.green)
-                                                    .padding(.horizontal, 8)
-                                                    .padding(.vertical, 4)
-                                                    .background(.green.opacity(0.12))
-                                                    .clipShape(Capsule())
+                                            ForEach(OBDMode.allCases, id: \.rawValue) { mode in
+                                                let isSupported = discovery.supportedModes.contains(mode)
+                                                ModeBadgeView(mode: mode, isSupported: isSupported)
                                             }
                                         }
+                                    } label: {
+                                        HStack {
+                                            Label(discovery.header, systemImage: "externaldrive.connected.to.line.below")
+                                                .font(.headline.monospaced())
+                                            Spacer()
+                                            Text("\(discovery.supportedModes.count)/\(OBDMode.allCases.count)")
+                                                .font(.caption.weight(.semibold))
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        .padding(.vertical, 2)
                                     }
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(10)
-                                    .background(.thinMaterial)
-                                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                    .padding(.vertical, 2)
+                                    if discovery.header != profile.headerDiscoveries.last?.header {
+                                        Divider()
+                                    }
                                 }
                             }
-                            .padding(.top, 8)
+                            // Removed top padding for a more compact section
                         } label: {
                             Label("Discovered Headers", systemImage: "point.3.connected.trianglepath.dotted")
                                 .font(.subheadline.weight(.semibold))
                         }
-
                         Divider()
                     }
 
@@ -222,6 +216,7 @@ struct BikeLearningCard: View {
                 )
             }
         }
+        // Popover for mode info is now attached per badge button in the grid above.
     }
 
     @ViewBuilder
@@ -272,4 +267,53 @@ struct BikeLearningCard: View {
             .padding()
     }
     .environment(BikeProfileManager.shared)
+}
+
+//MARK: - ModeBadgeView
+
+private struct ModeBadgeView: View {
+    let mode: OBDMode
+    let isSupported: Bool
+    @State private var isShowingPopover = false
+
+    var body: some View {
+        Button {
+            isShowingPopover = true
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: isSupported ? "checkmark.circle.fill" : "xmark.circle.fill")
+                    .font(.caption2)
+                Text(mode.rawValue)
+                    .font(.caption.weight(.bold))
+                    .monospacedDigit()
+            }
+            .foregroundStyle(isSupported ? .green : Color(red: 0.78, green: 0.36, blue: 0.40))
+            .frame(minWidth: 44)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 8)
+            .background(
+                (isSupported
+                    ? Color.green.opacity(0.12)
+                    : Color(red: 0.78, green: 0.36, blue: 0.40).opacity(0.10)
+                )
+            )
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $isShowingPopover,
+                 attachmentAnchor: .rect(.bounds),
+                 arrowEdge: .top) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Mode \(mode.rawValue)")
+                    .font(.headline)
+
+                Text("\(mode.rawValue) • \(mode.title)")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(16)
+            .frame(width: 220, alignment: .leading)
+            .presentationCompactAdaptation(.popover)
+        }
+    }
 }
