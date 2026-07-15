@@ -1024,7 +1024,7 @@ final class BruteForceScanner: ObservableObject {
             return false
         }
 
-        session.results.append(result)
+        session.results.insert(result, at: 0)
         results = session.results
 
         scanStatus.successCount = session.results.count

@@ -109,7 +109,12 @@ struct TerminalView: View {
                         selectedMode: selectedMode,
                         header: header,
                         showDisconnectConfirmation: $showDisconnectConfirmation,
-                        isCompact: isCompact
+                        isCompact: isCompact,
+                        onRestartECU: {
+                            Task {
+                                await ECUReset.shared.reset()
+                            }
+                        }
                     )
                     
                     ProgressCard(
@@ -147,7 +152,7 @@ struct TerminalView: View {
                         },
                         onTestECU: {
                             Task {
-                                await ECUTester.shared.run(header: cleanHeader)
+                                await ECUReset.shared.reset()
                             }
                         },
                         onDiscoverModes: {

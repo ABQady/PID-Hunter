@@ -130,26 +130,43 @@ final class Preflight {
                 )
 
                 let rx = result.response.raw.uppercased()
+                let response = result.response
 
-                if rx.contains(probe.responseService) {
+                switch response.type {
 
+                case .positive:
                     if attempt > 1 {
                         Logger.shared.info("Recovered after retry")
                     }
-
                     Logger.shared.success("✅ ECU Responded")
                     return true
-                }
 
-                if rx.contains("NO DATA") {
+                case .negative:
+                    Logger.shared.success("✅ ECU Responded (Negative Response)")
+                    return true
 
+                case .noData:
                     if attempt > 1 {
                         Logger.shared.info("Recovered after retry")
                     }
+                    Logger.shared.warning("⚠️ ECU Reachable (NO DATA)")
+                    return true
 
-                    Logger.shared.warning("⚠️ ECU Reachable but returned NO DATA")
+                case .partialFrame:
+                    Logger.shared.success("✅ ECU Responded (Partial Frame)")
+                    return true
+
+                default:
+                    break
+                }
+
+                // Fallback for adapters that return plain text instead of a parsed response.
+                if rx.contains(probe.responseService) || rx.contains("NO DATA") {
+                    Logger.shared.success("✅ ECU Responded (Raw Match)")
                     return true
                 }
+
+                Logger.shared.warning("⚠️ ECU responded with unexpected response type: \(response.type)")
 
             } catch BluetoothManager.BluetoothError.timeout {
 

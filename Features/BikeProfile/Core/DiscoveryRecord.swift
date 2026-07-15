@@ -145,6 +145,44 @@ Stored Class   : \(classification)
 Incoming Class : \(DiscoveryClassification(from: responseType))
 Hit Count      : \(hitCount)
 """)
+        let incoming = DiscoveryClassification(from: responseType)
+
+        // Promote the stored classification instead of blindly replacing it.
+        switch (classification, incoming) {
+        case (.positive, _):
+            break
+
+        case (_, .positive):
+            classification = .positive
+
+        case (.partialFrame, .negative),
+             (.partialFrame, .noData),
+             (.partialFrame, .unknown):
+            break
+
+        case (_, .partialFrame):
+            classification = .partialFrame
+
+        case (.negative, .noData),
+             (.negative, .unknown):
+            break
+
+        case (_, .negative):
+            classification = .negative
+
+        case (.noData, .unknown):
+            break
+
+        case (_, .noData):
+            classification = .noData
+
+        default:
+            classification = incoming
+        }
+
+        if incoming == .partialFrame {
+            hadPartialResponse = true
+        }
         if !notes.contains(response) {
             notes.append(response)
         }

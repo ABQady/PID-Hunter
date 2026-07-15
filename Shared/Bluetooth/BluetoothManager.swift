@@ -41,16 +41,25 @@ final class BluetoothManager: NSObject, ObservableObject {
 
     private var pendingRequest: PendingRequest?
 
-    private func clearPendingRequest(resumingWith error: Error? = nil) {
+    private func clearPendingRequest(
+        resumingWith error: Error? = nil
+    ) {
         guard let pending = pendingRequest else {
             return
         }
 
         pending.timeoutTask?.cancel()
+
+        Logger.shared.verbose(
+            "Clearing pending request \(pending.id)"
+        )
+
         pendingRequest = nil
 
         if let error {
-            pending.continuation.resume(throwing: error)
+            pending.continuation.resume(
+                throwing: error
+            )
         }
     }
     
@@ -240,9 +249,6 @@ final class BluetoothManager: NSObject, ObservableObject {
             type: type
         )
         txCount += 1
-//        if !command.uppercased().hasPrefix("AT") {
-//            ScanStatistics.shared.requestsSent += 1
-//        }
     }
     
     // MARK: Send & Wait
@@ -273,6 +279,9 @@ final class BluetoothManager: NSObject, ObservableObject {
                       pending.id == requestID else {
                     return
                 }
+                Logger.shared.warning(
+                    "⏱️ Request timed out: \(command)"
+                )
                 self.clearPendingRequest(resumingWith: BluetoothError.timeout)
             }
             // Update the timeoutTask in the pending request
@@ -637,19 +646,29 @@ extension BluetoothManager:
         Logger.shared.verbose("RX HEX = \(hex)")
     }
 
-    private func completePendingRequest(with response: ELMResponse, latency: TimeInterval) {
+    private func completePendingRequest(
+        with response: ELMResponse,
+        latency: TimeInterval
+    ) {
         guard let pending = pendingRequest else {
             Logger.shared.verbose("No pending request. Dropping response.")
             return
         }
 
         Logger.shared.verbose("Completing pending request \(pending.id)")
+
         pending.timeoutTask?.cancel()
 
+        // IMPORTANT:
+        // Resume first, then tear down state.
+        pending.continuation.resume(
+            returning: (response, latency)
+        )
+
         pendingRequest = nil
+
+        // Only clear assembler after the caller received the response.
         ELMResponseAssembler.shared.clear()
-        
-        pending.continuation.resume(returning: (response, latency))
 
         Logger.shared.verbose("🟢 Continuation RESUMED: \(response.type)")
     }

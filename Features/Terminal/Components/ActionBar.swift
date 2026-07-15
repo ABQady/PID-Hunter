@@ -122,12 +122,6 @@ struct ActionBar: View {
                 .disabled(!isScanning)
                 
                 Spacer()
-                Button {
-                    onTestECU()
-                } label: {
-                    Label("Test ECU", systemImage: "stethoscope")
-                }
-                .buttonStyle(.bordered)
                 
                 Button {
                     onDiscoverModes()

@@ -44,10 +44,24 @@ final class ELM327: ObservableObject {
             _ = try await BluetoothManager.shared.sendAndWait("ATS0", timeout: .seconds(1))
             _ = try await BluetoothManager.shared.sendAndWait("ATH1", timeout: .seconds(1))
             _ = try await BluetoothManager.shared.sendAndWait("ATSP5", timeout: .seconds(2))
-            _ = try await BluetoothManager.shared.sendAndWait("ATDP", timeout: .seconds(2))
+            Logger.shared.info("🔄 Waiting for protocol stabilization...")
+            try? await Task.sleep(for: .milliseconds(300))
+            let protocolResult = try await BluetoothManager.shared.sendAndWait(
+                "ATDP",
+                timeout: .seconds(3)
+            )
+            Logger.shared.info("📡 Protocol Detection: \(protocolResult.response.raw)")
+            if protocolResult.response.raw.localizedCaseInsensitiveContains("UNABLE TO CONNECT") {
+                Logger.shared.warning("⚠️ Adapter reported UNABLE TO CONNECT after protocol selection.")
+                Logger.shared.warning("⚠️ ECU may require ignition, different header, or additional bus wake-up.")
+                return false
+            }
             return true
         } catch {
-            Logger.shared.error("❌ Failed to initialize ELM: \(error.localizedDescription)")
+            Logger.shared.error("❌ Failed to initialize ELM")
+            Logger.shared.error("Reason: \(error.localizedDescription)")
+            Logger.shared.error("Current Header: \(currentHeader)")
+            Logger.shared.error("Bluetooth Connected: \(BluetoothManager.shared.isConnected)")
             return false
         }
     }
@@ -222,7 +236,7 @@ final class ELM327: ObservableObject {
                 return
             }
 
-            Logger.shared.info("🔎 Reading \(item.description)...")
+            Logger.shared.debug("🔎 Reading \(item.description)...")
 
             do {
                 let result = try await request(
@@ -230,7 +244,7 @@ final class ELM327: ObservableObject {
                     timeout: .seconds(2)
                 )
 
-                Logger.shared.verbose(
+                Logger.shared.debug(
                     "ECU ID → \(item.command) = \(result.response.raw)"
                 )
 
@@ -258,9 +272,9 @@ final class ELM327: ObservableObject {
 
                 case "0902":
                     if case .positive = result.response.type {
-                        Logger.shared.info("🔎 0902 RAW: \(result.response.raw)")
+                        Logger.shared.debug("🔎 0902 RAW: \(result.response.raw)")
                         let parsedVIN = result.response.vin
-                        Logger.shared.info("🔎 0902 Parsed VIN: \(parsedVIN ?? "nil")")
+                        Logger.shared.debug("🔎 0902 Parsed VIN: \(parsedVIN ?? "nil")")
                         assignIfPresent(parsedVIN, description: "ECUInfo VIN") {
                             ECUInfo.shared.vinIndentifier = $0
                         }
@@ -268,9 +282,9 @@ final class ELM327: ObservableObject {
 
                 case "0904":
                     if case .positive = result.response.type {
-                        Logger.shared.info("🔎 0904 RAW: \(result.response.raw)")
+                        Logger.shared.debug("🔎 0904 RAW: \(result.response.raw)")
                         let parsedCalibration = result.response.calibrationID
-                        Logger.shared.info("🔎 0904 Parsed Calibration: \(parsedCalibration ?? "nil")")
+                        Logger.shared.debug("🔎 0904 Parsed Calibration: \(parsedCalibration ?? "nil")")
                         assignIfPresent(parsedCalibration, description: "ECUInfo Calibration") {
                             ECUInfo.shared.calibrationIdentifier = $0
                         }

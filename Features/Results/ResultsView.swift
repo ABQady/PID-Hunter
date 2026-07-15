@@ -15,12 +15,11 @@ struct ResultsView: View {
     @State private var statsExpanded = true
     @State private var searchStatsExpanded = false
 
-    @State private var visibleTopID: ScanResult.ID?
-    @State private var previousResultCount = 0
+    @State private var isFollowingLiveResults = true
 
     private var filteredResults: [ScanResult] {
         let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
-        let source = Array(brute.results.reversed())
+        let source = brute.results
         guard !query.isEmpty else {
             return source
         }
@@ -51,7 +50,7 @@ struct ResultsView: View {
         ScrollView {
             LazyVStack(
                 alignment: .leading,
-                spacing: 16,
+                spacing: 12,
                 pinnedViews: [.sectionHeaders]
             ) {
                 // MARK: - ECU Information
@@ -221,21 +220,19 @@ struct ResultsView: View {
                         .frame(minHeight: 250)
                         .clipShape(RoundedRectangle(cornerRadius: 18))
                     } else {
-                        LazyVStack(spacing: 12) {
-                            ForEach(filteredResults) { result in
-                                PIDResultCard(result: result)
-                                    .id(result.id)
-                                    .background(
-                                        GeometryReader { geo in
-                                            Color.clear.preference(
-                                                key: VisiblePIDPreferenceKey.self,
-                                                value: [VisiblePIDPreferenceData(id: result.id, minY: geo.frame(in: .named("ResultsScroll")).minY)]
-                                            )
-                                        }
-                                    )
-                            }
+                        ForEach(filteredResults) { result in
+                            PIDResultCard(result: result)
+                                .id(result.id)
+                                .background(
+                                    GeometryReader { geo in
+                                        Color.clear.preference(
+                                            key: VisiblePIDPreferenceKey.self,
+                                            value: [VisiblePIDPreferenceData(id: result.id, minY: geo.frame(in: .named("ResultsScroll")).minY)]
+                                        )
+                                    }
+                                )
+                                .padding(.vertical, 6)
                         }
-                        .padding(.vertical, 4)
                     }
                 } header: {
                     VStack(spacing: 10) {
@@ -290,25 +287,26 @@ struct ResultsView: View {
                 .filter { $0.minY >= -1 }
                 .min(by: { $0.minY < $1.minY })
 
-            visibleTopID = candidate?.id
+            guard let firstID = filteredResults.first?.id else {
+                isFollowingLiveResults = true
+                return
+            }
+
+            isFollowingLiveResults = (candidate == nil) || (candidate?.id == firstID)
         }
-        // Preserve the user's reading position.
-        // If they are reading history, keep the same visible PID pinned.
-        // If they are already at the live head, keep following new discoveries.
+        // Only live-follow if user is at the head; otherwise, preserve scroll position.
         .onChange(of: brute.results.count) {
             guard let firstID = filteredResults.first?.id else { return }
 
-            if visibleTopID == nil || visibleTopID == firstID {
-                withAnimation(.easeOut(duration: 0.15)) {
-                    scrollProxy.scrollTo(firstID, anchor: .top)
-                }
-            } else if let anchor = visibleTopID {
-                var transaction = Transaction()
-                transaction.animation = nil
+            guard isFollowingLiveResults else {
+                return
+            }
 
-                withTransaction(transaction) {
-                    scrollProxy.scrollTo(anchor, anchor: .top)
-                }
+            var transaction = Transaction()
+            transaction.animation = nil
+
+            withTransaction(transaction) {
+                scrollProxy.scrollTo(firstID, anchor: .top)
             }
         }
         }
