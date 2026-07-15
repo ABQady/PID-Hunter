@@ -63,8 +63,7 @@
 │   │       ├── BikeProfileManager.swift
 │   │       ├── BikeProfileStore.swift
 │   │       ├── DiscoveryClassification.swift
-│   │       ├── DiscoveryRecord.swift
-│   │       └── ProbeRequest.swift
+│   │       └── DiscoveryRecord.swift
 │   ├── Results
 │   │   ├── InfoChip.swift
 │   │   ├── PIDResultCard.swift
@@ -78,16 +77,18 @@
 │   │   │   ├── RequestExecutor.swift
 │   │   │   ├── RequestOutcomeProcessor.swift
 │   │   │   └── ScanSession.swift
-│   │   ├── FixedCommandStrategy.swift
 │   │   ├── HeaderDiscovery.swift
-│   │   ├── InfoTypeStrategy.swift
 │   │   ├── ModeDiscovery.swift
-│   │   ├── PIDScanStrategy.swift
 │   │   ├── Preflight.swift
+│   │   ├── ProbeRequest.swift
 │   │   ├── ScanLauncher.swift
 │   │   ├── ScanPersistence.swift
 │   │   ├── ScanStatistics.swift
-│   │   └── ScanStrategy.swift
+│   │   └── Strategies
+│   │       ├── FixedCommandStrategy.swift
+│   │       ├── InfoTypeStrategy.swift
+│   │       ├── PIDScanStrategy.swift
+│   │       └── ScanStrategy.swift
 │   ├── Search
 │   │   ├── Core
 │   │   │   ├── SearchConfiguration.swift
@@ -109,9 +110,27 @@
 │   │   ├── PriorityPIDQueue.swift
 │   │   └── SearchKnowledgeBase.swift
 │   ├── Settings
-│   │   ├── AppStorageViewer.swift
 │   │   ├── BikeProfileCard.swift
 │   │   ├── SettingsView.swift
+│   │   ├── StorageBrowser
+│   │   │   ├── NavigationEngine.swift
+│   │   │   ├── StorageBreadcrumb.swift
+│   │   │   ├── StorageContextMenu.swift
+│   │   │   ├── StorageGridView.swift
+│   │   │   ├── StorageItem+UI.swift
+│   │   │   ├── StorageListView.swift
+│   │   │   ├── StorageModel.swift
+│   │   │   ├── StorageOperations.swift
+│   │   │   ├── StorageQuickLook.swift
+│   │   │   ├── StorageRow.swift
+│   │   │   ├── StorageSearchBar.swift
+│   │   │   ├── StorageService.swift
+│   │   │   ├── StorageSorting.swift
+│   │   │   ├── StorageTile.swift
+│   │   │   ├── StorageToolbar.swift
+│   │   │   └── StorageTypes.swift
+│   │   ├── StorageBrowserView.swift
+│   │   ├── StorageUsageCard.swift
 │   │   └── TextFileViewer.swift
 │   ├── SplashScreen.swift
 │   └── Terminal
@@ -154,7 +173,9 @@
 │   │   ├── ELMResponseAssembler.swift
 │   │   ├── ELMResponseParser.swift
 │   │   ├── ManualCommandSender.swift
-│   │   └── OBDMode.swift
+│   │   ├── OBDMode.swift
+│   │   ├── ProtocolFrame.swift
+│   │   └── ProtocolFrameParser.swift
 │   ├── ShareSheet.swift
 │   └── Telemetry
 │       ├── PIDRange.swift
@@ -163,10 +184,11 @@
 │       ├── TelemetryAnalyzer.swift
 │       └── TelemetryStore.swift
 └── Z.Old
+    ├── AppStorageViewer.swift
     ├── BikeKnowledge.swift
     ├── CSVExporter.swift
     ├── DynamicScanner.swift
     ├── MyContentView.swift
     └── TabView.swift
 
-39 directories, 131 files
+41 directories, 151 files
