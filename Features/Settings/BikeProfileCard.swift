@@ -177,18 +177,21 @@ struct BikeProfileCard: View {
                 Text("Bike Profile")
                 Spacer()
                 Picker("", selection: Binding(
-                    get: { manager.displayedProfile?.fingerprint.id ?? "" },
+                    get: { manager.displayedProfile?.id.uuidString ?? "" },
                     set: { selectedID in
-                        if let selected = manager.availableProfiles.first(where: { $0.fingerprint.id == selectedID }) {
-                            manager.selectProfile(selected)
+                        guard let selected = manager.availableProfiles.first(where: {
+                            $0.id.uuidString == selectedID
+                        }) else {
+                            return
                         }
+                        manager.selectProfile(selected)
                     }
                 )) {
-                    ForEach(manager.availableProfiles, id: \.fingerprint.id) { profile in
+                    ForEach(manager.availableProfiles, id: \.id) { profile in
                         Text(profile.displayName)
                             .lineLimit(1)
                             .truncationMode(.tail)
-                            .tag(profile.fingerprint.id)
+                            .tag(profile.id.uuidString)
                     }
                 }
                 .labelsHidden()
