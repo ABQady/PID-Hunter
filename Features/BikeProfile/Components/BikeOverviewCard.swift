@@ -89,13 +89,11 @@ struct BikeOverviewCard: View {
 //                        }
 //                    }
 
-                    Divider()
-
                     HStack {
 
                         stat(
-                            title: "Known",
-                            value: "\(analytics.totalRequests)"
+                            title: "Valid",
+                            value: "\(analytics.positiveRequests)"
                         )
 
                         Spacer()
@@ -125,7 +123,7 @@ struct BikeOverviewCard: View {
                     "No Bike Profile",
                     systemImage: "motorcycle",
                     description: Text(
-                        "Connect to an ECU once or select a saved bike profile."
+                        "Connect to an ECU or select a saved bike profile."
                     )
                 )
             }

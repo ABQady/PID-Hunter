@@ -74,7 +74,7 @@ struct StorageUsageCard: View {
 
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Total Storage")
+                        Text("Total Storage Usage")
                             .font(.caption)
                             .foregroundStyle(.secondary)
 

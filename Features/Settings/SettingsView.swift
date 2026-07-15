@@ -10,8 +10,12 @@ import UIKit
 #endif
 
 struct SettingsView: View {
-    @State private var showAppStorage = false
-    @State private var initialStorageLocation: AppStorageViewer.InitialLocation?
+    private struct BrowserDestination: Identifiable {
+        let id = UUID()
+        let location: StorageLocation?
+    }
+
+    @State private var browserDestination: BrowserDestination?
     
     @Environment(BikeProfileManager.self)
     private var manager
@@ -142,6 +146,12 @@ struct SettingsView: View {
         )
     }
 
+
+    // MARK: - Storage Sheet Helper
+
+    private func openStorage(at location: StorageLocation?) {
+        browserDestination = BrowserDestination(location: location)
+    }
 
     // MARK: - Export
 
@@ -417,13 +427,12 @@ struct SettingsView: View {
                     openLocation: { location in
                         switch location {
                         case .profiles:
-                            initialStorageLocation = .applicationSupport
+                            openStorage(at: .applicationSupport)
                         case .logs:
-                            initialStorageLocation = .documents
+                            openStorage(at: .documents)
                         case .cache:
-                            initialStorageLocation = .caches
+                            openStorage(at: .caches)
                         }
-                        showAppStorage = true
                     }
                 )
 
@@ -459,8 +468,7 @@ struct SettingsView: View {
                         }
                         Spacer()
                         Button {
-                            initialStorageLocation = nil
-                            showAppStorage = true
+                            openStorage(at: nil)
                         } label: {
                             VStack(spacing: 4) {
                                 Image(systemName: "internaldrive.fill")
@@ -483,8 +491,8 @@ struct SettingsView: View {
                 .clipShape(
                     RoundedRectangle(cornerRadius: 18)
                 )
-                .sheet(isPresented: $showAppStorage) {
-                    AppStorageViewer(initialLocation: initialStorageLocation)
+                .sheet(item: $browserDestination) { destination in
+                    StorageBrowserView(initialLocation: destination.location)
                 }
                 .onChange(of: modeDiscovery.supportedModes) { _, modes in
                     guard !forceModeSelection else { return }
@@ -504,7 +512,6 @@ struct SettingsView: View {
                     }
                 }
                 .padding(.horizontal)
-                //.padding(.bottom, 40)
             }
             .padding()
         }

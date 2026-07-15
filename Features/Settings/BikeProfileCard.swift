@@ -186,11 +186,18 @@ struct BikeProfileCard: View {
                 )) {
                     ForEach(manager.availableProfiles, id: \.fingerprint.id) { profile in
                         Text(profile.displayName)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
                             .tag(profile.fingerprint.id)
                     }
                 }
                 .labelsHidden()
                 .pickerStyle(.menu)
+                .frame(maxWidth: 170, alignment: .trailing)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .minimumScaleFactor(0.85)
+                .fixedSize(horizontal: false, vertical: true)
             }
             .font(.headline)
         }
