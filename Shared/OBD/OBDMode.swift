@@ -101,7 +101,10 @@ enum OBDMode: String, CaseIterable, Identifiable, Codable {
         case .mode01:
             return .pid8
 
-        case .mode21, .mode22, .mode23:
+        case .mode21:
+            return .pid8
+
+        case .mode22, .mode23:
             return .pid16
 
         case .mode09:
@@ -240,8 +243,10 @@ enum OBDMode: String, CaseIterable, Identifiable, Codable {
              .mode09:
             return rawValue + "00"
 
-        case .mode21,
-             .mode22,
+        case .mode21:
+            return rawValue + "00"
+
+        case .mode22,
              .mode23:
             return rawValue + "0000"
 
