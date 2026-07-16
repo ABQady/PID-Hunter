@@ -72,13 +72,13 @@ final class HeaderDiscovery {
         .values
         .sorted { $0.header < $1.header }
 
-        if !uniqueDiscoveries.isEmpty {
-            await BikeProfileManager.shared.updateHeaderDiscoveries(uniqueDiscoveries)
-
-            Logger.shared.info(
-                "💾 Persisted \(uniqueDiscoveries.count) header discoveries."
-            )
-        }
+//        if !uniqueDiscoveries.isEmpty {
+//            await BikeProfileManager.shared.updateHeaderDiscoveries(uniqueDiscoveries)
+//
+//            Logger.shared.info(
+//                "💾 Persisted \(uniqueDiscoveries.count) header discoveries."
+//            )
+//        }
 
         Logger.shared.info(
             "Header discovery complete. Found \(discoveries.count) supported headers."

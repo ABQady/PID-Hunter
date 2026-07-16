@@ -6,7 +6,7 @@
 //
 import Foundation
 
-struct ELMResponse {
+struct ELMResponse: Codable, Equatable, Hashable {
     let raw: String
     let type: ELMResponseType
     let header: String?
@@ -24,7 +24,7 @@ struct ELMResponse {
 }
 
 
-enum ELMResponseType {
+enum ELMResponseType: Codable, Equatable, Hashable {
     case noData
     case stopped
     case busError
@@ -339,6 +339,27 @@ extension ELMResponse {
             return payload.isEmpty
         }
         return false
+    }
+
+    var formatByte: UInt8? {
+        guard let header else { return nil }
+        let bytes = header.split(separator: " ")
+        guard bytes.count == 3 else { return nil }
+        return UInt8(bytes[0], radix: 16)
+    }
+
+    var respondingAddress: UInt8? {
+        guard let header else { return nil }
+        let bytes = header.split(separator: " ")
+        guard bytes.count == 3 else { return nil }
+        return UInt8(bytes[1], radix: 16)
+    }
+
+    var targetAddress: UInt8? {
+        guard let header else { return nil }
+        let bytes = header.split(separator: " ")
+        guard bytes.count == 3 else { return nil }
+        return UInt8(bytes[2], radix: 16)
     }
 }
 extension ELMResponse {

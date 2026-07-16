@@ -160,9 +160,9 @@ struct TerminalView: View {
                                 await ModeDiscovery.shared.discover()
                             }
                         },
-                        onDiscoverHeaders: {
+                        onDiscoverDevices: {
                             Task {
-                                await HeaderDiscovery.shared.discover()
+                                await DeviceDiscovery.shared.discover()
                             }
                         }
                     )

@@ -17,7 +17,8 @@ struct BikeProfile: Codable, Hashable {
         case firstSeen
         case lastSeen
         case discoveries
-        case headerDiscoveries
+        case deviceDiscoveries
+        case legacyHeaderDiscoveries = "headerDiscoveries"
     }
 
     static let currentSchemaVersion = 1
@@ -27,7 +28,27 @@ struct BikeProfile: Codable, Hashable {
     var firstSeen: Date = .now
     var lastSeen: Date = .now
     var discoveries: [DiscoveryRecord]
-    var headerDiscoveries: [HeaderDiscoveryResult] = []
+    var deviceDiscoveries: [DeviceDiscoveryRecord] = []
+    private var legacyHeaderDiscoveries: [HeaderDiscoveryResult] = []
+
+    var headerDiscoveries: [HeaderDiscoveryResult] {
+        if !deviceDiscoveries.isEmpty {
+            return Dictionary(
+                grouping: deviceDiscoveries,
+                by: { String(format: "%02X", $0.respondingAddress) }
+            )
+            .keys
+            .sorted()
+            .map {
+                HeaderDiscoveryResult(
+                    header: $0,
+                    supportedModes: []
+                )
+            }
+        }
+
+        return legacyHeaderDiscoveries
+    }
 
     mutating func touch() {
         lastSeen = .now
@@ -42,13 +63,15 @@ struct BikeProfile: Codable, Hashable {
         fingerprint: BikeFingerprint,
         displayName: String? = nil,
         discoveries: [DiscoveryRecord] = [],
+        deviceDiscoveries: [DeviceDiscoveryRecord] = [],
         headerDiscoveries: [HeaderDiscoveryResult] = []
     ) {
         self.id = UUID()
         self.fingerprint = fingerprint
         self.displayName = displayName ?? "Unknown Name"
         self.discoveries = discoveries
-        self.headerDiscoveries = headerDiscoveries
+        self.deviceDiscoveries = deviceDiscoveries
+        self.legacyHeaderDiscoveries = headerDiscoveries
         self.lastSeen = self.firstSeen
     }
 
@@ -62,7 +85,8 @@ struct BikeProfile: Codable, Hashable {
         firstSeen = try container.decodeIfPresent(Date.self, forKey: .firstSeen) ?? .now
         lastSeen = try container.decodeIfPresent(Date.self, forKey: .lastSeen) ?? firstSeen
         discoveries = try container.decodeIfPresent([DiscoveryRecord].self, forKey: .discoveries) ?? []
-        headerDiscoveries = try container.decodeIfPresent([HeaderDiscoveryResult].self, forKey: .headerDiscoveries) ?? []
+        deviceDiscoveries = try container.decodeIfPresent([DeviceDiscoveryRecord].self, forKey: .deviceDiscoveries) ?? []
+        legacyHeaderDiscoveries = try container.decodeIfPresent([HeaderDiscoveryResult].self, forKey: .legacyHeaderDiscoveries) ?? []
     }
 
     func encode(to encoder: Encoder) throws {
@@ -75,7 +99,10 @@ struct BikeProfile: Codable, Hashable {
         try container.encode(firstSeen, forKey: .firstSeen)
         try container.encode(lastSeen, forKey: .lastSeen)
         try container.encode(discoveries, forKey: .discoveries)
-        try container.encode(headerDiscoveries, forKey: .headerDiscoveries)
+        try container.encode(deviceDiscoveries, forKey: .deviceDiscoveries)
+        if deviceDiscoveries.isEmpty {
+            try container.encode(legacyHeaderDiscoveries, forKey: .legacyHeaderDiscoveries)
+        }
     }
 }
 // MARK: - Discovery Queries

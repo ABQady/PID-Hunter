@@ -405,25 +405,29 @@ Dirty        : true
         reloadProfiles()
     }
     
-    var headerDiscoveries: [HeaderDiscoveryResult] {
-        currentProfile?.headerDiscoveries ?? []
+//    var headerDiscoveries: [HeaderDiscoveryResult] {
+//        currentProfile?.headerDiscoveries ?? []
+//    }
+
+    var deviceDiscoveries: [DeviceDiscoveryRecord] {
+        currentProfile?.deviceDiscoveries ?? []
     }
     
-    func updateHeaderDiscoveries(_ discoveries: [HeaderDiscoveryResult]) {
+    func updateDeviceDiscoveries(_ discoveries: [DeviceDiscoveryRecord]) {
         guard var profile = currentProfile else {
             Logger.shared.warning("No active Bike Profile to update.")
             return
         }
 
-        if !discoveries.isEmpty {
-            profile.headerDiscoveries = discoveries
-            profile.touch()
-            lastSaveDate = .distantPast
-            commitProfile(profile)
-        }
+        profile.deviceDiscoveries = discoveries
+        profile.touch()
+
+        lastSaveDate = .distantPast
+        commitProfile(profile)
 
         save()
         reloadProfiles()
-        Logger.shared.info("✅ Saved \(discoveries.count) header discoveries.")
+
+        Logger.shared.info("✅ Saved \(discoveries.count) device discoveries.")
     }
 }

@@ -38,11 +38,20 @@ struct BikeLearningCard: View {
                         .font(.headline)
 
                     if let profile,
-                       !profile.headerDiscoveries.isEmpty {
+                       !profile.deviceDiscoveries.isEmpty {
 
+                        let groupedDiscoveries = Dictionary(
+                            grouping: profile.deviceDiscoveries,
+                            by: { String(format: "%02X", $0.respondingAddress) }
+                        )
+                        .sorted { $0.key < $1.key }
+
+                        // TODO: Replace temporary empty supportedModes with Mode Discovery data once migrated.
                         DisclosureGroup {
                             VStack(alignment: .leading, spacing: 2) {
-                                ForEach(profile.headerDiscoveries, id: \.header) { discovery in
+                                ForEach(groupedDiscoveries, id: \.key) { entry in
+                                    let header = entry.key
+                                    let discoveries = entry.value
                                     DisclosureGroup {
                                         LazyVGrid(
                                             columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4),
@@ -50,23 +59,23 @@ struct BikeLearningCard: View {
                                             spacing: 12
                                         ) {
                                             ForEach(OBDMode.allCases, id: \.rawValue) { mode in
-                                                let isSupported = discovery.supportedModes.contains(mode)
+                                                let isSupported = [].contains(mode)
                                                 ModeBadgeView(mode: mode, isSupported: isSupported)
                                             }
                                         }
                                     } label: {
                                         HStack {
-                                            Label(discovery.header, systemImage: "externaldrive.connected.to.line.below")
+                                            Label(header, systemImage: "externaldrive.connected.to.line.below")
                                                 .font(.headline.monospaced())
                                             Spacer()
-                                            Text("\(discovery.supportedModes.count)/\(OBDMode.allCases.count)")
+                                            Text("\(0)/\(OBDMode.allCases.count)")
                                                 .font(.caption.weight(.semibold))
                                                 .foregroundStyle(.secondary)
                                         }
                                         .padding(.vertical, 2)
                                     }
                                     .padding(.vertical, 2)
-                                    if discovery.header != profile.headerDiscoveries.last?.header {
+                                    if header != groupedDiscoveries.last?.key {
                                         Divider()
                                     }
                                 }
