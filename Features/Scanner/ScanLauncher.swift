@@ -180,7 +180,7 @@ final class ScanLauncher {
             resumeResults: resume.results
         )
 
-        Logger.shared.info("Resume Results: \(resume.results.count)")
+        Logger.shared.verbose(.persistence, "Resume Results: \(resume.results.count)")
 
         logLaunchContext(context, hasResume: resume.hasResume)
 
@@ -205,7 +205,7 @@ final class ScanLauncher {
         _ context: ScanContext,
         hasResume: Bool
     ) {
-        Logger.shared.info("""
+        Logger.shared.verbose(.setup, """
 🚀 Scan Context
 Resume    : \(hasResume)
 Mode      : \(context.mode.rawValue)
@@ -293,7 +293,7 @@ End PID   : \(context.endPID)
             Logger.shared.info("⏭️ Auto Preflight Disabled")
             return true
         }
-        Logger.shared.info("Running preflight using header \(context.header)")
+        Logger.shared.verbose(.setup, "Running preflight using header \(context.header)")
         let ok = await Preflight.shared.run(
             header: context.header,
             mode: context.mode
@@ -315,9 +315,9 @@ End PID   : \(context.endPID)
             Logger.shared.error("❌ Failed to prepare Bike Profile")
             return false
         }
-        Logger.shared.info("🆔 Fingerprint: \(fingerprint.id)")
+        Logger.shared.verbose(.persistence, "🆔 Fingerprint: \(fingerprint.id)")
         Logger.shared.info("📘 Bike Profile Ready")
-        Logger.shared.info("Known Requests: \(profile.discoveries.count)")
+        Logger.shared.verbose(.persistence, "Known Requests: \(profile.discoveries.count)")
         return true
     }
     
@@ -365,7 +365,7 @@ End PID   : \(context.endPID)
         context: ScanContext
     ) async {
         let strategy = ScanStrategyFactory.strategy(for: context.mode)
-        Logger.shared.info("Launching \(context.mode.rawValue) using \(type(of: strategy))")
+        Logger.shared.verbose(.setup, "Launching \(context.mode.rawValue) using \(type(of: strategy))")
         await strategy.start(
             mode: context.mode,
             launcher: self,

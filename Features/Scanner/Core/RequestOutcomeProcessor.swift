@@ -113,7 +113,7 @@ final class RequestOutcomeProcessor {
             request: request,
             source: .discovery,
             logAction: {
-                Logger.shared.verbose(
+                Logger.shared.verbose(.outcome,
                     """
 📦 Outcome
 Classification : \(classification)
@@ -152,7 +152,7 @@ Raw Response   : \(response.raw)
             request: request,
             source: .confirmedNegative,
             logAction: {
-                Logger.shared.info(
+                Logger.shared.verbose(.outcome,
                     "🔴 Confirmed Negative | \(mode.rawValue) | \(request) | \(classification) | \(Int(latency * 1000)) ms"
                 )
             },

@@ -74,7 +74,7 @@ final class ELM327: ObservableObject {
         guard !normalized.isEmpty else { return }
 
         do {
-            Logger.shared.debug("TX -> \(normalized)")
+            Logger.shared.verbose(.communication, "TX -> \(normalized)")
             try BluetoothManager.shared.send(normalized)
         } catch {
             Logger.shared.error("ELM327.send failed: \(normalized) | \(error.localizedDescription)")
@@ -95,7 +95,7 @@ final class ELM327: ObservableObject {
         }
 
         if currentHeader == normalized {
-            Logger.shared.verbose("Header already active -> \(normalized)")
+            Logger.shared.verbose(.setup, "Header already active -> \(normalized)")
             return ELMRequestResult(
                 response: ELMResponse(
                     raw: "OK",
@@ -108,16 +108,14 @@ final class ELM327: ObservableObject {
             )
         }
 
-        Logger.shared.debug("TX(wait) -> ATSH\(normalized)")
+        Logger.shared.verbose(.communication, "TX(wait) -> ATSH\(normalized)")
 
         let result = try await BluetoothManager.shared.sendAndWait(
             "ATSH\(normalized)",
             timeout: timeout
         )
-        Logger.shared.verbose("RX(wait) <- \(result.response.raw)")
-        Logger.shared.verbose(
-            String(format: "Header switch completed in %.1f ms", result.latency * 1000)
-        )
+        Logger.shared.verbose(.communication, "RX(wait) <- \(result.response.raw)")
+        Logger.shared.verbose(.setup, String(format: "Header switch completed in %.1f ms", result.latency * 1000))
 
         currentHeader = normalized
         Logger.shared.info("Header -> \(normalized)")
@@ -178,7 +176,7 @@ final class ELM327: ObservableObject {
 
         let normalized = normalize(command)
 
-        Logger.shared.debug("TX(wait) -> \(normalized)")
+        Logger.shared.verbose(.communication, "TX(wait) -> \(normalized)")
         let result = try await BluetoothManager.shared.sendAndWait(
             normalized,
             timeout: timeout
@@ -236,7 +234,7 @@ final class ELM327: ObservableObject {
                 return
             }
 
-            Logger.shared.debug("🔎 Reading \(item.description)...")
+            Logger.shared.verbose(.discovery, "🔎 Reading \(item.description)...")
 
             do {
                 let result = try await request(
@@ -244,9 +242,7 @@ final class ELM327: ObservableObject {
                     timeout: .seconds(2)
                 )
 
-                Logger.shared.debug(
-                    "ECU ID → \(item.command) = \(result.response.raw)"
-                )
+                Logger.shared.verbose(.discovery, "ECU ID → \(item.command) = \(result.response.raw)")
 
                 switch item.command {
 
@@ -272,9 +268,9 @@ final class ELM327: ObservableObject {
 
                 case "0902":
                     if case .positive = result.response.type {
-                        Logger.shared.debug("🔎 0902 RAW: \(result.response.raw)")
+                        Logger.shared.verbose(.parser, "🔎 0902 RAW: \(result.response.raw)")
                         let parsedVIN = result.response.vin
-                        Logger.shared.debug("🔎 0902 Parsed VIN: \(parsedVIN ?? "nil")")
+                        Logger.shared.verbose(.parser, "🔎 0902 Parsed VIN: \(parsedVIN ?? "nil")")
                         assignIfPresent(parsedVIN, description: "ECUInfo VIN") {
                             ECUInfo.shared.vinIndentifier = $0
                         }
@@ -282,9 +278,9 @@ final class ELM327: ObservableObject {
 
                 case "0904":
                     if case .positive = result.response.type {
-                        Logger.shared.debug("🔎 0904 RAW: \(result.response.raw)")
+                        Logger.shared.verbose(.parser, "🔎 0904 RAW: \(result.response.raw)")
                         let parsedCalibration = result.response.calibrationID
-                        Logger.shared.debug("🔎 0904 Parsed Calibration: \(parsedCalibration ?? "nil")")
+                        Logger.shared.verbose(.parser, "🔎 0904 Parsed Calibration: \(parsedCalibration ?? "nil")")
                         assignIfPresent(parsedCalibration, description: "ECUInfo Calibration") {
                             ECUInfo.shared.calibrationIdentifier = $0
                         }
@@ -305,9 +301,7 @@ final class ELM327: ObservableObject {
                     "📘 Fingerprint → Header=\(ECUInfo.shared.header) | Protocol=\(ECUInfo.shared.protocolName)"
                 )
             } catch {
-                Logger.shared.verbose(
-                    "ECU ID → \(item.command) failed"
-                )
+                Logger.shared.verbose(.discovery, "ECU ID → \(item.command) failed")
             }
 
             try? await Task.sleep(for: .milliseconds(300))

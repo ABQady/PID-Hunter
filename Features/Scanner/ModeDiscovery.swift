@@ -41,18 +41,18 @@ final class ModeDiscovery: ObservableObject {
     }
 
     private func probe(_ mode: OBDMode) async {
-        Logger.shared.info("🔎 Probing \(mode.title)...")
+        Logger.shared.verbose(.discovery, "🔎 Probing \(mode.title)...")
 
         do {
             let result = try await elm.request(command: mode.discoveryCommand)
             let response = result.response
             let latency = result.latency
 
-            Logger.shared.debug("Probe \(mode.title) latency: \(String(format: "%.3f", latency)) s")
+            Logger.shared.verbose(.telemetry, "Probe \(mode.title) latency: \(String(format: "%.3f", latency)) s")
 
             let requestMode = mode.requestService
 
-            Logger.shared.debug(
+            Logger.shared.verbose(.discovery,
                 """
                 Mode Discovery
                   Request : \(String(format: "%02X", requestMode))
@@ -143,7 +143,7 @@ final class ModeDiscovery: ObservableObject {
         Logger.shared.info("🔎 Starting mode discovery")
 
         if let header {
-            Logger.shared.info("Using header: \(header)")
+            Logger.shared.verbose(.setup, "Using header: \(header)")
 
             do {
                 try await elm.setHeader(header)

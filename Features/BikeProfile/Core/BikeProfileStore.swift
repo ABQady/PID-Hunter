@@ -125,7 +125,7 @@ final class BikeProfileStore {
         let data = try self.encoder.encode(profile)
         try data.write(to: url, options: .atomic)
         Logger.shared.info("💾 Saved Bike Profile")
-        Logger.shared.verbose("""
+        Logger.shared.verbose(.persistence, """
         💾 SAVE
         UUID        : \(profile.id)
         Discoveries : \(profile.discoveries.count)

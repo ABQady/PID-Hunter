@@ -496,13 +496,13 @@ final class BruteForceScanner: ObservableObject {
         header: String,
         consecutiveTimeouts: inout Int
     ) {
-        Logger.shared.error("""
-        🧪 PROCESS RESPONSE
-        Request        : \(request)
-        Classification : \(classification)
-        Request Header : \(header)
-        Response Header: \(response.header ?? "nil")
-        """)
+        Logger.shared.verbose(.outcome, """
+🧪 PROCESS RESPONSE
+Request        : \(request)
+Classification : \(classification)
+Request Header : \(header)
+Response Header: \(response.header ?? "nil")
+""")
         recordResponseStatistics(
             classification: classification,
             latency: latency
@@ -771,8 +771,8 @@ final class BruteForceScanner: ObservableObject {
             end: UInt16(rangeEndPID)
         )
         session.currentPID = firstPIDToExecute
-        Logger.shared.info("Search Engine = \(searchEngine)")
-        Logger.shared.info(
+        Logger.shared.verbose(.setup, "Search Engine = \(searchEngine)")
+        Logger.shared.verbose(.scanner,
             "Scanner using \(session.searchStrategy.engineType)"
         )
         while let pid = session.searchStrategy.nextPID(), pid < UInt16(firstPIDToExecute) {
@@ -937,7 +937,7 @@ final class BruteForceScanner: ObservableObject {
         context: ScanLauncher.ScanContext,
         consecutiveTimeouts: inout Int
     ) async {
-        Logger.shared.info("Retrying partial frames...")
+        Logger.shared.verbose(.scanner, "Retrying partial frames...")
 
         let retryResults = await PartialFrameRetryEngine().retryPendingFrames(
             using: requestExecutor,
@@ -954,7 +954,7 @@ final class BruteForceScanner: ObservableObject {
             timeout: requestTimeout
         )
 
-        Logger.shared.info(
+        Logger.shared.verbose(.scanner,
             "Partial retry pass completed. \(retryResults.count) frame(s) processed."
         )
 
@@ -985,7 +985,7 @@ final class BruteForceScanner: ObservableObject {
         // This method must never create or promote logger sessions directly.
         // Session transitions are owned by ScanLauncher/LogSessionManager so that
         // PreScan logging is finalized before the dedicated scan log begins.
-        Logger.shared.info("Search engine: \(searchEngine)")
+        Logger.shared.verbose(.setup, "Search engine: \(searchEngine)")
         Logger.shared.info(
             "Starting \(context.mode.rawValue) scan using header \(context.header)"
         )

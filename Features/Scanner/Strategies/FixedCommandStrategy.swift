@@ -43,12 +43,12 @@ final class FixedCommandStrategy: ScanStrategy {
             return
         }
 
-        Logger.shared.info(
+        Logger.shared.verbose(.setup,
             "Launching Fixed Command strategy for \(mode.title) using header \(context.header)"
         )
 
         let requests = mode.runtimeRequests.joined(separator: ", ")
-        Logger.shared.debug(
+        Logger.shared.verbose(.setup,
             "Runtime requests: \(requests)"
         )
 

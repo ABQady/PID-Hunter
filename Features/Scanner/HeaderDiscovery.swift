@@ -47,14 +47,14 @@ final class HeaderDiscovery {
                 continue
             }
 
-            Logger.shared.info("Running mode discovery on \(header)...")
+            Logger.shared.verbose(.discovery, "Running mode discovery on \(header)...")
 
             let modes = await ModeDiscovery.shared.discover(on: header)
 
             if !modes.isEmpty {
                 let modeNames = modes.map { $0.title }.joined(separator: ", ")
-                Logger.shared.info("Discovered header: \(header)")
-                Logger.shared.info("Header \(header) supports: \(modeNames)")
+                Logger.shared.verbose(.discovery, "Discovered header: \(header)")
+                Logger.shared.verbose(.discovery, "Header \(header) supports: \(modeNames)")
 
                 discoveries.append(
                     HeaderDiscoveryResult(
@@ -75,7 +75,7 @@ final class HeaderDiscovery {
 //        if !uniqueDiscoveries.isEmpty {
 //            await BikeProfileManager.shared.updateHeaderDiscoveries(uniqueDiscoveries)
 //
-//            Logger.shared.info(
+//            Logger.shared.verbose(.persistence,
 //                "💾 Persisted \(uniqueDiscoveries.count) header discoveries."
 //            )
 //        }

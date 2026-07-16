@@ -25,6 +25,19 @@ struct SettingsView: View {
 
     @AppStorage("debugVerbosity")
     private var debugVerbosity = DebugVerbosity.normal.rawValue
+
+    @AppStorage("verboseCategory.communication") private var verboseCommunication = true
+    @AppStorage("verboseCategory.transport") private var verboseTransport = true
+    @AppStorage("verboseCategory.assembler") private var verboseAssembler = true
+    @AppStorage("verboseCategory.parser") private var verboseParser = true
+    @AppStorage("verboseCategory.setup") private var verboseSetup = true
+    @AppStorage("verboseCategory.scanner") private var verboseScanner = true
+    @AppStorage("verboseCategory.discovery") private var verboseDiscovery = true
+    @AppStorage("verboseCategory.persistence") private var verbosePersistence = true
+    @AppStorage("verboseCategory.bluetooth") private var verboseBluetooth = true
+    @AppStorage("verboseCategory.telemetry") private var verboseTelemetry = true
+    @AppStorage("verboseCategory.outcome") private var verboseOutcome = true
+    @AppStorage("verboseCategory.lifecycle") private var verboseLifecycle = true
     
     @ObservedObject private var modeDiscovery = ModeDiscovery.shared
 
@@ -334,14 +347,14 @@ struct SettingsView: View {
                     
                     if enableDebugLogging {
                         Divider()
-                        
+
                         HStack {
                             Text("Debug Level")
                                 .font(.title3)
                                 .foregroundStyle(.secondary)
-                            
+
                             Spacer()
-                            
+
                             Picker("Debug Level", selection: $debugVerbosity) {
                                 Text("Normal")
                                     .tag(DebugVerbosity.normal.rawValue)
@@ -349,6 +362,69 @@ struct SettingsView: View {
                                     .tag(DebugVerbosity.verbose.rawValue)
                             }
                             .pickerStyle(.menu)
+                        }
+
+                        Divider()
+                        // Enable All Categories toggle
+                        Toggle(
+                            "Enable All Categories",
+                            isOn: Binding(
+                                get: {
+                                    verboseCommunication &&
+                                    verboseTransport &&
+                                    verboseAssembler &&
+                                    verboseParser &&
+                                    verboseSetup &&
+                                    verboseScanner &&
+                                    verboseDiscovery &&
+                                    verbosePersistence &&
+                                    verboseBluetooth &&
+                                    verboseTelemetry &&
+                                    verboseOutcome &&
+                                    verboseLifecycle
+                                },
+                                set: { value in
+                                    verboseCommunication = value
+                                    verboseTransport = value
+                                    verboseAssembler = value
+                                    verboseParser = value
+                                    verboseSetup = value
+                                    verboseScanner = value
+                                    verboseDiscovery = value
+                                    verbosePersistence = value
+                                    verboseBluetooth = value
+                                    verboseTelemetry = value
+                                    verboseOutcome = value
+                                    verboseLifecycle = value
+                                }
+                            )
+                        )
+                        // Grouped verbose category toggles
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Communication")
+                                .font(.headline)
+                            Toggle("Communication", isOn: $verboseCommunication)
+                            Toggle("Transport", isOn: $verboseTransport)
+                            Toggle("Bluetooth", isOn: $verboseBluetooth)
+                            Toggle("Assembler", isOn: $verboseAssembler)
+                        }
+                        Divider()
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Processing")
+                                .font(.headline)
+                            Toggle("Parser", isOn: $verboseParser)
+                            Toggle("Outcome", isOn: $verboseOutcome)
+                            Toggle("Telemetry", isOn: $verboseTelemetry)
+                        }
+                        Divider()
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Scanner")
+                                .font(.headline)
+                            Toggle("Setup", isOn: $verboseSetup)
+                            Toggle("Scanner", isOn: $verboseScanner)
+                            Toggle("Discovery", isOn: $verboseDiscovery)
+                            Toggle("Persistence", isOn: $verbosePersistence)
+                            Toggle("Lifecycle", isOn: $verboseLifecycle)
                         }
                     }
                 }

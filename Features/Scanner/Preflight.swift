@@ -101,7 +101,7 @@ final class Preflight {
                 return false
             }
 
-            Logger.shared.info("Header: \(normalizedHeader)")
+            Logger.shared.verbose(.setup, "Header: \(normalizedHeader)")
 
         } catch BluetoothManager.BluetoothError.timeout {
             Logger.shared.error("❌ Header Timeout")
@@ -132,11 +132,14 @@ final class Preflight {
                 let rx = result.response.raw.uppercased()
                 let response = result.response
 
+                Logger.shared.verbose(.discovery, "Probe response type: \(response.type)")
+                Logger.shared.verbose(.communication, "Probe raw response: \(rx)")
+
                 switch response.type {
 
                 case .positive:
                     if attempt > 1 {
-                        Logger.shared.info("Recovered after retry")
+                        Logger.shared.verbose(.telemetry, "Recovered after retry")
                     }
                     Logger.shared.success("✅ ECU Responded")
                     return true
@@ -147,7 +150,7 @@ final class Preflight {
 
                 case .noData:
                     if attempt > 1 {
-                        Logger.shared.info("Recovered after retry")
+                        Logger.shared.verbose(.telemetry, "Recovered after retry")
                     }
                     Logger.shared.warning("⚠️ ECU Reachable (NO DATA)")
                     return true
@@ -166,7 +169,7 @@ final class Preflight {
                     return true
                 }
 
-                Logger.shared.warning("⚠️ ECU responded with unexpected response type: \(response.type)")
+                Logger.shared.verbose(.discovery, "Unexpected response type: \(response.type)")
 
             } catch BluetoothManager.BluetoothError.timeout {
 

@@ -78,7 +78,7 @@ final class LogSessionManager {
     ) async throws {
 
         print("🚀 beginLoggingSessionIfNeeded entered")
-        Logger.shared.verbose("beginLoggingSessionIfNeeded entered")
+        Logger.shared.verbose(.lifecycle, "beginLoggingSessionIfNeeded entered")
         
         guard !isLoggingSessionActive else {
             return

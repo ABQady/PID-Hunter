@@ -26,19 +26,19 @@ final class ELMResponseAssembler {
         if !buffer.isEmpty &&
             now.timeIntervalSince(lastChunkTime) > timeout {
 
-            Logger.shared.verbose("Assembler timeout")
-            Logger.shared.verbose("Discarded buffer (\(buffer.count) bytes)")
-            Logger.shared.verbose(buffer)
+            Logger.shared.verbose(.assembler, "Assembler timeout")
+            Logger.shared.verbose(.assembler, "Discarded buffer (\(buffer.count) bytes)")
+            Logger.shared.verbose(.assembler, buffer)
             buffer.removeAll(keepingCapacity: true)
         }
 
         lastChunkTime = now
         buffer += chunk
-        Logger.shared.verbose("Assembler RX chunk (\(chunk.count) bytes): \(chunk.debugDescription)")
+        Logger.shared.verbose(.assembler, "Assembler RX chunk (\(chunk.count) bytes): \(chunk.debugDescription)")
 
         guard buffer.count <= maxBufferSize else {
-            Logger.shared.verbose("Assembler buffer overflow")
-            Logger.shared.verbose("Discarded buffer (\(buffer.count) bytes)")
+            Logger.shared.verbose(.assembler, "Assembler buffer overflow")
+            Logger.shared.verbose(.assembler, "Discarded buffer (\(buffer.count) bytes)")
             buffer.removeAll(keepingCapacity: true)
             return []
         }
@@ -60,29 +60,29 @@ final class ELMResponseAssembler {
                 continue
             }
 
-            Logger.shared.verbose("Assembler complete response: \(trimmed.debugDescription)")
+            Logger.shared.verbose(.assembler, "Assembler complete response: \(trimmed.debugDescription)")
             let parsed = ELMResponseParser.parse(trimmed)
             let header = parsed.header ?? "-"
             let service = parsed.service.map { String(format: "%02X", $0) } ?? "-"
             let pid = parsed.pid.map { String(format: "%04X", $0) } ?? "-"
             let payload = parsed.payload.map { String(format: "%02X", $0) }.joined(separator: " ")
-            Logger.shared.verbose(
+            Logger.shared.verbose(.assembler,
                 "Assembler parsed → type=\(parsed.type) | header=\(header) | service=\(service) | pid=\(pid) | payload=[\(payload)]"
             )
             switch parsed.type {
             case .unknown:
-                Logger.shared.verbose("Assembler ignored non-ECU text: \(trimmed)")
+                Logger.shared.verbose(.assembler, "Assembler ignored non-ECU text: \(trimmed)")
                 continue
 
             default:
-                Logger.shared.verbose(
+                Logger.shared.verbose(.assembler,
                     "Assembler accepted \(parsed.type): \(trimmed)"
                 )
                 responses.append(parsed)
             }
        }
         if !responses.isEmpty {
-            Logger.shared.debug(
+            Logger.shared.verbose(.assembler,
                 "Assembler completed \(responses.count) response(s)"
             )
         }

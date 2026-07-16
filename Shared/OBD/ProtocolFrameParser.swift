@@ -55,7 +55,7 @@ enum ProtocolFrameParser {
         requestService: UInt8,
         definition: ProtocolDefinition
     ) -> [ProtocolFrame] {
-        Logger.shared.info("🧩 Protocol: header=\(definition.headerLength) identifier=\(definition.identifierLength) sequence=\(definition.hasSequence) checksum=\(definition.hasChecksum)")
+        Logger.shared.verbose(.parser, "🧩 Protocol: header=\(definition.headerLength) identifier=\(definition.identifierLength) sequence=\(definition.hasSequence) checksum=\(definition.hasChecksum)")
         let responseService = definition.responseService(for: requestService)
         let identifierLength = definition.identifierLength(for: requestService)
 
@@ -81,7 +81,7 @@ enum ProtocolFrameParser {
         }
 
         for frame in frames {
-            Logger.shared.info("""
+            Logger.shared.verbose(.parser, """
 🔎 Protocol Frame
 Header     : \(frame.headerHex)
 Service    : \(String(format: "%02X", frame.service))

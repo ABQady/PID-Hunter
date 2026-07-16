@@ -8,9 +8,25 @@ private enum LogLevel {
     case debug
 }
 
+
 enum DebugVerbosity: Int {
     case normal = 1
     case verbose = 2
+}
+
+enum VerboseCategory: String, CaseIterable {
+    case communication
+    case assembler
+    case parser
+    case transport
+    case scanner
+    case discovery
+    case persistence
+    case setup
+    case telemetry
+    case outcome
+    case lifecycle
+    case bluetooth
 }
 
 enum LogStyle {
@@ -52,6 +68,10 @@ actor Logger {
         DebugVerbosity(
             rawValue: UserDefaults.standard.integer(forKey: "debugVerbosity")
         ) ?? .normal
+    }
+
+    private func isVerboseCategoryEnabled(_ category: VerboseCategory) -> Bool {
+        UserDefaults.standard.bool(forKey: "verboseCategory.\(category.rawValue)")
     }
     
     private init() {
@@ -196,6 +216,18 @@ actor Logger {
         )
     }
 
+    func verboseImpl(_ category: VerboseCategory, _ text: String) {
+        guard isVerboseCategoryEnabled(category) else {
+            return
+        }
+        append(
+            "[DEBUG][\(category.rawValue.uppercased())] \(text)",
+            style: .debug,
+            level: .debug,
+            verboseOnly: true
+        )
+    }
+
     @inline(__always)
     nonisolated func console(_ text: String) {
         Task {
@@ -265,9 +297,16 @@ actor Logger {
         }
     }
 
+
     nonisolated func verbose(_ text: String) {
         Task {
             await self.verboseImpl(text)
+        }
+    }
+
+    nonisolated func verbose(_ category: VerboseCategory, _ text: String) {
+        Task {
+            await self.verboseImpl(category, text)
         }
     }
 

@@ -51,8 +51,8 @@ final class DeviceDiscovery: ObservableObject {
         )
 
         for record in discoverySession.successfulRecords {
-
-            Logger.shared.info(
+            Logger.shared.verbose(
+                .discovery,
                 String(
                     format: "Requested=%02X  Responded=%02X",
                     record.requestAddress,
@@ -62,10 +62,9 @@ final class DeviceDiscovery: ObservableObject {
         }
         
         if !discoverySession.successfulRecords.isEmpty {
-
             BikeProfileManager.shared.updateDeviceDiscoveries(discoverySession.successfulRecords)
-
-            Logger.shared.info(
+            Logger.shared.verbose(
+                .persistence,
                 "💾 Persisted \(discoverySession.successfulRecords.count) device discoveries."
             )
         }
@@ -88,7 +87,7 @@ final class DeviceDiscovery: ObservableObject {
         Logger.shared.info("────────────")
         Logger.shared.info("🔎 Starting device discovery")
 
-        Logger.shared.info("🔧 Initializing ELM for discovery session...")
+        Logger.shared.verbose(.setup, "🔧 Initializing ELM for discovery session...")
         await elm.initializeELM()
 
         for address in UInt8.min...UInt8.max {
@@ -103,17 +102,14 @@ final class DeviceDiscovery: ObservableObject {
     
 
     private func probe(_ address: UInt8) async {
-
-        Logger.shared.info(
+        Logger.shared.verbose(
+            .discovery,
             String(format: "🔎 Probing %02X...", address)
         )
 
         do {
-
             let command = discoveryCommand(for: address)
-
-            Logger.shared.verbose("📤 \(command)")
-
+            Logger.shared.verbose(.communication, "📤 \(command)")
             let result = try await elm.request(command: command)
 
             let response = result.response
@@ -219,8 +215,8 @@ final class DeviceDiscovery: ObservableObject {
 
 
     private func handleFailure(_ address: UInt8) {
-
         Logger.shared.verbose(
+            .discovery,
             String(format: "❌ %02X Unsupported", address)
         )
     }

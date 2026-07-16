@@ -56,7 +56,7 @@ final class BikeProfileManager {
 
         let analytics = BikeAnalytics(profile: profile)
 
-        Logger.shared.info("""
+        Logger.shared.verbose(.discovery, """
         📊 Context
         Profile UUID : \(profile.id)
         Discoveries  : \(profile.discoveries.count)
@@ -313,7 +313,7 @@ final class BikeProfileManager {
 
         let requestKey = "\(header) | \(mode.rawValue) | \(request)"
 
-        Logger.shared.info("""
+        Logger.shared.verbose(.persistence, """
 📝 Record Request
 Request Key  : \(requestKey)
 Response HDR : \(response.header ?? "-")
@@ -322,7 +322,7 @@ Source       : \(source)
 Before Count : \(profile.discoveries.count)
 """)
 
-        Logger.shared.info("""
+        Logger.shared.verbose(.persistence, """
 🔍 Persistence Decision
 Request Header : \(header)
 Response Header: \(response.header ?? "-")
@@ -335,13 +335,13 @@ Lookup Key     : \(requestKey)
             mode: mode,
             request: request
         ) {
-            Logger.shared.info("♻️ Updating discovery: \(requestKey)")
+            Logger.shared.verbose(.persistence, "♻️ Updating discovery: \(requestKey)")
             profile.discoveries[index].record(
                 response: response.raw,
                 responseType: response.type,
                 latency: latency
             )
-            Logger.shared.info("📄 Existing classification: \(profile.discoveries[index].classification)")
+            Logger.shared.verbose(.persistence, "📄 Existing classification: \(profile.discoveries[index].classification)")
             profile.discoveries[index].source = resolvedSource(
                 current: profile.discoveries[index].source,
                 incoming: source
@@ -349,7 +349,7 @@ Lookup Key     : \(requestKey)
             profile.discoveries[index].hadPartialResponse =
                 profile.discoveries[index].hadPartialResponse || hadPartialResponse
         } else {
-            Logger.shared.info("➕ Adding discovery: \(requestKey)")
+            Logger.shared.verbose(.persistence, "➕ Adding discovery: \(requestKey)")
             profile.discoveries.append(
                 DiscoveryRecord(
                     header: header,
@@ -367,14 +367,14 @@ Lookup Key     : \(requestKey)
                 )
             )
             if let added = profile.discoveries.last {
-                Logger.shared.info("📄 Stored classification: \(added.classification)")
+                Logger.shared.verbose(.persistence, "📄 Stored classification: \(added.classification)")
             }
-            Logger.shared.info("📈 Discovery count after append: \(profile.discoveries.count)")
+            Logger.shared.verbose(.persistence, "📈 Discovery count after append: \(profile.discoveries.count)")
         }
 
         let discoveryCount = profile.discoveries.count
         profile.touch()
-        Logger.shared.info("""
+        Logger.shared.verbose(.persistence, """
 💾 Committing Bike Profile
 Discoveries : \(discoveryCount)
 Dirty        : true

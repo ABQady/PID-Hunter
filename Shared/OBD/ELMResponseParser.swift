@@ -106,7 +106,7 @@ enum ELMResponseParser {
         
         if tokens.isEmpty {
             if upper.contains("OK") || upper.contains("ELM") || upper.hasPrefix("AT") {
-                Logger.shared.verbose("Parser → atResponse (empty token fallback)")
+                Logger.shared.verbose(.parser, "Parser → atResponse (empty token fallback)")
                 return ELMResponse(
                     raw: text,
                     type: .atResponse,
@@ -189,7 +189,7 @@ enum ELMResponseParser {
         // Deterministic parsing based on the first protocol byte
         guard let firstToken = tokens.first else {
             if upper.contains("OK") || upper.contains("ELM") || upper.hasPrefix("AT") {
-                Logger.shared.verbose("Parser → atResponse (empty token fallback)")
+                Logger.shared.verbose(.parser, "Parser → atResponse (empty token fallback)")
                 return ELMResponse(
                     raw: text,
                     type: .atResponse,
@@ -215,7 +215,7 @@ enum ELMResponseParser {
                 return ELMResponse(raw: text, type: .unknown, header: header, pid: nil, payload: [])
             }
 
-            Logger.shared.verbose(
+            Logger.shared.verbose(.parser,
                 "Parser → negative | Header=\(header ?? "-") | Service=\(String(format: "%02X", requestedService))"
             )
 
@@ -258,7 +258,7 @@ enum ELMResponseParser {
                 type = .unknown
             }
 
-            Logger.shared.verbose("Parser → \(type) | Header=\(header ?? "-") | Service=\(service.map { String(format: "%02X", $0) } ?? "-") | PID=\(pid.map { String(format: "%04X", $0) } ?? "-")")
+            Logger.shared.verbose(.parser, "Parser → \(type) | Header=\(header ?? "-") | Service=\(service.map { String(format: "%02X", $0) } ?? "-") | PID=\(pid.map { String(format: "%04X", $0) } ?? "-")")
             return ELMResponse(
                 raw: text,
                 type: type,
@@ -289,7 +289,7 @@ enum ELMResponseParser {
             }
         }
 
-        Logger.shared.info("""
+        Logger.shared.verbose(.parser, """
 🔎 Parsed Response
 Service : \(String(format: "%02X", requestService))
 PID Len : \(pidLength)
@@ -309,18 +309,18 @@ PID     : \(pid.map { String(format: "%04X", $0) } ?? "-")
             definition: definition
         )
 
-        Logger.shared.info("🔎 Parsed \(frames.count) response frame(s)")
+        Logger.shared.verbose(.parser, "🔎 Parsed \(frames.count) response frame(s)")
 
         payload = ProtocolFrameParser.assemblePayload(
             from: frames,
             identifier: identifier
         )
 
-        Logger.shared.info(
+        Logger.shared.verbose(.parser,
             "🔎 Parsed Payload: \(payload.map { String(format: "%02X", $0) }.joined(separator: " "))"
         )
 
-        Logger.shared.verbose(
+        Logger.shared.verbose(.parser,
             "Parser → \(type) | Header=\(header ?? "-") | Service=\(service.map { String(format: "%02X", $0) } ?? "-") | PID=\(pid.map { String(format: "%04X", $0) } ?? "-")"
         )
 
@@ -366,7 +366,7 @@ extension ELMResponse {
 
     @inline(__always)
     private func asciiPayload() -> String? {
-        Logger.shared.info("""
+        Logger.shared.verbose(.parser, """
 🔎 ASCII Payload
 Service : \(service.map { String(format: "%02X", $0) } ?? "-")
 PID     : \(pid.map { String(format: "%04X", $0) } ?? "-")
@@ -382,7 +382,7 @@ Payload : \(payload.map { String(format: "%02X", $0) }.joined(separator: " "))
         let decoded = String(bytes: printable, encoding: .ascii)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        Logger.shared.info("🔎 ASCII Decoded: \(decoded ?? "nil")")
+        Logger.shared.verbose(.parser, "🔎 ASCII Decoded: \(decoded ?? "nil")")
 
         return decoded
     }
