@@ -81,6 +81,26 @@ final class ELM327: ObservableObject {
         }
     }
 
+    func send(
+        _ command: String,
+        timeout: Duration = .seconds(1)
+    ) async throws -> ELMRequestResult {
+
+        let normalized = normalize(command)
+
+        Logger.shared.verbose(.communication, "TX(wait) -> \(normalized)")
+
+        let result = try await BluetoothManager.shared.sendAndWait(
+            normalized,
+            timeout: timeout
+        )
+
+        return ELMRequestResult(
+            response: result.response,
+            latency: result.latency
+        )
+    }
+
     // MARK: - Header
     @discardableResult
     func setHeader(

@@ -15,6 +15,7 @@ struct StatusCard: View {
     let onRestartECU: () -> Void
 
     @State private var showRestartConfirmation = false
+    @State private var showELMView = false
 
     var body: some View {
         HStack {
@@ -92,5 +93,12 @@ struct StatusCard: View {
         .padding()
         .background(.thinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 18))
+        .contentShape(RoundedRectangle(cornerRadius: 18))
+        .onTapGesture {
+            showELMView = true
+        }
+        .sheet(isPresented: $showELMView) {
+            ELMView(profile: .empty)
+        }
     }
 }
