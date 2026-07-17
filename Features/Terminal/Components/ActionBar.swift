@@ -6,6 +6,16 @@
 //
 import SwiftUI
 
+private struct ActionBarButtonStyle: PrimitiveButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Button(action: configuration.trigger) {
+            configuration.label
+                .frame(width: 32, height: 32)
+        }
+        .buttonStyle(.bordered)
+    }
+}
+
 struct ActionBar: View {
 
     let isConnected: Bool
@@ -73,7 +83,7 @@ struct ActionBar: View {
                     Label("Clear",
                           systemImage: "trash")
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(ActionBarButtonStyle())
                 .disabled(!hasLines)
                 Spacer()
                 // A new scan always starts a brand-new scan session.
@@ -96,7 +106,7 @@ struct ActionBar: View {
                             : "dot.radiowaves.up.forward"
                     )
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(ActionBarButtonStyle())
                 .disabled(!isConnected || isScanning)
                 .confirmationDialog(
                     "Start a new scan from the beginning?",
@@ -118,7 +128,7 @@ struct ActionBar: View {
                 } label: {
                     Label("Stop",systemImage:"stop.fill")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(ActionBarButtonStyle())
                 .disabled(!isScanning)
                 
                 Spacer()
@@ -128,18 +138,19 @@ struct ActionBar: View {
                 } label: {
                     Label("Discover Modes", systemImage: "dot.scope")
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(ActionBarButtonStyle())
 
                 Button {
                     onDiscoverDevices()
                 } label: {
                     Label("Discover Devices", systemImage: "point.3.connected.trianglepath.dotted")
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(ActionBarButtonStyle())
             }
             .controlSize(
                 isCompact ? .small : .regular
             )
+            .buttonBorderShape(.capsule)
             .if(isCompact) {
                 $0.labelStyle(.iconOnly)
             }

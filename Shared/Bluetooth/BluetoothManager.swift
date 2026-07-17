@@ -601,12 +601,7 @@ extension BluetoothManager:
     // MARK: - didUpdateValueFor helpers
     private static let ecuFramePrefixes: Set<String> = ["41", "61", "62", "7F"]
 
-    private func updateECUInfo(from response: ELMResponse) {
-        let upper = response.raw.uppercased()
-
-        if let header = response.header, !header.isEmpty {
-            ECUInfo.shared.header = header
-        }
+    private func updateECUInfo(from response: ELMResponse) {        let upper = response.raw.uppercased()
 
         if upper.hasPrefix("ELM") {
             ECUInfo.shared.elmVersion = response.raw

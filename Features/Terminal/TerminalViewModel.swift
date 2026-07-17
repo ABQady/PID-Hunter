@@ -23,6 +23,9 @@ final class TerminalViewModel {
         refreshTask = Task { @MainActor in
             for await snapshot in Logger.shared.stream() {
                 guard !Task.isCancelled else { break }
+                guard snapshot != lines else {
+                    continue
+                }
                 withMutation(keyPath: \.lines) {
                     lines = snapshot
                 }

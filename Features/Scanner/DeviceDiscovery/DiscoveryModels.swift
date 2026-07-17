@@ -9,7 +9,7 @@
 import Foundation
 
 struct DeviceDiscoveryRecord: Codable, Equatable, Identifiable, Hashable {
-    let id = UUID()
+    var id = UUID()
 
     let requestAddress: UInt8
 

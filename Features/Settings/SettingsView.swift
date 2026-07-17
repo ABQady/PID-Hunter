@@ -364,67 +364,69 @@ struct SettingsView: View {
                             .pickerStyle(.menu)
                         }
 
-                        Divider()
-                        // Enable All Categories toggle
-                        Toggle(
-                            "Enable All Categories",
-                            isOn: Binding(
-                                get: {
-                                    verboseCommunication &&
-                                    verboseTransport &&
-                                    verboseAssembler &&
-                                    verboseParser &&
-                                    verboseSetup &&
-                                    verboseScanner &&
-                                    verboseDiscovery &&
-                                    verbosePersistence &&
-                                    verboseBluetooth &&
-                                    verboseTelemetry &&
-                                    verboseOutcome &&
-                                    verboseLifecycle
-                                },
-                                set: { value in
-                                    verboseCommunication = value
-                                    verboseTransport = value
-                                    verboseAssembler = value
-                                    verboseParser = value
-                                    verboseSetup = value
-                                    verboseScanner = value
-                                    verboseDiscovery = value
-                                    verbosePersistence = value
-                                    verboseBluetooth = value
-                                    verboseTelemetry = value
-                                    verboseOutcome = value
-                                    verboseLifecycle = value
-                                }
+                        if debugVerbosity == DebugVerbosity.verbose.rawValue {
+                            Divider()
+                            // Enable All Categories toggle
+                            Toggle(
+                                "Enable All Categories",
+                                isOn: Binding(
+                                    get: {
+                                        verboseCommunication &&
+                                        verboseTransport &&
+                                        verboseAssembler &&
+                                        verboseParser &&
+                                        verboseSetup &&
+                                        verboseScanner &&
+                                        verboseDiscovery &&
+                                        verbosePersistence &&
+                                        verboseBluetooth &&
+                                        verboseTelemetry &&
+                                        verboseOutcome &&
+                                        verboseLifecycle
+                                    },
+                                    set: { value in
+                                        verboseCommunication = value
+                                        verboseTransport = value
+                                        verboseAssembler = value
+                                        verboseParser = value
+                                        verboseSetup = value
+                                        verboseScanner = value
+                                        verboseDiscovery = value
+                                        verbosePersistence = value
+                                        verboseBluetooth = value
+                                        verboseTelemetry = value
+                                        verboseOutcome = value
+                                        verboseLifecycle = value
+                                    }
+                                )
                             )
-                        )
-                        // Grouped verbose category toggles
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Communication")
-                                .font(.headline)
-                            Toggle("Communication", isOn: $verboseCommunication)
-                            Toggle("Transport", isOn: $verboseTransport)
-                            Toggle("Bluetooth", isOn: $verboseBluetooth)
-                            Toggle("Assembler", isOn: $verboseAssembler)
-                        }
-                        Divider()
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Processing")
-                                .font(.headline)
-                            Toggle("Parser", isOn: $verboseParser)
-                            Toggle("Outcome", isOn: $verboseOutcome)
-                            Toggle("Telemetry", isOn: $verboseTelemetry)
-                        }
-                        Divider()
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Scanner")
-                                .font(.headline)
-                            Toggle("Setup", isOn: $verboseSetup)
-                            Toggle("Scanner", isOn: $verboseScanner)
-                            Toggle("Discovery", isOn: $verboseDiscovery)
-                            Toggle("Persistence", isOn: $verbosePersistence)
-                            Toggle("Lifecycle", isOn: $verboseLifecycle)
+                            // Grouped verbose category toggles
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Communication")
+                                    .font(.headline)
+                                Toggle("Communication", isOn: $verboseCommunication)
+                                Toggle("Transport", isOn: $verboseTransport)
+                                Toggle("Bluetooth", isOn: $verboseBluetooth)
+                                Toggle("Assembler", isOn: $verboseAssembler)
+                            }
+                            Divider()
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Processing")
+                                    .font(.headline)
+                                Toggle("Parser", isOn: $verboseParser)
+                                Toggle("Outcome", isOn: $verboseOutcome)
+                                Toggle("Telemetry", isOn: $verboseTelemetry)
+                            }
+                            Divider()
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Scanner")
+                                    .font(.headline)
+                                Toggle("Setup", isOn: $verboseSetup)
+                                Toggle("Scanner", isOn: $verboseScanner)
+                                Toggle("Discovery", isOn: $verboseDiscovery)
+                                Toggle("Persistence", isOn: $verbosePersistence)
+                                Toggle("Lifecycle", isOn: $verboseLifecycle)
+                            }
                         }
                     }
                 }

@@ -118,6 +118,7 @@ final class ELM327: ObservableObject {
         Logger.shared.verbose(.setup, String(format: "Header switch completed in %.1f ms", result.latency * 1000))
 
         currentHeader = normalized
+        ECUInfo.shared.header = normalized
         Logger.shared.info("Header -> \(normalized)")
 
         return ELMRequestResult(

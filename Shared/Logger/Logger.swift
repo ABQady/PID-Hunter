@@ -39,7 +39,7 @@ enum LogStyle {
     case debug
 }
 
-struct LogLine: Identifiable {
+struct LogLine: Identifiable, Equatable {
     let id: Int64
     let text: String
     let style: LogStyle
