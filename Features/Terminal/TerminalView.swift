@@ -9,11 +9,11 @@ import SwiftUI
 struct TerminalView: View {
     @ObservedObject private var bt = BluetoothManager.shared
     @ObservedObject private var brute = BruteForceScanner.shared
-    @ObservedObject private var stats = ScanStatistics.shared
+    @ObservedObject private var progressStatistics = ProgressStatistics.shared
     @Bindable var viewModel: TerminalViewModel
-    @State private var programmaticScroll = false
+
     @State private var search = ""
-    @State private var shouldAutoScroll = true
+    @State private var jumpToLive: (() -> Void)?
     @State private var showDisconnectConfirmation = false
     @Binding var selectedMode: OBDMode
     @Binding var header: String
@@ -22,7 +22,11 @@ struct TerminalView: View {
     @State private var manualCommand = ""
     @FocusState private var commandFieldFocused: Bool
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     private var isCompact: Bool { horizontalSizeClass == .compact }
+    private var useOuterScrollView: Bool {
+        horizontalSizeClass == .compact && verticalSizeClass == .compact
+    }
     
     @inline(__always)
     private var compactStatusTitle: String {
@@ -61,166 +65,123 @@ struct TerminalView: View {
         _endPID = endPID
     }
     
-    private func jumpToLive(proxy: ScrollViewProxy) {
-        guard let last = viewModel.lines.last else { return }
-
-        shouldAutoScroll = true
-        programmaticScroll = true
-
-        withAnimation(nil) {
-            proxy.scrollTo(last.id, anchor: .bottom)
-        }
-
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(100))
-            programmaticScroll = false
-        }
-    }
-    
     private func launchScan() {
         ScanLauncher.shared.start(
             bt: bt,
             brute: brute,
-            stats: stats,
             mode: selectedMode,
             startPID: startPID,
             endPID: endPID,
             cleanHeader: cleanHeader,
-            onPrepareUI: {
-                shouldAutoScroll = true
-                programmaticScroll = true
-            }
+            onPrepareUI: {}
         )
-        
-        shouldAutoScroll = true
-        programmaticScroll = true
-
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(100))
-            programmaticScroll = false
-        }
     }
     
-    private var terminalTab: some View {
-        ScrollView(.vertical, showsIndicators: true) {
-                VStack(spacing: 18) {
-                    //MARK: Status Card
-                    StatusCard(
-                        bt: bt,
-                        selectedMode: selectedMode,
-                        header: header,
-                        showDisconnectConfirmation: $showDisconnectConfirmation,
-                        isCompact: isCompact
-                    )
-                    
-                    
-                    ProgressCard(
-                        stats: stats,
-                        successRate: brute.statistics.successRate,
-                        averageLatency: brute.statistics.averageLatency,
-                        isScanning: brute.scanStatus.isScanning,
-                        isCompleted: stats.finishedAt != nil,
-                        hasResumePoint: brute.hasResumePoint,
-                        currentMode: selectedMode
-                    )
-                    
-                    ActionBar(
-                        isConnected: bt.isConnected,
-                        isScanning: brute.scanStatus.isScanning,
-                        hasResumePoint: brute.hasResumePoint,
-                        hasLines: !viewModel.lines.isEmpty,
-                        isCompact: isCompact,
-                        onClear: {
-                            bt.resetTrafficCounters()
-                            viewModel.clear()
-                        },
-                        onScan: {
-                            bt.resetTrafficCounters()
-                            launchScan()
-                        },
-                        onStop: {
-                            brute.stop()
-                        },
-                        onResume: {
-                            launchScan()
-                        },
-                        onTestECU: {
-                            Task {
-                                await ECUTester.shared.run(header: cleanHeader)
-                            }
-                        },
-                        onDiscoverModes: {
-                            Task {
-                                await ModeDiscovery.shared.discover()
-                            }
+    private var terminalContent: some View {
+        VStack(spacing: isCompact ? 12 : 16) {
+                //MARK: Status Card
+                StatusCard(
+                    bt: bt,
+                    selectedMode: selectedMode,
+                    header: header,
+                    showDisconnectConfirmation: $showDisconnectConfirmation,
+                    isCompact: isCompact,
+                    onRestartECU: {
+                        Task {
+                            await ECUReset.shared.reset()
                         }
-                    )
-                    
-                    VStack(alignment: .leading, spacing: 8) {
-                        ScrollViewReader { proxy in
-                            VStack(spacing: 8) {
-                                TerminalHeader(
-                                    title: "Terminal",
-                                    status: isCompact ? compactStatusTitle : bt.status.title,
-                                    found: brute.scanStatus.successCount,
-                                    successRate: brute.statistics.successRate,
-                                    averageLatency: brute.statistics.averageLatency,
-                                    txCount: bt.txCount,
-                                    rxCount: bt.rxCount,
-                                    isCompact: isCompact,
-                                    onJumpToLive: {
-                                        jumpToLive(proxy: proxy)
-                                    }
-                                )
-                                
-                                TerminalLog(
-                                    lines: viewModel.lines,
-                                    isCompact: isCompact
-                                )
-                                .simultaneousGesture(
-                                    DragGesture()
-                                        .onChanged { _ in
-                                            shouldAutoScroll = false
-                                        }
-                                )
-                                .onScrollPhaseChange { _, phase in
-                                    guard !programmaticScroll else { return }
-
-                                    if phase == .interacting {
-                                        shouldAutoScroll = false
-                                    }
-                                }
-                                
-                                
-                            }
-                                .onChange(of: viewModel.lines.count) { _, _ in
-                                    guard shouldAutoScroll,
-                                          let last = viewModel.lines.last else {
-                                        return
-                                    }
-                                    Task { @MainActor in
-                                        withAnimation(nil) {
-                                            proxy.scrollTo(last.id, anchor: .bottom)
-                                        }
-                                    }
-                                }
-                        }
-                        ManualCommandBar(
-                            manualCommand: $manualCommand,
-                            commandFieldFocused: $commandFieldFocused,
-                            send: {
-                                ManualCommandSender.shared.send(
-                                    bluetoothManager: bt,
-                                    manualCommand: &manualCommand
-                                )
-                            }
-                        )
                     }
+                )
+                
+                ProgressCard(
+                    successRate: brute.statistics.successRate,
+                    averageLatency: brute.statistics.averageLatency,
+                    isScanning: brute.scanStatus.isScanning,
+                    isCompleted: progressStatistics.finishedAt != nil,
+                    hasResumePoint: brute.hasResumePoint,
+                    currentMode: selectedMode
+                )
+                
+                ActionBar(
+                    isConnected: bt.isConnected,
+                    isScanning: brute.scanStatus.isScanning,
+                    resumeMetadata:
+                        ScanPersistence.shared.hasResumePoint
+                            ? ScanPersistence.shared.loadResumeMetadata()
+                            : nil,
+                    hasLines: !viewModel.lines.isEmpty,
+                    isCompact: isCompact,
+                    onClear: {
+                        bt.resetTrafficCounters()
+                        viewModel.clear()
+                    },
+                    onScan: {
+                        bt.resetTrafficCounters()
+                        launchScan()
+                    },
+                    onStop: {
+                        brute.stop()
+                    },
+                    onResume: {
+                        launchScan()
+                    },
+                    onTestECU: {
+                        Task {
+                            await ECUReset.shared.reset()
+                        }
+                    },
+                    onDiscoverModes: {
+                        Task {
+                            await ModeDiscovery.shared.discover()
+                        }
+                    },
+                    onDiscoverDevices: {
+                        Task {
+                            await DeviceDiscovery.shared.discover()
+                        }
+                    }
+                )
+                
+                VStack(alignment: .leading) {
+                        VStack{
+                            TerminalHeader(
+                                title: "Terminal",
+                                status: isCompact ? compactStatusTitle : bt.status.title,
+                                found: brute.scanStatus.successCount,
+                                successRate: brute.statistics.successRate,
+                                averageLatency: brute.statistics.averageLatency,
+                                txCount: bt.txCount,
+                                rxCount: bt.rxCount,
+                                isCompact: isCompact,
+                                onJumpToLive: {
+                                    jumpToLive?()
+                                }
+                            )
+                            
+                            TerminalLog(
+                                lines: viewModel.lines,
+                                isCompact: isCompact,
+                                registerJumpHandler: { handler in
+                                    jumpToLive = handler
+                                }
+                            )
+                        }
+                    
+                    ManualCommandBar(
+                        manualCommand: $manualCommand,
+                        commandFieldFocused: $commandFieldFocused,
+                        send: {
+                            ManualCommandSender.shared.send(
+                                bluetoothManager: bt,
+                                manualCommand: &manualCommand
+                            )
+                        }
+                    )
                 }
-                .frame(maxWidth: .infinity,
-                       alignment: .top)
-                .layoutPriority(1)
             }
+            .frame(maxWidth: .infinity,
+                   alignment: .top)
+            .layoutPriority(1)
             .scrollDismissesKeyboard(.interactively)
             .frame(maxWidth: .infinity, alignment: .top)
             .padding()
@@ -230,8 +191,19 @@ struct TerminalView: View {
                     commandFieldFocused = false
                 }
             )
-        }
+    }
     
+    private var terminalTab: some View {
+        Group {
+            if useOuterScrollView {
+                ScrollView(.vertical, showsIndicators: true) {
+                    terminalContent
+                }
+            } else {
+                terminalContent
+            }
+        }
+    }
     
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

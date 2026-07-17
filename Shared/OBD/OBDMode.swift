@@ -6,12 +6,6 @@
 
 import Foundation
 
-enum RequestFormat {
-    case pid8
-    case pid16
-    case singleCommand
-    case infoSequence
-}
 
 /// ScanCapability describes the request format used for a given OBD mode.
 enum ScanCapability {
@@ -36,7 +30,7 @@ enum ScanStrategyType {
     case infoType
 }
 
-enum OBDMode: String, CaseIterable, Identifiable {
+enum OBDMode: String, CaseIterable, Identifiable, Codable {
 
     case mode01 = "01"
     case mode02 = "02"
@@ -107,7 +101,10 @@ enum OBDMode: String, CaseIterable, Identifiable {
         case .mode01:
             return .pid8
 
-        case .mode21, .mode22, .mode23:
+        case .mode21:
+            return .pid8
+
+        case .mode22, .mode23:
             return .pid16
 
         case .mode09:
@@ -147,18 +144,6 @@ enum OBDMode: String, CaseIterable, Identifiable {
         }
     }
 
-    var requestFormat: RequestFormat {
-        switch scanCapability {
-        case .pid8:
-            return .pid8
-        case .pid16:
-            return .pid16
-        case .fixedCommand:
-            return .singleCommand
-        case .infoType:
-            return .infoSequence
-        }
-    }
 
     var pidRange: ClosedRange<Int>? {
         switch scanCapability {
@@ -185,6 +170,44 @@ enum OBDMode: String, CaseIterable, Identifiable {
         default:
             return requestService &+ 0x40
         }
+    }
+    
+    @inline(__always)
+    var positiveResponsePrefix: String {
+        String(format: "%02X", responseService)
+    }
+
+    @inline(__always)
+    var identifierLength: Int {
+        scanCapability.pidWidth
+    }
+
+    func payload(from response: String, request: String) -> String {
+        let cleanedResponse = response.replacingOccurrences(of: " ", with: "")
+        let cleanedRequest = request.replacingOccurrences(of: " ", with: "")
+
+        guard !cleanedResponse.isEmpty else {
+            return "—"
+        }
+
+        guard cleanedRequest.count >= 2 + identifierLength else {
+            return cleanedResponse
+        }
+
+        let identifier = String(
+            cleanedRequest
+                .dropFirst(2)
+                .prefix(identifierLength)
+        )
+
+        let expectedPrefix = positiveResponsePrefix + identifier
+
+        guard cleanedResponse.hasPrefix(expectedPrefix) else {
+            return cleanedResponse
+        }
+
+        let payloadHex = String(cleanedResponse.dropFirst(expectedPrefix.count))
+        return payloadHex.isEmpty ? "—" : payloadHex
     }
     
     @inline(__always)
@@ -220,8 +243,10 @@ enum OBDMode: String, CaseIterable, Identifiable {
              .mode09:
             return rawValue + "00"
 
-        case .mode21,
-             .mode22,
+        case .mode21:
+            return rawValue + "00"
+
+        case .mode22,
              .mode23:
             return rawValue + "0000"
 
@@ -234,14 +259,14 @@ enum OBDMode: String, CaseIterable, Identifiable {
     }
 
     var runtimeRequests: [String] {
-        switch requestFormat {
+        switch scanCapability {
         case .pid8, .pid16:
             return [discoveryCommand]
 
-        case .singleCommand:
+        case .fixedCommand:
             return [rawValue]
 
-        case .infoSequence:
+        case .infoType:
             return [
                 rawValue + "00",
                 rawValue + "02",

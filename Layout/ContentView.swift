@@ -54,6 +54,7 @@ struct ContentView: View {
             }
 
         }
+        .environment(BikeProfileManager.shared)
         .onAppear {
             applyModeDefaults(selectedMode)
         }

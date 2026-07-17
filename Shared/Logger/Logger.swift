@@ -8,9 +8,25 @@ private enum LogLevel {
     case debug
 }
 
+
 enum DebugVerbosity: Int {
     case normal = 1
     case verbose = 2
+}
+
+enum VerboseCategory: String, CaseIterable {
+    case communication
+    case assembler
+    case parser
+    case transport
+    case scanner
+    case discovery
+    case persistence
+    case setup
+    case telemetry
+    case outcome
+    case lifecycle
+    case bluetooth
 }
 
 enum LogStyle {
@@ -23,7 +39,7 @@ enum LogStyle {
     case debug
 }
 
-struct LogLine: Identifiable {
+struct LogLine: Identifiable, Equatable {
     let id: Int64
     let text: String
     let style: LogStyle
@@ -34,9 +50,9 @@ actor Logger {
     private var nextID: Int64 = 0
 
     private var lines: [LogLine] = []
+    private let sink = BufferedFileSink()
     private static let trimChunk = 256
     private let maxLines = 5000
-    private static let logFilename = "rawTraffic.log"
 
     private let timestampFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -53,6 +69,10 @@ actor Logger {
             rawValue: UserDefaults.standard.integer(forKey: "debugVerbosity")
         ) ?? .normal
     }
+
+    private func isVerboseCategoryEnabled(_ category: VerboseCategory) -> Bool {
+        UserDefaults.standard.bool(forKey: "verboseCategory.\(category.rawValue)")
+    }
     
     private init() {
         lines.reserveCapacity(maxLines)
@@ -60,13 +80,23 @@ actor Logger {
 
     private var continuations: [AsyncStream<[LogLine]>.Continuation] = []
 
-    func stream() -> AsyncStream<[LogLine]> {
+    private func registerContinuation(
+        _ continuation: AsyncStream<[LogLine]>.Continuation
+    ) {
+        continuations.append(continuation)
+        continuation.yield(lines)
+    }
+
+    nonisolated func stream() -> AsyncStream<[LogLine]> {
         AsyncStream { continuation in
-            continuations.append(continuation)
-            continuation.yield(lines)
+            Task {
+                await self.registerContinuation(continuation)
+            }
+
             continuation.onTermination = { [weak self] _ in
+                guard let self else { return }
                 Task {
-                    await self?.removeContinuation(continuation)
+                    await self.removeContinuation(continuation)
                 }
             }
         }
@@ -124,12 +154,14 @@ actor Logger {
         }
         if text.isEmpty { return }
         let timestamp = timestampFormatter.string(from: .now)
-        console(text)
+        print(text)
         let line = makeLogLine(
             text: "\(timestamp) \(text)",
             style: style
         )
-
+        // Journal persistence is independent from the in-memory terminal.
+        // Terminal rendering must continue to work even if log persistence changes.
+        sink.write(line.text)
         lines.append(line)
         let overflow = lines.count - maxLines
         if overflow > 0 {
@@ -184,9 +216,23 @@ actor Logger {
         )
     }
 
+    func verboseImpl(_ category: VerboseCategory, _ text: String) {
+        guard isVerboseCategoryEnabled(category) else {
+            return
+        }
+        append(
+            "[DEBUG][\(category.rawValue.uppercased())] \(text)",
+            style: .debug,
+            level: .debug,
+            verboseOnly: true
+        )
+    }
+
     @inline(__always)
     nonisolated func console(_ text: String) {
-        print(text)
+        Task {
+            await self.infoImpl(text)
+        }
     }
 
     // MARK: - Maintenance
@@ -200,22 +246,42 @@ actor Logger {
         lines.removeAll(keepingCapacity: true)
         publish()
     }
-    func saveLog() throws -> URL {
-        let filename = Self.logFilename
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
-        var output = String()
-        output.reserveCapacity(lines.count * 48)
-        for line in lines {
-            output.append(line.text)
-            output.append("\n")
+    func exportCurrentLog() throws -> URL {
+        if let sourceURL = sink.currentFileURL {
+            // Active journal file exists; flush and export it.
+            sink.flush()
+            // Create a unique export file in the temp directory
+            let exportURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent(
+                    sourceURL.deletingPathExtension().lastPathComponent
+                    + "-Export-\(UUID().uuidString).log"
+                )
+            if FileManager.default.fileExists(atPath: exportURL.path) {
+                try FileManager.default.removeItem(at: exportURL)
+            }
+            try FileManager.default.copyItem(at: sourceURL, to: exportURL)
+            return exportURL
+        } else {
+            // No journal file; export the in-memory terminal contents.
+            let exportURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent("Terminal-\(UUID().uuidString).log")
+            let contents = lines.map(\.text).joined(separator: "\n")
+            try contents.write(to: exportURL, atomically: true, encoding: .utf8)
+            return exportURL
         }
-        try output.write(to: url, atomically: true, encoding: .utf8)
-        return url
+    }
+    
+     func startSessionImpl(fileURL: URL) throws {
+        try sink.startSession(fileURL: fileURL)
+    }
+
+     func finishSessionImpl() {
+        sink.finish()
     }
     
     nonisolated func error(_ text: String) {
         Task {
-            await self.errorImpl(text)
+             await self.errorImpl(text)
         }
     }
 
@@ -231,9 +297,16 @@ actor Logger {
         }
     }
 
+
     nonisolated func verbose(_ text: String) {
         Task {
             await self.verboseImpl(text)
+        }
+    }
+
+    nonisolated func verbose(_ category: VerboseCategory, _ text: String) {
+        Task {
+            await self.verboseImpl(category, text)
         }
     }
 

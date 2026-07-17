@@ -21,8 +21,11 @@ final class TerminalViewModel {
     func start() {
         guard refreshTask == nil else { return }
         refreshTask = Task { @MainActor in
-            for await snapshot in await Logger.shared.stream() {
+            for await snapshot in Logger.shared.stream() {
                 guard !Task.isCancelled else { break }
+                guard snapshot != lines else {
+                    continue
+                }
                 withMutation(keyPath: \.lines) {
                     lines = snapshot
                 }

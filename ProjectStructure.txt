@@ -20,14 +20,14 @@
 │                   └── xcschememanagement.plist
 ├── Assets.xcassets
 │   ├── AppIcon.appiconset
-│   │   ├── AppIcon1024x1024.png
-│   │   └── Contents.json
+│   │   ├── Contents.json
+│   │   └── NewIcon.png
 │   ├── Contents.json
 │   ├── Image.imageset
 │   │   ├── Contents.json
-│   │   ├── Image.png
-│   │   ├── Image@2x.png
-│   │   └── Image@3x.png
+│   │   ├── NewIcon 1.png
+│   │   ├── NewIcon 2.png
+│   │   └── NewIcon.png
 │   ├── PIDHunterSplash.imageset
 │   │   ├── Contents.json
 │   │   ├── PIDHunterSplashScreen 1.png
@@ -47,26 +47,48 @@
 │   ├── Search Engine Blueprint.png
 │   └── Threading Map.png
 ├── Features
+│   ├── BikeProfile
+│   │   ├── BikeView.swift
+│   │   ├── Components
+│   │   │   ├── BikeAnalyticsCard.swift
+│   │   │   ├── BikeLearning.swift
+│   │   │   ├── BikeOverviewCard.swift
+│   │   │   ├── StoredKnowledgeSheet.swift
+│   │   │   └── StoredPIDCard.swift
+│   │   └── Core
+│   │       ├── BikeAnalytics.swift
+│   │       ├── BikeFingerprint.swift
+│   │       ├── BikeKnowledgeFilter.swift
+│   │       ├── BikeProfile.swift
+│   │       ├── BikeProfileManager.swift
+│   │       ├── BikeProfileStore.swift
+│   │       ├── DiscoveryClassification.swift
+│   │       └── DiscoveryRecord.swift
 │   ├── Results
 │   │   ├── InfoChip.swift
 │   │   ├── PIDResultCard.swift
-│   │   ├── ResultsView.swift
-│   │   └── ScanStatistics.swift
+│   │   └── ResultsView.swift
 │   ├── Scanner
 │   │   ├── Core
 │   │   │   ├── BruteForceScanner.swift
 │   │   │   ├── PIDScanContext.swift
 │   │   │   ├── PIDScanEngine.swift
+│   │   │   ├── PartialFrameRetryEngine.swift
 │   │   │   ├── RequestExecutor.swift
-│   │   │   └── RequestOutcomeProcessor.swift
-│   │   ├── FixedCommandStrategy.swift
-│   │   ├── InfoTypeStrategy.swift
+│   │   │   ├── RequestOutcomeProcessor.swift
+│   │   │   └── ScanSession.swift
+│   │   ├── HeaderDiscovery.swift
 │   │   ├── ModeDiscovery.swift
-│   │   ├── PIDScanStrategy.swift
 │   │   ├── Preflight.swift
+│   │   ├── ProbeRequest.swift
 │   │   ├── ScanLauncher.swift
 │   │   ├── ScanPersistence.swift
-│   │   └── ScanStrategy.swift
+│   │   ├── ScanStatistics.swift
+│   │   └── Strategies
+│   │       ├── FixedCommandStrategy.swift
+│   │       ├── InfoTypeStrategy.swift
+│   │       ├── PIDScanStrategy.swift
+│   │       └── ScanStrategy.swift
 │   ├── Search
 │   │   ├── Core
 │   │   │   ├── SearchConfiguration.swift
@@ -77,8 +99,8 @@
 │   │   │   ├── SearchEngineDescriptor.swift
 │   │   │   ├── SearchEngineFactory.swift
 │   │   │   ├── SearchEngineRegistry.swift
+│   │   │   ├── SearchEngineStatistics.swift
 │   │   │   ├── SearchEngineType.swift
-│   │   │   ├── SearchStatistics.swift
 │   │   │   └── SearchStrategy.swift
 │   │   ├── Engines
 │   │   │   ├── AdaptiveSearchStrategy.swift
@@ -88,7 +110,28 @@
 │   │   ├── PriorityPIDQueue.swift
 │   │   └── SearchKnowledgeBase.swift
 │   ├── Settings
-│   │   └── SettingsView.swift
+│   │   ├── BikeProfileCard.swift
+│   │   ├── SettingsView.swift
+│   │   ├── StorageBrowser
+│   │   │   ├── NavigationEngine.swift
+│   │   │   ├── StorageBreadcrumb.swift
+│   │   │   ├── StorageContextMenu.swift
+│   │   │   ├── StorageGridView.swift
+│   │   │   ├── StorageItem+UI.swift
+│   │   │   ├── StorageListView.swift
+│   │   │   ├── StorageModel.swift
+│   │   │   ├── StorageOperations.swift
+│   │   │   ├── StorageQuickLook.swift
+│   │   │   ├── StorageRow.swift
+│   │   │   ├── StorageSearchBar.swift
+│   │   │   ├── StorageService.swift
+│   │   │   ├── StorageSorting.swift
+│   │   │   ├── StorageTile.swift
+│   │   │   ├── StorageToolbar.swift
+│   │   │   └── StorageTypes.swift
+│   │   ├── StorageBrowserView.swift
+│   │   ├── StorageUsageCard.swift
+│   │   └── TextFileViewer.swift
 │   ├── SplashScreen.swift
 │   └── Terminal
 │       ├── Components
@@ -113,20 +156,26 @@
 │   ├── Bluetooth
 │   │   ├── BluetoothManager.swift
 │   │   └── ELM327.swift
-│   ├── CSVExporter.swift
 │   ├── ECU
 │   │   ├── ECUInfo.swift
 │   │   ├── ECUStatus.swift
 │   │   └── ECUTester.swift
+│   ├── Exporter.swift
 │   ├── Logger
+│   │   ├── BufferedFileSink.swift
+│   │   ├── LogFileNaming.swift
 │   │   ├── LogLine+Formatting.swift
+│   │   ├── LogSessionManager.swift
+│   │   ├── LogSink.swift
 │   │   ├── LogStyle+Color.swift
 │   │   └── Logger.swift
 │   ├── OBD
 │   │   ├── ELMResponseAssembler.swift
 │   │   ├── ELMResponseParser.swift
 │   │   ├── ManualCommandSender.swift
-│   │   └── OBDMode.swift
+│   │   ├── OBDMode.swift
+│   │   ├── ProtocolFrame.swift
+│   │   └── ProtocolFrameParser.swift
 │   ├── ShareSheet.swift
 │   └── Telemetry
 │       ├── PIDRange.swift
@@ -135,8 +184,11 @@
 │       ├── TelemetryAnalyzer.swift
 │       └── TelemetryStore.swift
 └── Z.Old
+    ├── AppStorageViewer.swift
+    ├── BikeKnowledge.swift
+    ├── CSVExporter.swift
     ├── DynamicScanner.swift
     ├── MyContentView.swift
     └── TabView.swift
 
-36 directories, 104 files
+41 directories, 151 files

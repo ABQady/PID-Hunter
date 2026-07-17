@@ -159,10 +159,16 @@ struct SmartSearchStrategy: SearchStrategy {
                 enqueue(neighbor)
             }
 
+        // Partial frames are unresolved. The retry pipeline will determine
+        // whether they become positives or confirmed negatives before they
+        // influence future search decisions.
+        case .partialFrame:
+            break
+
         case .negative,
              .noData,
              .timeout:
-
+            
             positiveHitCount = max(0, positiveHitCount - 1)
 
         case .unknown,

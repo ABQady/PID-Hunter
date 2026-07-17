@@ -68,6 +68,12 @@ struct iPhoneLayout: View {
                             Label("Results", systemImage: "list.bullet.rectangle")
                         }
                         .tag(2)
+
+                    BikeView()
+                        .tabItem {
+                            Label("Bike", systemImage: "motorcycle")
+                        }
+                        .tag(3)
                 }
                 .ignoresSafeArea(.keyboard, edges: .bottom)
                 .scrollDismissesKeyboard(.interactively)

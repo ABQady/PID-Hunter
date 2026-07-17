@@ -12,6 +12,10 @@ struct StatusCard: View {
     let header: String
     @Binding var showDisconnectConfirmation: Bool
     let isCompact: Bool
+    let onRestartECU: () -> Void
+
+    @State private var showRestartConfirmation = false
+    @State private var showELMView = false
 
     var body: some View {
         HStack {
@@ -29,38 +33,72 @@ struct StatusCard: View {
                 }
             }
             Spacer()
-            Button {
-                if bt.isConnected {
-                    showDisconnectConfirmation = true
-                } else {
-                    bt.startScan()
+            HStack(spacing: 6) {
+                Button {
+                    if bt.isScanning {
+                        showRestartConfirmation = true
+                    } else {
+                        onRestartECU()
+                    }
+                } label: {
+                    Image(systemName: "arrow.trianglehead.clockwise")
                 }
-            } label: {
-                Label(
-                    bt.isConnected ? "Disconnect" : "Scan BLE",
-                    systemImage: bt.isConnected ? "bolt.horizontal.circle.fill" : "dot.radiowaves.left.and.right"
-                )
-            }
-            .buttonStyle(.bordered)
-            .disabled(!bt.isConnected && bt.isScanning)
-            .confirmationDialog(
-                "Disconnect from ELM327?",
-                isPresented: $showDisconnectConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button("Disconnect", role: .destructive) {
-                    bt.disconnect()
+                .buttonStyle(.bordered)
+                .labelStyle(.iconOnly)
+                .disabled(!bt.isConnected)
+                .confirmationDialog(
+                    "Restart ECU?",
+                    isPresented: $showRestartConfirmation,
+                    titleVisibility: .visible
+                ) {
+                    Button("Restart ECU", role: .destructive) {
+                        onRestartECU()
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("This will restart the ECU and interrupt the current scan. Continue?")
                 }
-                Button("Cancel", role: .cancel) { }
-            } message: {
-                Text("Are you sure you want to disconnect from the connected BLE adapter?")
-            }
-            .if(isCompact) { view in
-                view.labelStyle(.iconOnly)
+
+                Button {
+                    if bt.isConnected {
+                        showDisconnectConfirmation = true
+                    } else {
+                        bt.startScan()
+                    }
+                } label: {
+                    Label(
+                        bt.isConnected ? "Disconnect" : "Scan BLE",
+                        systemImage: bt.isConnected ? "bolt.horizontal.circle.fill" : "dot.radiowaves.left.and.right"
+                    )
+                }
+                .buttonStyle(.bordered)
+                .disabled(!bt.isConnected && bt.isScanning)
+                .confirmationDialog(
+                    "Disconnect from ELM327?",
+                    isPresented: $showDisconnectConfirmation,
+                    titleVisibility: .visible
+                ) {
+                    Button("Disconnect", role: .destructive) {
+                        bt.disconnect()
+                    }
+                    Button("Cancel", role: .cancel) { }
+                } message: {
+                    Text("Are you sure you want to disconnect from the connected BLE adapter?")
+                }
+                .if(isCompact) { view in
+                    view.labelStyle(.iconOnly)
+                }
             }
         }
         .padding()
         .background(.thinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 18))
+        .contentShape(RoundedRectangle(cornerRadius: 18))
+        .onTapGesture {
+            showELMView = true
+        }
+        .sheet(isPresented: $showELMView) {
+            ELMView(profile: .empty)
+        }
     }
 }

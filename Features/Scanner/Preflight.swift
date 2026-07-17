@@ -12,16 +12,12 @@ final class Preflight {
 
     static let shared = Preflight()
 
-    private static let positiveServices: Set<String> = [
-        "41", "61", "62"
-    ]
-
     private enum Timing {
-        static let headerSettle = Duration.milliseconds(100)
-        static let retryDelay = Duration.milliseconds(500)
-        static let headerTimeout = Duration.seconds(1)
-        static let ecuTimeout = Duration.seconds(2)
-        static let protocolTimeout = Duration.seconds(2)
+        static let headerSettle = Duration.milliseconds(750)
+        static let retryDelay = Duration.milliseconds(750)
+        static let headerTimeout = Duration.seconds(3)
+        static let ecuTimeout = Duration.seconds(3)
+        static let protocolTimeout = Duration.seconds(3)
     }
 
     private let maxECURetries = 2
@@ -42,7 +38,7 @@ final class Preflight {
             .uppercased()
     }
 
-    func run(header: String) async -> Bool {
+    func run(header: String, mode: OBDMode) async -> Bool {
 
         Logger.shared.info("========== PREFLIGHT ==========")
 
@@ -78,10 +74,15 @@ final class Preflight {
             return false
         }
 
-        guard await ELM327.shared.initializeELM() else {
-            Logger.shared.error("❌ Failed to initialize ELM")
+        guard let probe = ProbeRequest.forMode(mode) else {
+            Logger.shared.error("❌ No probe defined for selected mode")
             return false
         }
+
+//        guard await ELM327.shared.initializeELM() else {
+//            Logger.shared.error("❌ Failed to initialize ELM")
+//            return false
+//        }
 
         guard ensureConnected() else {
             return false
@@ -100,7 +101,7 @@ final class Preflight {
                 return false
             }
 
-            Logger.shared.info("Header: \(normalizedHeader)")
+            Logger.shared.verbose(.setup, "Header: \(normalizedHeader)")
 
         } catch BluetoothManager.BluetoothError.timeout {
             Logger.shared.error("❌ Header Timeout")
@@ -124,31 +125,51 @@ final class Preflight {
             do {
 
                 let result = try await BluetoothManager.shared.sendAndWait(
-                    "0100",
+                    probe.request,
                     timeout: Timing.ecuTimeout
                 )
 
                 let rx = result.response.raw.uppercased()
+                let response = result.response
 
-                if Self.positiveServices.contains(where: rx.contains) {
+                Logger.shared.verbose(.discovery, "Probe response type: \(response.type)")
+                Logger.shared.verbose(.communication, "Probe raw response: \(rx)")
 
+                switch response.type {
+
+                case .positive:
                     if attempt > 1 {
-                        Logger.shared.info("Recovered after retry")
+                        Logger.shared.verbose(.telemetry, "Recovered after retry")
                     }
-
                     Logger.shared.success("✅ ECU Responded")
                     return true
+
+                case .negative:
+                    Logger.shared.success("✅ ECU Responded (Negative Response)")
+                    return true
+
+                case .noData:
+                    if attempt > 1 {
+                        Logger.shared.verbose(.telemetry, "Recovered after retry")
+                    }
+                    Logger.shared.warning("⚠️ ECU Reachable (NO DATA)")
+                    return true
+
+                case .partialFrame:
+                    Logger.shared.success("✅ ECU Responded (Partial Frame)")
+                    return true
+
+                default:
+                    break
                 }
 
-                if rx.contains("NO DATA") {
-
-                    if attempt > 1 {
-                        Logger.shared.info("Recovered after retry")
-                    }
-
-                    Logger.shared.warning("⚠️ ECU Reachable but returned NO DATA")
+                // Fallback for adapters that return plain text instead of a parsed response.
+                if rx.contains(probe.responseService) || rx.contains("NO DATA") {
+                    Logger.shared.success("✅ ECU Responded (Raw Match)")
                     return true
                 }
+
+                Logger.shared.verbose(.discovery, "Unexpected response type: \(response.type)")
 
             } catch BluetoothManager.BluetoothError.timeout {
 

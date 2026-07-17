@@ -31,25 +31,28 @@ final class ModeDiscovery: ObservableObject {
         Logger.shared.success(
             "🏁 Mode discovery finished (\(supportedModes.count) supported)"
         )
+        let modes = supportedModes.sorted { $0.rawValue < $1.rawValue }
         Logger.shared.info(
             "Supported Modes: " +
-            supportedModes
+            modes
                 .map(\.rawValue)
                 .joined(separator: ", ")
         )
     }
 
     private func probe(_ mode: OBDMode) async {
-        Logger.shared.info("🔎 Probing \(mode.title)...")
+        Logger.shared.verbose(.discovery, "🔎 Probing \(mode.title)...")
 
         do {
             let result = try await elm.request(command: mode.discoveryCommand)
             let response = result.response
             let latency = result.latency
 
+            Logger.shared.verbose(.telemetry, "Probe \(mode.title) latency: \(String(format: "%.3f", latency)) s")
+
             let requestMode = mode.requestService
 
-            Logger.shared.debug(
+            Logger.shared.verbose(.discovery,
                 """
                 Mode Discovery
                   Request : \(String(format: "%02X", requestMode))
@@ -121,14 +124,13 @@ final class ModeDiscovery: ObservableObject {
 
     private init() { }
 
-    func discover() async {
+    func discover(on header: String? = nil) async -> [OBDMode] {
 
-        supportedModes.removeAll()
-        discoveryLog.removeAll()
-        
         guard !isRunning else {
-            return
+            return supportedModes
         }
+
+        reset()
 
         isRunning = true
 
@@ -140,10 +142,23 @@ final class ModeDiscovery: ObservableObject {
 
         Logger.shared.info("🔎 Starting mode discovery")
 
+        if let header {
+            Logger.shared.verbose(.setup, "Using header: \(header)")
+
+            do {
+                try await elm.setHeader(header)
+            } catch {
+                Logger.shared.error("❌ Failed to set header \(header): \(error.localizedDescription)")
+                finishDiscovery()
+                return supportedModes
+            }
+        }
+
         for mode in OBDMode.discoveryModes {
             await probe(mode)
         }
         finishDiscovery()
+        return supportedModes
     }
 
     func handleSuccess(_ mode: OBDMode) {

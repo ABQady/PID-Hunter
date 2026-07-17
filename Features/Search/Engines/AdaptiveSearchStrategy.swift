@@ -33,7 +33,10 @@ struct AdaptiveSearchStrategy: SearchStrategy {
 
         case .timeout:
             return .timeout
-
+            
+        case .partialFrame:
+            return .unknown
+            
         case .unknown,
              .adapter:
             return .unknown

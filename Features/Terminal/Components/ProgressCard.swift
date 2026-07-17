@@ -10,7 +10,7 @@ import Combine
 
 struct ProgressCard: View {
 
-    @ObservedObject var stats: ScanStatistics
+    @ObservedObject private var progressStatistics = ProgressStatistics.shared
 
     let successRate: Double
     let averageLatency: Double
@@ -21,9 +21,25 @@ struct ProgressCard: View {
 
     let currentMode: OBDMode
 
-    private var progress: Double { stats.progressFraction }
-    private var currentRequests: Int { stats.requestsSent }
-    private var totalRequests: Int { stats.totalRequests }
+    init(
+        successRate: Double,
+        averageLatency: Double,
+        isScanning: Bool,
+        isCompleted: Bool,
+        hasResumePoint: Bool,
+        currentMode: OBDMode
+    ) {
+        self.successRate = successRate
+        self.averageLatency = averageLatency
+        self.isScanning = isScanning
+        self.isCompleted = isCompleted
+        self.hasResumePoint = hasResumePoint
+        self.currentMode = currentMode
+    }
+
+    private var progress: Double { progressStatistics.progress }
+    private var currentRequests: Int { progressStatistics.completed }
+    private var totalRequests: Int { progressStatistics.total }
 
     @inline(__always)
     private func formatETA(_ seconds: TimeInterval) -> String {
@@ -57,8 +73,8 @@ struct ProgressCard: View {
                 .frame(maxWidth: .infinity)
                 ViewThatFits(in: .horizontal) {
                     TimelineView(.periodic(from: .now, by: 1)) { _ in
-                        let elapsed = formatETA(stats.elapsed(at: .now))
-                        let eta = formatETA(stats.eta(at: .now))
+                        let elapsed = formatETA(progressStatistics.elapsed)
+                        let eta = formatETA(progressStatistics.estimatedRemaining)
                         HStack(spacing: 4) {
                             Text("Elapsed: \(elapsed)")
                             if isCompleted {
@@ -77,8 +93,8 @@ struct ProgressCard: View {
                         Text("\(Int(progress * 100))% • \(currentRequests)/\(totalRequests)")
 
                         TimelineView(.periodic(from: .now, by: 1)) { _ in
-                            let elapsed = formatETA(stats.elapsed(at: .now))
-                            let eta = formatETA(stats.eta(at: .now))
+                            let elapsed = formatETA(progressStatistics.elapsed)
+                            let eta = formatETA(progressStatistics.estimatedRemaining)
                             VStack(alignment: .leading, spacing: 2) {
 
                                 Text("Elapsed: \(elapsed)")
@@ -99,22 +115,5 @@ struct ProgressCard: View {
             .padding()
             .background(.thinMaterial)
             .clipShape(RoundedRectangle(cornerRadius: 18))
-            .overlay(
-                Group {
-                    if hasResumePoint && !isScanning {
-                        VStack {
-                            Spacer()
-                            HStack {
-                                Text("Resume available")
-                                    .font(.caption)
-                                    .foregroundStyle(.orange)
-                                Spacer()
-                            }
-                            .padding(.horizontal)
-                        }
-                    }
-                }
-            )
-        
     }
 }

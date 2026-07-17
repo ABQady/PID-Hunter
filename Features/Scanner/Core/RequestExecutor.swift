@@ -8,8 +8,11 @@ import Foundation
 
 // MARK: - Request Result
 
+// TODO: Migrate downstream consumers to use RequestContext instead of reconstructing
+// request metadata from ELMResponse where possible.
 enum RequestResult {
     case success(
+        context: RequestContext,
         response: ELMResponse,
         classification: SearchResult,
         latency: TimeInterval
@@ -24,6 +27,7 @@ enum SearchResult {
     case positive(ELMResponse)
     case noData
     case negative(ELMResponse)
+    case partialFrame(ELMResponse)
     case timeout
     case unknown(ELMResponse)
     case adapter(ELMResponse)
@@ -31,13 +35,23 @@ enum SearchResult {
 
 struct ResponseClassifier {
 
-    func classify(_ response: ELMResponse) -> SearchResult {
+    func classify(_ response: ELMResponse) async -> SearchResult {
         
         switch response.type {
 
         case .positive:
+            // A response classified as positive may still be an incomplete frame
+            // (for example, only the echoed header without a service byte/payload).
+            // Treat those as partial frames so they can be retried later instead of
+            // being promoted to positive or discarded as negative.
+            if response.raw == "83F111" {
+                return .partialFrame(response)
+            }
             return .positive(response)
-
+            
+        case .partialFrame:
+            return .partialFrame(response)
+            
         case .negative:
             return .negative(response)
 
@@ -57,6 +71,11 @@ struct ResponseClassifier {
     }
 }
 
+/// Immutable metadata describing the original scan request.
+/// This context is the source of truth throughout the scan pipeline.
+/// Transport responses may differ (for example response header vs. request header),
+/// so downstream components must prefer values from RequestContext whenever they
+/// refer to the original request.
 struct RequestContext {
     let mode: OBDMode
     let pid: UInt16
@@ -77,17 +96,32 @@ final class RequestExecutor {
     @inline(__always)
     private func recordTelemetry(
         context: RequestContext,
-        result: ELM327.ELMRequestResult,
+        response: ELMResponse,
+        latency: TimeInterval,
         classification: SearchResult
     ) {
+        Logger.shared.verbose(.telemetry,
+            """
+📡 Telemetry
+Mode           : \(context.mode.rawValue)
+PID            : \(String(format: "%04X", context.pid))
+Request Header : \(context.header)
+Retry          : \(context.retryCount)
+Engine         : \(context.searchEngine)
+Response Header: \(response.header ?? "nil")
+Response PID   : \(response.pid.map { String(format: "%04X", $0) } ?? "nil")
+Classification : \(classification)
+Latency        : \(String(format: "%.3f", latency)) s
+"""
+        )
         telemetry.record(
             RequestTelemetry(
                 timestamp: Date(),
                 mode: context.mode,
                 pid: context.pid,
                 header: context.header,
-                latency: result.latency,
-                response: result.response,
+                latency: latency,
+                response: response,
                 classification: classification,
                 retryCount: context.retryCount,
                 searchEngine: context.searchEngine
@@ -102,43 +136,46 @@ final class RequestExecutor {
         timeout: Double
     ) async -> RequestResult {
 
-        Logger.shared.debug("Request → \(request)")
+        Logger.shared.verbose(.transport, "Request → \(request)")
 
         guard BluetoothManager.shared.isConnected else {
             return .connectionLost
         }
 
         do {
-            let result = try await transport.request(
+            let transportResult = try await transport.request(
                 command: request,
                 timeout: .seconds(timeout)
             )
 
-            let searchResult = classifier.classify(result.response)
-            Logger.shared.verbose("""
+            let classification = await classifier.classify(transportResult.response)
+            Logger.shared.verbose(.outcome, """
 Request Classification
 REQUEST = \(request)
-TYPE    = \(result.response.type)
-RESULT  = \(searchResult)
-LATENCY = \(String(format: "%.3f", result.latency)) s
+TYPE    = \(transportResult.response.type)
+RESULT  = \(classification)
+LATENCY = \(String(format: "%.3f", transportResult.latency)) s
 """)
             recordTelemetry(
                 context: context,
-                result: result,
-                classification: searchResult
+                response: transportResult.response,
+                latency: transportResult.latency,
+                classification: classification
             )
 
-            Logger.shared.debug(
-                "Completed → \(request) (\(String(format: "%.3f", result.latency)) s)"
+            Logger.shared.verbose(.transport,
+                "Completed → \(request) (\(String(format: "%.3f", transportResult.latency)) s)"
             )
             return .success(
-                response: result.response,
-                classification: searchResult,
-                latency: result.latency
+                context: context,
+                response: transportResult.response,
+                classification: classification,
+                latency: transportResult.latency
             )
 
         } catch BluetoothManager.BluetoothError.timeout {
-            Logger.shared.debug("Timeout → \(request)")
+            Logger.shared.verbose(.telemetry, "Request timed out after \(String(format: "%.3f", timeout)) s")
+            Logger.shared.verbose(.transport, "Timeout → \(request)")
             return .timeout
 
         } catch {

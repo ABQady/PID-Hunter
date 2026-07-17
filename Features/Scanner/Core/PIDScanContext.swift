@@ -5,10 +5,9 @@
 //  Created by Ahmed Al Qady on 09/07/2026.
 //
 struct PIDScanContext {
-    let configuration: ScanConfiguration
     let session: ScanSession
     let persistence: ScanPersistence
-    let statistics: SearchStatistics
+    let statistics: SearchEngineStatistics
     let stats: ScanStatistics
     let requestExecutor: RequestExecutor
     let scanStatus: ScanStatus

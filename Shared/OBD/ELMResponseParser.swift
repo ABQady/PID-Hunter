@@ -6,7 +6,7 @@
 //
 import Foundation
 
-struct ELMResponse {
+struct ELMResponse: Codable, Equatable, Hashable {
     let raw: String
     let type: ELMResponseType
     let header: String?
@@ -20,10 +20,11 @@ struct ELMResponse {
     }
     let pid: UInt16?
     let payload: [UInt8]
+    
 }
 
 
-enum ELMResponseType {
+enum ELMResponseType: Codable, Equatable, Hashable {
     case noData
     case stopped
     case busError
@@ -33,6 +34,7 @@ enum ELMResponseType {
     case unknown
     case positive(service: UInt8)
     case negative(service: UInt8)
+    case partialFrame
 }
 
 enum ELMResponseParser {
@@ -42,11 +44,27 @@ enum ELMResponseParser {
         "BUS INIT",
         "SEARCHING...",
         "SEARCHING",
+        "BUS INIT: OK",
+        "BUS INIT...OK",
     ]
+
+
 
     static func parse(_ text: String) -> ELMResponse {
 
         let upper = text.uppercased()
+        
+        let informationalOnly = informationalMarkers.contains { upper.trimmingCharacters(in: .whitespacesAndNewlines) == $0 }
+        if informationalOnly {
+            return ELMResponse(
+                raw: text,
+                type: .searching,
+                header: nil,
+                pid: nil,
+                payload: []
+            )
+        }
+
         let compact = upper
             .replacingOccurrences(of: " ", with: "")
             .replacingOccurrences(of: "\r", with: "")
@@ -88,7 +106,7 @@ enum ELMResponseParser {
         
         if tokens.isEmpty {
             if upper.contains("OK") || upper.contains("ELM") || upper.hasPrefix("AT") {
-                Logger.shared.verbose("Parser → atResponse (empty token fallback)")
+                Logger.shared.verbose(.parser, "Parser → atResponse (empty token fallback)")
                 return ELMResponse(
                     raw: text,
                     type: .atResponse,
@@ -138,6 +156,7 @@ enum ELMResponseParser {
                     payload: []
                 )
         } else if upper.contains("UNABLE TO CONNECT") {
+            Logger.shared.warning("Parser → unableToConnect")
             type = .unableToConnect
             return ELMResponse(
                     raw: text,
@@ -147,6 +166,7 @@ enum ELMResponseParser {
                     payload: []
                 )
         } else if upper.contains("BUS ERROR") {
+            Logger.shared.warning("Parser → busError")
             type = .busError
             return ELMResponse(
                     raw: text,
@@ -166,72 +186,79 @@ enum ELMResponseParser {
                 )
         }
         
-        for (index, token) in tokens.enumerated() {
-            // ISO 14230 / ISO 15765 Negative Response
-            if token == "7F" {
-
-                guard tokens.indices.contains(index + 2),
-                      let requestedService = UInt8(tokens[index + 1], radix: 16)
-                else {
-                    continue
-                }
-
-                Logger.shared.verbose(
-                    "Parser → negative | Header=\(header ?? "-") | Service=\(String(format: "%02X", requestedService))"
-                )
-
+        // Deterministic parsing based on the first protocol byte
+        guard let firstToken = tokens.first else {
+            if upper.contains("OK") || upper.contains("ELM") || upper.hasPrefix("AT") {
+                Logger.shared.verbose(.parser, "Parser → atResponse (empty token fallback)")
                 return ELMResponse(
                     raw: text,
-                    type: .negative(service: requestedService),
+                    type: .atResponse,
                     header: header,
                     pid: nil,
-                    payload: tokens
-                        .dropFirst(index + 2)
-                        .compactMap { UInt8($0, radix: 16) }
+                    payload: []
                 )
             }
-            
-            guard let responseService = UInt8(token, radix: 16),
-                  responseService >= 0x40,
-                  responseService != 0x7F else {
-                continue
+            return ELMResponse(
+                raw: text,
+                type: .unknown,
+                header: header,
+                pid: nil,
+                payload: []
+            )
+        }
+
+        // Handle negative response only if the first protocol byte is 7F
+        if firstToken == "7F" {
+            guard tokens.count >= 3,
+                  let requestedService = UInt8(tokens[1], radix: 16)
+            else {
+                return ELMResponse(raw: text, type: .unknown, header: header, pid: nil, payload: [])
             }
 
-            let requestService = responseService - 0x40
-            service = requestService
-
-            type = .positive(service: requestService)
-            
-            let pidLength: Int
-
-            switch requestService {
-            case 0x22:
-                pidLength = 2
-            case 0x01, 0x21:
-                pidLength = 1
-            default:
-                pidLength = 0
-            }
-            
-            if pidLength == 1 {
-                if tokens.indices.contains(index + 1) {
-                    pid = UInt16(tokens[index + 1], radix: 16)
-                }
-            } else if pidLength == 2 {
-                if tokens.indices.contains(index + 2),
-                   let high = UInt16(tokens[index + 1], radix: 16),
-                   let low  = UInt16(tokens[index + 2], radix: 16) {
-                    pid = (high << 8) | low
-                }
-            }
-            payload = tokens
-                .dropFirst(index + 1 + pidLength)
-                .compactMap { UInt8($0, radix: 16) }
-            
-            Logger.shared.verbose(
-                "Parser → \(type) | Header=\(header ?? "-") | Service=\(service.map { String(format: "%02X", $0) } ?? "-") | PID=\(pid.map { String(format: "%04X", $0) } ?? "-")"
+            Logger.shared.verbose(.parser,
+                "Parser → negative | Header=\(header ?? "-") | Service=\(String(format: "%02X", requestedService))"
             )
 
+            return ELMResponse(
+                raw: text,
+                type: .negative(service: requestedService),
+                header: header,
+                pid: nil,
+                payload: tokens.dropFirst(2).compactMap { UInt8($0, radix: 16) }
+            )
+        }
+
+        // Parse positive responses ONLY from the first protocol byte
+        guard let responseService = UInt8(firstToken, radix: 16),
+              (0x40...0x7E).contains(responseService)
+        else {
+            // fall through to AT/searching/unknown logic below
+            let lines = upper
+                .split(whereSeparator: \.isNewline)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
+
+            let hasATCommandEcho = lines.contains {
+                $0.hasPrefix("AT") && $0.count > 2
+            }
+
+            let hasATReply = compact.contains("OK")
+                || upper.contains("ELM327")
+                || upper.hasPrefix("ELM")
+                || upper.contains("ISO")
+                || upper.contains("KWP")
+                || upper.contains("CAN")
+                || upper.contains("J1850")
+
+            if hasATCommandEcho || hasATReply {
+                type = .atResponse
+            } else if upper.contains("SEARCHING") {
+                type = .searching
+            } else {
+                type = .unknown
+            }
+
+            Logger.shared.verbose(.parser, "Parser → \(type) | Header=\(header ?? "-") | Service=\(service.map { String(format: "%02X", $0) } ?? "-") | PID=\(pid.map { String(format: "%04X", $0) } ?? "-")")
             return ELMResponse(
                 raw: text,
                 type: type,
@@ -240,33 +267,63 @@ enum ELMResponseParser {
                 payload: payload
             )
         }
-        
-        let lines = upper
-            .split(whereSeparator: \.isNewline)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
 
-        let hasATCommandEcho = lines.contains {
-            $0.hasPrefix("AT") && $0.count > 2
+        let requestService = responseService - 0x40
+        service = requestService
+
+        let definition = ProtocolDefinition.kwp
+        let pidLength = definition.identifierLength(for: requestService)
+
+        type = .positive(service: requestService)
+
+        // PID parsing: identifier starts at token index 1
+        if pidLength == 1 {
+            if tokens.indices.contains(1) {
+                pid = UInt16(tokens[1], radix: 16)
+            }
+        } else if pidLength == 2 {
+            if tokens.indices.contains(2),
+               let high = UInt16(tokens[1], radix: 16),
+               let low  = UInt16(tokens[2], radix: 16) {
+                pid = (high << 8) | low
+            }
         }
 
-        let hasATReply = compact.contains("OK")
-            || upper.contains("ELM327")
-            || upper.hasPrefix("ELM")
-            || upper.contains("ISO")
-            || upper.contains("KWP")
-            || upper.contains("CAN")
-            || upper.contains("J1850")
+        Logger.shared.verbose(.parser, """
+🔎 Parsed Response
+Service : \(String(format: "%02X", requestService))
+PID Len : \(pidLength)
+PID     : \(pid.map { String(format: "%04X", $0) } ?? "-")
+""")
 
-        if hasATCommandEcho || hasATReply {
-            type = .atResponse
-        } else if upper.contains("SEARCHING") {
-            type = .searching
-        } else {
-            type = .unknown
-        }
-        
-        Logger.shared.verbose("Parser → \(type) | Header=\(header ?? "-") | Service=\(service.map { String(format: "%02X", $0) } ?? "-") | PID=\(pid.map { String(format: "%04X", $0) } ?? "-")")
+        let identifier = Array(
+            tokens
+                .dropFirst(1)
+                .prefix(pidLength)
+                .compactMap { UInt8($0, radix: 16) }
+        )
+
+        let frames = ProtocolFrameParser.parse(
+            tokens: tokens,
+            requestService: requestService,
+            definition: definition
+        )
+
+        Logger.shared.verbose(.parser, "🔎 Parsed \(frames.count) response frame(s)")
+
+        payload = ProtocolFrameParser.assemblePayload(
+            from: frames,
+            identifier: identifier
+        )
+
+        Logger.shared.verbose(.parser,
+            "🔎 Parsed Payload: \(payload.map { String(format: "%02X", $0) }.joined(separator: " "))"
+        )
+
+        Logger.shared.verbose(.parser,
+            "Parser → \(type) | Header=\(header ?? "-") | Service=\(service.map { String(format: "%02X", $0) } ?? "-") | PID=\(pid.map { String(format: "%04X", $0) } ?? "-")"
+        )
+
         return ELMResponse(
             raw: text,
             type: type,
@@ -282,6 +339,77 @@ extension ELMResponse {
             return payload.isEmpty
         }
         return false
+    }
+
+    var formatByte: UInt8? {
+        guard let header else { return nil }
+        let bytes = header.split(separator: " ")
+        guard bytes.count == 3 else { return nil }
+        return UInt8(bytes[0], radix: 16)
+    }
+
+    var respondingAddress: UInt8? {
+        guard let header else { return nil }
+        let bytes = header.split(separator: " ")
+        guard bytes.count == 3 else { return nil }
+        return UInt8(bytes[1], radix: 16)
+    }
+
+    var targetAddress: UInt8? {
+        guard let header else { return nil }
+        let bytes = header.split(separator: " ")
+        guard bytes.count == 3 else { return nil }
+        return UInt8(bytes[2], radix: 16)
+    }
+}
+extension ELMResponse {
+
+    @inline(__always)
+    private func asciiPayload() -> String? {
+        Logger.shared.verbose(.parser, """
+🔎 ASCII Payload
+Service : \(service.map { String(format: "%02X", $0) } ?? "-")
+PID     : \(pid.map { String(format: "%04X", $0) } ?? "-")
+Payload : \(payload.map { String(format: "%02X", $0) }.joined(separator: " "))
+""")
+
+        let printable = payload.filter { 0x20...0x7E ~= $0 }
+
+        guard !printable.isEmpty else {
+            return nil
+        }
+
+        let decoded = String(bytes: printable, encoding: .ascii)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        Logger.shared.verbose(.parser, "🔎 ASCII Decoded: \(decoded ?? "nil")")
+
+        return decoded
+    }
+
+    var asciiString: String? {
+        asciiPayload()
+    }
+
+    var vin: String? {
+        guard service == 0x09, pid == 0x02 else {
+            return nil
+        }
+        return asciiPayload()
+    }
+
+    var calibrationID: String? {
+        guard service == 0x09, pid == 0x04 else {
+            return nil
+        }
+        return asciiPayload()
+    }
+
+    var ecuName: String? {
+        guard service == 0x09, pid == 0x0A else {
+            return nil
+        }
+        return asciiPayload()
     }
 }
 extension String {

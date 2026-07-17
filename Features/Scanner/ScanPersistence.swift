@@ -21,7 +21,11 @@ final class ScanPersistence {
 
     private enum Key {
         static let resumePID = "resumePID"
-
+        static let resumeHeader = "resumeHeader"
+        static let resumeMode = "resumeMode"
+        static let resumeStartPID = "resumeStartPID"
+        static let resumeEndPID = "resumeEndPID"
+        
         static let resumeRequestsSent = "resumeRequestsSent"
         static let resumeResponses = "resumeResponses"
         static let resumePositiveResponses = "resumePositiveResponses"
@@ -32,9 +36,36 @@ final class ScanPersistence {
         static let savedResults = "savedResults"
     }
     
+    struct ResumeMetadata {
+        let header: String
+        let mode: OBDMode?
+        let startPID: Int
+        let endPID: Int
+        let currentPID: Int
+    }
+    
+    func loadResumeMetadata() -> ResumeMetadata {
+        let header = defaults.string(forKey: Key.resumeHeader) ?? ""
+
+        let mode: OBDMode?
+        if let raw = defaults.string(forKey: Key.resumeMode) {
+            mode = OBDMode(rawValue: raw)
+        } else {
+            mode = nil
+        }
+
+        return ResumeMetadata(
+            header: header,
+            mode: mode,
+            startPID: defaults.object(forKey: Key.resumeStartPID) as? Int ?? 0,
+            endPID: defaults.object(forKey: Key.resumeEndPID) as? Int ?? 0,
+            currentPID: defaults.object(forKey: Key.resumePID) as? Int ?? 0
+        )
+    }
+    
     func saveResumePoint(
         session: ScanSession,
-        statistics: SearchStatistics,
+        statistics: SearchEngineStatistics,
         scanStatistics: ScanStatistics,
         force: Bool = false
     ){
@@ -43,7 +74,11 @@ final class ScanPersistence {
         }
 
         defaults.set(session.currentPID, forKey: Key.resumePID)
-
+        defaults.set(session.header, forKey: Key.resumeHeader)
+        defaults.set(session.mode?.rawValue, forKey: Key.resumeMode)
+        defaults.set(session.startPID, forKey: Key.resumeStartPID)
+        defaults.set(session.endPID, forKey: Key.resumeEndPID)
+        
         let requestStats = statistics
         
         defaults.set(requestStats.requestsSent, forKey: Key.resumeRequestsSent)
@@ -62,6 +97,14 @@ final class ScanPersistence {
         scanStatistics: ScanStatistics ){
 
         session.currentPID = defaults.object(forKey: Key.resumePID) as? Int ?? 0
+        session.header = defaults.string(forKey: Key.resumeHeader) ?? ""
+        if let rawMode = defaults.string(forKey: Key.resumeMode) {
+            session.mode = OBDMode(rawValue: rawMode)
+        } else {
+            session.mode = nil
+        }
+            session.startPID = defaults.object(forKey: Key.resumeStartPID) as? Int ?? 0
+            session.endPID = defaults.object(forKey: Key.resumeEndPID) as? Int ?? 0
 
         let stats = scanStatistics
         stats.positiveResponses = defaults.object(forKey: Key.resumePositiveResponses) as? Int ?? 0
@@ -85,6 +128,10 @@ final class ScanPersistence {
         session.currentPID = 0
         session.searchStrategy.reset()
         defaults.removeObject(forKey: Key.resumePID)
+        defaults.removeObject(forKey: Key.resumeStartPID)
+        defaults.removeObject(forKey: Key.resumeEndPID)
+        defaults.removeObject(forKey: Key.resumeHeader)
+        defaults.removeObject(forKey: Key.resumeMode)
         defaults.removeObject(forKey: Key.resumeRequestsSent)
         defaults.removeObject(forKey: Key.resumeResponses)
         defaults.removeObject(forKey: Key.resumePositiveResponses)

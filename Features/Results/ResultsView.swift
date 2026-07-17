@@ -9,18 +9,21 @@ struct ResultsView: View {
     @ObservedObject private var brute = BruteForceScanner.shared
     @ObservedObject private var ecu = ECUInfo.shared
     @ObservedObject private var stats = ScanStatistics.shared
-    @ObservedObject private var discovery = ModeDiscovery.shared
     
     @State private var search = ""
     @State private var ecuExpanded = true
     @State private var statsExpanded = true
     @State private var searchStatsExpanded = false
 
+    @State private var isFollowingLiveResults = true
+
     private var filteredResults: [ScanResult] {
         let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return brute.results }
-
-        return brute.results.filter {
+        let source = brute.results
+        guard !query.isEmpty else {
+            return source
+        }
+        return source.filter {
             $0.request.localizedCaseInsensitiveContains(query)
                 || $0.response.localizedCaseInsensitiveContains(query)
                 || $0.header.localizedCaseInsensitiveContains(query)
@@ -40,17 +43,14 @@ struct ResultsView: View {
         SearchEngineType(rawValue: selectedSearchEngine) != .sequential
     }
     
-    private var searchStats: SearchStatistics {
-        brute.statistics
-    }
 
     // MARK: - Results View
     private var resultsView: some View {
-        
+        ScrollViewReader { scrollProxy in
         ScrollView {
             LazyVStack(
                 alignment: .leading,
-                spacing: 16,
+                spacing: 12,
                 pinnedViews: [.sectionHeaders]
             ) {
                 // MARK: - ECU Information
@@ -93,84 +93,6 @@ struct ResultsView: View {
                             )
                         }
                     }
-
-                    Divider()
-
-//                    LabeledContent("Supported Services") {
-//                        if ecu.services.services.isEmpty {
-//                            Text("-")
-//                                .foregroundStyle(.secondary)
-//                        } else {
-//                            LazyVGrid(
-//                                columns: [
-//                                    GridItem(.adaptive(minimum: 80))
-//                                ],
-//                                alignment: .leading,
-//                                spacing: 8
-//                            ) {
-//                                ForEach(ecu.services.services, id: \.self) {
-//                                    service in
-//                                    Text(service)
-//                                        .font(
-//                                            .system(
-//                                                .caption,
-//                                                design: .monospaced
-//                                            ).bold()
-//                                        )
-//                                        .foregroundStyle(.green)
-//                                        .padding(.horizontal, 10)
-//                                        .padding(.vertical, 5)
-//                                        .background(.green.opacity(0.15))
-//                                        .overlay {
-//                                            Capsule()
-//                                                .stroke(.green.opacity(0.35))
-//                                        }
-//                                        .clipShape(Capsule())
-//                                }
-//                            }
-//                            .frame(maxWidth: .infinity, alignment: .leading)
-//                        }
-//                    }
-                    if !discovery.supportedModes.isEmpty {
-
-                        Divider()
-                            .padding(.vertical, 8)
-
-                        Text("Supported Modes")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-
-                        LazyVGrid(
-                            columns: [
-                                GridItem(.adaptive(minimum: 80))
-                            ],
-                            alignment: .leading,
-                            spacing: 8
-                        ) {
-                            ForEach(
-                                discovery.supportedModes
-                                    .sorted(by: { $0.requestService < $1.requestService })
-                            ) { mode in
-                                Text("\(mode.rawValue) • \(mode.title)")
-                                    .font(
-                                        .system(
-                                            .caption,
-                                            design: .monospaced
-                                        ).bold()
-                                    )
-                                    .foregroundStyle(.blue)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 5)
-                                    .background(.blue.opacity(0.15))
-                                    .overlay {
-                                        Capsule()
-                                            .stroke(.blue.opacity(0.35))
-                                    }
-                                    .clipShape(Capsule())
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
                 }
                 .font(.headline)
                 .padding()
@@ -179,77 +101,31 @@ struct ResultsView: View {
 
                 // MARK: - Statistics Section
                 // MARK: - Scan Statistics
-                Divider()
                 
                 // Scan Statistics describe the current scan session
                 // (requests, responses, timing and transport health).
                 DisclosureGroup("Scan Statistics", isExpanded: $statsExpanded) {
                     Divider()
                     HStack {
-                        statistic(
-                            title: "Requests",
-                            value: "\(stats.requestsSent)"
-                        )
+                        statistic(title: "Requests", value: "\(stats.requestsSent)")
                         Spacer()
-                        statistic(
-                            title: "Hits",
-                            //value: "\(brute.scanStatus.successCount)"
-                            value: "\(stats.positiveResponses)"
-                        )
-
+                        statistic(title: "Responses", value: "\(stats.responses)")
                         Spacer()
-
-                        statistic(
-                            title: "Hit Rate",
-                            value: String(
-                                format: "%.1f%%",
-                                stats.positiveResponseRate
-                            )
-                        )
-                    }
-
+                        statistic(title: "Partial", value: "\(stats.partialFrames)")
+                    }.padding(.bottom)
                     HStack {
                         statistic(title: "NO DATA", value: "\(stats.noData)")
-
                         Spacer()
-
-                        statistic(
-                            title: "Bus Errors",
-                            value: "\(stats.busErrors)"
-                        )
-
+                        statistic(title: "Bus Errors", value: "\(stats.busErrors)")
                         Spacer()
-
-                        statistic(
-                            title: "Timeouts",
-                            value: "\(stats.timeouts)"
-                        )
-                    }
-
+                        statistic(title: "Timeouts", value: "\(stats.timeouts)")
+                    }.padding(.bottom)
                     HStack {
-                        statistic(
-                            title: "Elapsed",
-                            value: formattedElapsed()
-                        )
-
+                        statistic(title: "Elapsed", value: formattedElapsed())
                         Spacer()
-
-                        statistic(
-                            title: "ETA",
-                            value: formattedETA()
-                        )
-
+                        statistic(title: "ETA", value: formattedETA())
                         Spacer()
-
-                        statistic(
-                            title: "Failures",
-                            value: String(
-                                format: "%.1f%%",
-                                stats.failureRate
-                            )
-                        )
                     }
-
                 }
                 .font(.headline)
                 .padding()
@@ -257,8 +133,9 @@ struct ResultsView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 18))
 
                 if showsSearchStatistics {
-                    // Search Statistics describe the search engine's performance
-                    // (discoveries, success rate and latency).
+                    // Search Statistics are algorithm metrics.
+                    // Scan Statistics are transport/session metrics.
+                    // Do not duplicate values between them.
                     DisclosureGroup(
                         "Search Statistics",
                         isExpanded: $searchStatsExpanded
@@ -267,73 +144,55 @@ struct ResultsView: View {
                         HStack {
                             statistic(
                                 title: "Requests",
-                                value: "\(searchStats.requestsSent)"
+                                value: "\(brute.statistics.requestsSent)"
                             )
-
                             Spacer()
-
-                            statistic(
-                                title: "Successes",
-                                value: "\(searchStats.successfulResponses)"
-                            )
-
-                            Spacer()
-
-                            statistic(
-                                title: "Failures",
-                                value: "\(searchStats.failedResponses)"
-                            )
-                        }
-                        HStack {
                             statistic(
                                 title: "Discoveries",
-                                value: "\(searchStats.discoveredPIDs)"
+                                value: "\(brute.statistics.successfulResponses)"
                             )
-
                             Spacer()
-
                             statistic(
-                                title: "Success %",
+                                title: "Misses",
+                                value: "\(brute.statistics.failedResponses)"
+                            )
+                        }.padding(.bottom)
+                        HStack {
+                            Spacer()
+                            statistic(
+                                title: "Discovery Rate",
                                 value: String(
                                     format: "%.1f%%",
-                                    searchStats.successRate * 100
+                                    brute.statistics.successRate * 100
                                 )
                             )
-
                             Spacer()
-
-                            statistic(
-                                title: "Avg",
-                                value: String(
-                                    format: "%.0f ms",
-                                    searchStats.averageLatency * 1000
-                                )
-                            )
-                        }
-
+                        }.padding(.bottom)
                         HStack {
                             statistic(
                                 title: "Fastest",
                                 value: String(
                                     format: "%.0f ms",
-                                    searchStats.fastestSuccessfulResponse
+                                    brute.statistics.fastestSuccessfulResponse
                                         * 1000
                                 )
                             )
-
                             Spacer()
-
+                            statistic(
+                                title: "Avg",
+                                value: String(
+                                    format: "%.0f ms",
+                                    brute.statistics.averageLatency * 1000
+                                )
+                            )
+                            Spacer()
                             statistic(
                                 title: "Slowest",
                                 value: String(
                                     format: "%.0f ms",
-                                    searchStats.slowestResponse * 1000
+                                    brute.statistics.slowestResponse * 1000
                                 )
                             )
-
-                            Spacer()
-
-                            statistic(title: "", value: "")
                         }
                     }
                     .font(.headline)
@@ -345,7 +204,6 @@ struct ResultsView: View {
                 // MARK: - PID Results
                 Section {
                     if !hasResults {
-
                         ContentUnavailableView {
                             Label(
                                 "No PID Results",
@@ -361,15 +219,20 @@ struct ResultsView: View {
                         .frame(maxWidth: .infinity)
                         .frame(minHeight: 250)
                         .clipShape(RoundedRectangle(cornerRadius: 18))
-
                     } else {
-                        LazyVStack(spacing: 12) {
-                            ForEach(Array(filteredResults.reversed())) {
-                                result in
-                                PIDResultCard(result: result)
-                            }
+                        ForEach(filteredResults) { result in
+                            PIDResultCard(result: result)
+                                .id(result.id)
+                                .background(
+                                    GeometryReader { geo in
+                                        Color.clear.preference(
+                                            key: VisiblePIDPreferenceKey.self,
+                                            value: [VisiblePIDPreferenceData(id: result.id, minY: geo.frame(in: .named("ResultsScroll")).minY)]
+                                        )
+                                    }
+                                )
+                                .padding(.vertical, 6)
                         }
-                        .padding(.vertical, 4)
                     }
                 } header: {
                     VStack(spacing: 10) {
@@ -417,6 +280,35 @@ struct ResultsView: View {
             }
             .padding()
             .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .coordinateSpace(name: "ResultsScroll")
+        .onPreferenceChange(VisiblePIDPreferenceKey.self) { values in
+            let candidate = values
+                .filter { $0.minY >= -1 }
+                .min(by: { $0.minY < $1.minY })
+
+            guard let firstID = filteredResults.first?.id else {
+                isFollowingLiveResults = true
+                return
+            }
+
+            isFollowingLiveResults = (candidate == nil) || (candidate?.id == firstID)
+        }
+        // Only live-follow if user is at the head; otherwise, preserve scroll position.
+        .onChange(of: brute.results.count) {
+            guard let firstID = filteredResults.first?.id else { return }
+
+            guard isFollowingLiveResults else {
+                return
+            }
+
+            var transaction = Transaction()
+            transaction.animation = nil
+
+            withTransaction(transaction) {
+                scrollProxy.scrollTo(firstID, anchor: .top)
+            }
+        }
         }
     }
 
@@ -468,7 +360,19 @@ struct ResultsView: View {
     }
 
     var body: some View {
-        
         resultsView
+    }
+}
+
+private struct VisiblePIDPreferenceData: Equatable {
+    let id: ScanResult.ID
+    let minY: CGFloat
+}
+
+private struct VisiblePIDPreferenceKey: PreferenceKey {
+    static var defaultValue: [VisiblePIDPreferenceData] = []
+
+    static func reduce(value: inout [VisiblePIDPreferenceData], nextValue: () -> [VisiblePIDPreferenceData]) {
+        value = nextValue()
     }
 }

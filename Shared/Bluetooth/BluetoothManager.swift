@@ -18,8 +18,10 @@ final class BluetoothManager: NSObject, ObservableObject {
     @Published var detectedRX = ""
     @Published var detectedService = ""
     @Published var status: ECUStatus = .disconnected
+
     @Published var txCount = 0
     @Published var rxCount = 0
+
 
     // MARK: BLE
     private var central: CBCentralManager!
@@ -39,16 +41,26 @@ final class BluetoothManager: NSObject, ObservableObject {
 
     private var pendingRequest: PendingRequest?
 
-    private func clearPendingRequest(resumingWith error: Error? = nil) {
+    private func clearPendingRequest(
+        resumingWith error: Error? = nil
+    ) {
         guard let pending = pendingRequest else {
             return
         }
 
         pending.timeoutTask?.cancel()
+
+        Logger.shared.verbose(
+            .transport,
+            "Clearing pending request \(pending.id)"
+        )
+
         pendingRequest = nil
 
         if let error {
-            pending.continuation.resume(throwing: error)
+            pending.continuation.resume(
+                throwing: error
+            )
         }
     }
     
@@ -85,54 +97,82 @@ final class BluetoothManager: NSObject, ObservableObject {
     }
     
     // MARK: Scan
-        func startScan() {
-            ELMResponseAssembler.shared.clear()
-            txCount = 0
-            rxCount = 0
-            status = .scanningBLE
-            
-            guard central.state == .poweredOn else { return }
-            
-            isConnected = false
-            lastResponse = ""
-            detectedTX = ""
-            detectedRX = ""
-            detectedService = ""
-            
-            elmPeripheral = nil
-            writeCharacteristic = nil
-            notifyCharacteristic = nil
-            elmInitialized = false
-            retriedProtocol = false
-            
-            discoveredDevices.removeAll()
-            isScanning = true
-            
-            central.scanForPeripherals(
-                withServices: nil,
-                options: [
-                    CBCentralManagerScanOptionAllowDuplicatesKey: false
-                ]
-            )
-            
-            Task { @MainActor [weak self] in
-                try? await Task.sleep(for: .seconds(10))
+    func startScan() {
+        ELMResponseAssembler.shared.clear()
+        txCount = 0
+        rxCount = 0
+        status = .scanningBLE
 
-                guard let self else { return }
+        // Start PreSession logging as soon as BLE scan begins
+        Task {
+            if !LogSessionManager.shared.isLoggingSessionActive {
+                let metadata = LogSessionManager.Metadata(
+                    appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown",
+                    mode: nil,
+                    header: nil,
+                    searchEngine: nil,
+                    requestDelay: nil,
+                    requestTimeout: nil,
+                    autoPreflight: nil,
+                    debugLogging: nil
+                )
 
-                if self.isScanning {
-                    self.status = .timeout
-                    self.stopScan()
-                    Logger.shared.warning("Scan timed out")
+                do {
+                    try await LogSessionManager.shared.startInitialPreScanSessionIfNeeded(
+                        logger: Logger.shared
+                    )
+                } catch {
+                    Logger.shared.error("❌ Failed to start logging session: \(error.localizedDescription)")
                 }
             }
+        }
+
+        guard central.state == .poweredOn else { return }
+
+        isConnected = false
+        lastResponse = ""
+        detectedTX = ""
+        detectedRX = ""
+        detectedService = ""
+
+        elmPeripheral = nil
+        writeCharacteristic = nil
+        notifyCharacteristic = nil
+        elmInitialized = false
+        retriedProtocol = false
+
+        discoveredDevices.removeAll()
+        isScanning = true
+
+        central.scanForPeripherals(
+            withServices: nil,
+            options: [
+                CBCentralManagerScanOptionAllowDuplicatesKey: false
+            ]
+        )
+
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(10))
+
+            guard let self else { return }
+
+            if self.isScanning {
+                self.status = .timeout
+                self.stopScan()
+                Logger.shared.warning("Scan timed out")
+            }
+        }
         Logger.shared.console("Scanning...")
         Logger.shared.info("Scanning...")
     }
-    func stopScan() {
+    private func stopBLEScan() {
         guard isScanning else { return }
         central.stopScan()
         isScanning = false
+    }
+
+    func stopScan() {
+        stopBLEScan()
     }
     // MARK: Connection
     func connect(
@@ -146,7 +186,7 @@ final class BluetoothManager: NSObject, ObservableObject {
         )
     }
     func disconnect() {
-        stopScan()
+        stopBLEScan()
         guard let peripheral = elmPeripheral else {
             return
         }
@@ -155,10 +195,14 @@ final class BluetoothManager: NSObject, ObservableObject {
         )
         status = .disconnected
         ELMResponseAssembler.shared.clear()
-        clearPendingRequest(resumingWith: BluetoothError.disconnected)
         ECUInfo.shared.clear()
 
         clearPendingRequest(resumingWith: BluetoothError.disconnected)
+        Task {
+            if LogSessionManager.shared.isLoggingSessionActive {
+                await closeLoggingSession()
+            }
+        }
     }
     // MARK: TX - SEND
     func send(
@@ -185,8 +229,8 @@ final class BluetoothManager: NSObject, ObservableObject {
         Logger.shared.console("TX Props = \(tx.properties)")
         Logger.shared.console(">> \(command)")
         Logger.shared.tx(command)
-        Logger.shared.verbose("TX UUID = \(tx.uuid.uuidString)")
-        Logger.shared.verbose("TX Props = \(tx.properties)")
+        Logger.shared.verbose(.communication, "TX UUID = \(tx.uuid.uuidString)")
+        Logger.shared.verbose(.communication, "TX Props = \(tx.properties)")
         lastSendTime = Date()
         let type: CBCharacteristicWriteType =
         tx.properties.contains(.write)
@@ -197,7 +241,7 @@ final class BluetoothManager: NSObject, ObservableObject {
             String(format: "%02X", $0)
         }.joined(separator: " ")
         
-        Logger.shared.verbose("TX HEX = \(hex)")
+        Logger.shared.verbose(.communication, "TX HEX = \(hex)")
         
         status = .waitingResponse
         peripheral.writeValue(
@@ -206,9 +250,6 @@ final class BluetoothManager: NSObject, ObservableObject {
             type: type
         )
         txCount += 1
-//        if !command.uppercased().hasPrefix("AT") {
-//            ScanStatistics.shared.requestsSent += 1
-//        }
     }
     
     // MARK: Send & Wait
@@ -223,7 +264,7 @@ final class BluetoothManager: NSObject, ObservableObject {
         ELMResponseAssembler.shared.clear()
 
         return try await withCheckedThrowingContinuation { continuation in
-            Logger.shared.verbose("📌 Registering continuation")
+            Logger.shared.verbose(.transport, "📌 Registering continuation")
             let requestID = UUID()
             // Assign pendingRequest BEFORE sending command, with timeoutTask nil
             pendingRequest = PendingRequest(
@@ -239,13 +280,16 @@ final class BluetoothManager: NSObject, ObservableObject {
                       pending.id == requestID else {
                     return
                 }
+                Logger.shared.warning(
+                    "⏱️ Request timed out: \(command)"
+                )
                 self.clearPendingRequest(resumingWith: BluetoothError.timeout)
             }
             // Update the timeoutTask in the pending request
             pendingRequest?.timeoutTask = timeoutTask
             do {
                 try send(command)
-                Logger.shared.verbose("📤 Command sent successfully")
+                Logger.shared.verbose(.transport, "📤 Command sent successfully")
             } catch {
                 timeoutTask.cancel()
                 clearPendingRequest()
@@ -254,73 +298,39 @@ final class BluetoothManager: NSObject, ObservableObject {
             }
         }
     }
-    @inline(__always)
-    private func ensureConnected() -> Bool {
-        guard isConnected else {
-            status = .disconnected
-            return false
-        }
-        return true
-    }
-
-    @discardableResult
-    private func runInitializationCommand(
-        _ command: String,
-        timeout: Duration = .seconds(2)
-    ) async -> Bool {
-        do {
-            _ = try await sendAndWait(command, timeout: timeout)
-            return ensureConnected()
-        } catch {
-            Logger.shared.error("Initialization command failed: \(command): \(error)")
-            return false
-        }
-    }
-
     @MainActor
     private func initializeELM() async {
         status = .initializingELM
 
-        do {
-            _ = try await sendAndWait("ATZ", timeout: .seconds(3))
-        } catch {
-            Logger.shared.error("ATZ failed: \(error)")
-            return
-        }
-        guard isConnected else {
-            status = .disconnected
+        guard await ELM327.shared.initializeELM() else {
+            Logger.shared.error("ELM initialization failed")
             return
         }
 
-        guard await runInitializationCommand("ATE0") else { return }
-        guard await runInitializationCommand("ATL0") else { return }
-        guard await runInitializationCommand("ATS0") else { return }
-        guard await runInitializationCommand("ATH1") else { return }
+        status = .connected
+
         ECUInfo.shared.header = ELM327.shared.currentHeader
+        ECUInfo.shared.status = "Connected"
+        ECUInfo.shared.lastConnected = Date()
 
-        status = .settingProtocol
-        guard await runInitializationCommand("ATSP5") else { return }
-        try? await Task.sleep(for: .milliseconds(1500))
-        status = .checkingProtocol
-        guard await runInitializationCommand("ATDP") else { return }
-        guard await runInitializationCommand("ATI") else { return }
+        // Reset transient ECU identification before collecting fresh values.
+        ECUInfo.shared.ecuIdentifier = ""
+        ECUInfo.shared.calibrationIdentifier = ""
+        ECUInfo.shared.vinIndentifier = ""
+        ECUInfo.shared.ecuName = ""
 
-        status = .testingECU
-        do {
-            let result = try await sendAndWait("0100", timeout: .seconds(2))
-            Logger.shared.success("ECU Test Response: \(result.response.raw)")
-        } catch {
-            Logger.shared.error("ECU test failed: \(error)")
-            return
+        // Collect fresh ECU identification synchronously before building the fingerprint.
+        await ELM327.shared.identifyECU()
+
+        let fingerprint = ECUInfo.shared.fingerprint
+
+        if let profile = BikeProfileManager.shared.load(for: fingerprint) {
+            Logger.shared.success("Loaded bike profile: \(profile.displayName)")
+        } else {
+            Logger.shared.info("No matching bike profile found")
         }
 
         Logger.shared.success("ELM initialization finished")
-
-        guard ensureConnected() else { return }
-        status = .connected
-
-        ECUInfo.shared.status = "Connected"
-        ECUInfo.shared.lastConnected = Date()
     }
     
     @MainActor
@@ -328,7 +338,12 @@ final class BluetoothManager: NSObject, ObservableObject {
         txCount = 0
         rxCount = 0
     }
-    
+
+    // MARK: - Private helpers
+    private func closeLoggingSession() async {
+        await Logger.shared.finishSessionImpl()
+        LogSessionManager.shared.endLoggingSession()
+    }
 }
 // ======================================================
 // MARK: CBCentralManagerDelegate
@@ -387,7 +402,7 @@ extension BluetoothManager:
                         (name.contains("elm") || name.contains("obd")) {
                         
                         Logger.shared.console("🚀 Auto connecting to \(name)")
-                        stopScan()
+                        stopBLEScan()
                         status = .connecting
                         connect(to: peripheral)
                     }
@@ -402,7 +417,7 @@ extension BluetoothManager:
         Task { @MainActor in
             Logger.shared.console("Connected to \(peripheral.name ?? "Unknown")")
             Logger.shared.success("Connected to \(peripheral.name ?? "Unknown")")
-            stopScan()
+            stopBLEScan()
             peripheral.discoverServices(nil)
         }
     }
@@ -431,7 +446,7 @@ extension BluetoothManager:
 
             self.discoveredDevices.removeAll()
 
-            self.stopScan()
+            self.stopBLEScan()
             ECUInfo.shared.clear()
 
             Logger.shared.console("Disconnected")
@@ -496,9 +511,9 @@ extension BluetoothManager:
                 Logger.shared.console("CHAR    : \(c.uuid.uuidString)")
                 Logger.shared.console("PROPS   : \(c.properties)")
                 
-                Logger.shared.verbose("SERVICE: \(service.uuid.uuidString)")
-                Logger.shared.verbose("CHAR: \(c.uuid.uuidString)")
-                Logger.shared.verbose("PROPS: \(c.properties)")
+                Logger.shared.verbose(.bluetooth, "SERVICE: \(service.uuid.uuidString)")
+                Logger.shared.verbose(.bluetooth, "CHAR: \(c.uuid.uuidString)")
+                Logger.shared.verbose(.bluetooth, "PROPS: \(c.properties)")
                 
                 // RX
                 if c.uuid.uuidString.uppercased() == "FFF1" {
@@ -576,6 +591,9 @@ extension BluetoothManager:
              .atResponse,
              .unknown:
             break
+        case .partialFrame:
+            ScanStatistics.shared.recordPartialFrame()
+            Logger.shared.warning("🟡 Partial ECU frame")
         }
     }
     
@@ -583,8 +601,7 @@ extension BluetoothManager:
     // MARK: - didUpdateValueFor helpers
     private static let ecuFramePrefixes: Set<String> = ["41", "61", "62", "7F"]
 
-    private func updateECUInfo(from response: ELMResponse) {
-        let upper = response.raw.uppercased()
+    private func updateECUInfo(from response: ELMResponse) {        let upper = response.raw.uppercased()
 
         if upper.hasPrefix("ELM") {
             ECUInfo.shared.elmVersion = response.raw
@@ -596,6 +613,21 @@ extension BluetoothManager:
             upper.contains("J1850") {
             ECUInfo.shared.protocolName = response.raw
         }
+
+        if let vin = response.vin, !vin.isEmpty {
+            ECUInfo.shared.ecuIdentifier = vin
+        }
+
+        if let calibration = response.calibrationID {
+            Logger.shared.info("📥 updateECUInfo Calibration = '\(calibration)'")
+            ECUInfo.shared.calibrationIdentifier = calibration
+        }
+
+        if let ecuName = response.ecuName, !ecuName.isEmpty {
+            ECUInfo.shared.ecuName = ecuName
+        }
+        
+        
     }
 
     private func logResponse(_ raw: String) {
@@ -607,24 +639,34 @@ extension BluetoothManager:
 
         Logger.shared.console("<< TEXT: \(raw)")
         Logger.shared.console("<< HEX : \(hex)")
-        Logger.shared.verbose("RX HEX = \(hex)")
+        Logger.shared.verbose(.communication, "RX HEX = \(hex)")
     }
 
-    private func completePendingRequest(with response: ELMResponse, latency: TimeInterval) {
+    private func completePendingRequest(
+        with response: ELMResponse,
+        latency: TimeInterval
+    ) {
         guard let pending = pendingRequest else {
-            Logger.shared.verbose("No pending request. Dropping response.")
+            Logger.shared.verbose(.transport, "No pending request. Dropping response.")
             return
         }
 
-        Logger.shared.verbose("Completing pending request \(pending.id)")
+        Logger.shared.verbose(.transport, "Completing pending request \(pending.id)")
+
         pending.timeoutTask?.cancel()
 
-        pendingRequest = nil
-        ELMResponseAssembler.shared.clear()
-        
-        pending.continuation.resume(returning: (response, latency))
+        // IMPORTANT:
+        // Resume first, then tear down state.
+        pending.continuation.resume(
+            returning: (response, latency)
+        )
 
-        Logger.shared.verbose("🟢 Continuation RESUMED: \(response.type)")
+        pendingRequest = nil
+
+        // Only clear assembler after the caller received the response.
+        ELMResponseAssembler.shared.clear()
+
+        Logger.shared.verbose(.transport, "🟢 Continuation RESUMED: \(response.type)")
     }
 
     // MARK: didUpdateValueFor
@@ -646,13 +688,15 @@ extension BluetoothManager:
 
             let responses = await ELMResponseAssembler.shared.append(chunk)
             guard !responses.isEmpty else {
-                Logger.shared.verbose("RX Chunk (\(value.count) bytes)")
+                Logger.shared.verbose(.assembler, "RX Chunk (\(value.count) bytes)")
                 return
             }
             for response in responses {
                 let raw = response.raw
 
-                Logger.shared.verbose("""
+                updateECUInfo(from: response)
+
+                Logger.shared.verbose(.assembler, """
 🔵 RX COMPLETE
 RAW      = \(raw)
 TYPE     = \(response.type)
@@ -660,15 +704,12 @@ SERVICE  = \(response.service.map { String(format: "%02X", $0) } ?? "-")
 PID      = \(response.pid.map { String(format: "%04X", $0) } ?? "-")
 PAYLOAD  = \(response.payload.map { String(format: "%02X", $0) }.joined(separator: " "))
 """)
-                
 
-                updateECUInfo(from: response)
-
-                Logger.shared.verbose("RX Complete (\(responses.count) response(s))")
+                Logger.shared.verbose(.assembler, "RX Complete (\(responses.count) response(s))")
                 logResponse(raw)
 
                 rxCount += 1
-                if !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                if !raw.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).isEmpty {
                     lastResponse = raw
                 }
 
@@ -686,7 +727,7 @@ PAYLOAD  = \(response.payload.map { String(format: "%02X", $0) }.joined(separato
                         compact.contains($0)
                     }
                     if !containsFrame {
-                        Logger.shared.verbose("Ignoring transient response: \(response.raw)")
+                        Logger.shared.verbose(.parser, "Ignoring transient response: \(response.raw)")
                         continue
                     }
                 }
@@ -695,8 +736,8 @@ PAYLOAD  = \(response.payload.map { String(format: "%02X", $0) }.joined(separato
                     Logger.shared.warning("Ignoring response type: \(response.type)")
                     continue
                 }
-                
-                Logger.shared.verbose("Attempting to complete pending request with response type: \(response.type)")
+
+                Logger.shared.verbose(.transport, "Attempting to complete pending request with response type: \(response.type)")
                 completePendingRequest(with: response, latency: latency)
                 analyzeResponse(response)
             }
@@ -715,6 +756,7 @@ PAYLOAD  = \(response.payload.map { String(format: "%02X", $0) }.joined(separato
             }
 
             Logger.shared.verbose(
+                .bluetooth,
                 "Notify \(characteristic.uuid.uuidString): \(characteristic.isNotifying)"
             )
 
@@ -755,7 +797,10 @@ extension ELMResponseType {
         case .searching,
              .stopped:
             return false
+        case .partialFrame:
+            return true
         }
     }
 }
+
 
