@@ -19,6 +19,7 @@ final class DeviceDiscovery: ObservableObject {
 
     @Published private(set) var discoveryLog: [DiscoveryResult] = []
     @Published private(set) var discoverySession = DiscoverySession()
+    private let statistics = ProgressStatistics.shared
 
     var discoveredDevices: [DeviceDiscoveryResult] {
         discoverySession.successfulRecords.map {
@@ -45,6 +46,8 @@ final class DeviceDiscovery: ObservableObject {
 
     @inline(__always)
     private func finishDiscovery() {
+
+        statistics.finish()
 
         Logger.shared.success(
             "🏁 Device discovery finished (\(discoverySession.respondingAddresses.count) devices)"
@@ -79,6 +82,8 @@ final class DeviceDiscovery: ObservableObject {
         await reset()
 
         isRunning = true
+
+        statistics.start(total: 256)
 
         defer {
             isRunning = false
@@ -146,6 +151,8 @@ final class DeviceDiscovery: ObservableObject {
                     )
                 )
 
+                statistics.record(success: true)
+
                 Logger.shared.success(
                     String(
                         format: "✅ %02X → %02X",
@@ -169,6 +176,8 @@ final class DeviceDiscovery: ObservableObject {
                     )
                 )
 
+                statistics.record(success: false)
+
                 handleFailure(address)
             }
 
@@ -180,6 +189,8 @@ final class DeviceDiscovery: ObservableObject {
 
             handleFailure(address)
 
+            statistics.record(success: false)
+
         } catch {
 
             Logger.shared.error(
@@ -189,6 +200,8 @@ final class DeviceDiscovery: ObservableObject {
             )
 
             handleFailure(address)
+
+            statistics.record(success: false)
         }
     }
 
@@ -226,5 +239,6 @@ final class DeviceDiscovery: ObservableObject {
         discoveryLog.removeAll(keepingCapacity: true)
         discoverySession.records.removeAll(keepingCapacity: true)
         
+        statistics.reset()
     }
 }

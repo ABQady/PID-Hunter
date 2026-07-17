@@ -9,7 +9,7 @@ import SwiftUI
 struct TerminalView: View {
     @ObservedObject private var bt = BluetoothManager.shared
     @ObservedObject private var brute = BruteForceScanner.shared
-    @ObservedObject private var stats = ScanStatistics.shared
+    @ObservedObject private var progressStatistics = ProgressStatistics.shared
     @Bindable var viewModel: TerminalViewModel
     @State private var programmaticScroll = false
     @State private var search = ""
@@ -118,11 +118,10 @@ struct TerminalView: View {
                     )
                     
                     ProgressCard(
-                        stats: stats,
                         successRate: brute.statistics.successRate,
                         averageLatency: brute.statistics.averageLatency,
                         isScanning: brute.scanStatus.isScanning,
-                        isCompleted: stats.finishedAt != nil,
+                        isCompleted: progressStatistics.finishedAt != nil,
                         hasResumePoint: brute.hasResumePoint,
                         currentMode: selectedMode
                     )

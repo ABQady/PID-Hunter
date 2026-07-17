@@ -54,6 +54,7 @@ final class BruteForceScanner: ObservableObject {
     @Published private(set) var scanStatus = ScanStatus()
     @Published private(set) var session = ScanSession()
     @Published private(set) var statistics = SearchEngineStatistics()
+    private let progressStatistics = ProgressStatistics.shared
     @Published private(set) var partialFrames: [PartialFrame] = []
     @Published private(set) var partialFrameCount = 0
 
@@ -252,7 +253,7 @@ final class BruteForceScanner: ObservableObject {
     
     private func finishScan(completed: Bool) {
         scanStatus.isScanning = false
-        scanStatus.currentRequest = ""
+        scanStatus.currentRequest = completed ? "Scan completed" : "Scan stopped"
         
         // Flush all pending profile mutations before any session finalization.
         RequestOutcomeProcessor.shared.flushProfile()
@@ -275,7 +276,7 @@ final class BruteForceScanner: ObservableObject {
             persistence.saveResults(session.results)
             // persistence.refreshResumeAvailability() // Removed as ScanPersistence refreshes internally
         }
-        
+        progressStatistics.finish()
         shouldStop = false
     }
     
@@ -301,6 +302,7 @@ final class BruteForceScanner: ObservableObject {
         scanStatus = ScanStatus()
 
         statistics.reset()
+        progressStatistics.reset()
         ScanStatistics.shared.reset()
     }
 
@@ -389,6 +391,7 @@ final class BruteForceScanner: ObservableObject {
 
     private func updateUIProgress(done: Int, total: Int) {
         scanStatus.progress = Double(done) / Double(total)
+        progressStatistics.update(completed: done)
     }
 
     private func updateExecutionStatistics(total: Int) {
@@ -715,7 +718,7 @@ Response Header: \(response.header ?? "nil")
     
     func stop() {
         shouldStop = true
-        scanStatus.currentRequest = "Stopping..."
+        scanStatus.currentRequest = "Scan stopping..."
         stats.complete()
     }
 
@@ -749,11 +752,13 @@ Response Header: \(response.header ?? "nil")
     ) {
         let totalRequests = Int(context.endPID) - Int(context.startPID) + 1
         if context.resumeMetadata != nil {
+            progressStatistics.start(total: totalRequests)
             stats.totalRequests = totalRequests
             if stats.startedAt == nil {
                 stats.start()
             }
         } else {
+            progressStatistics.start(total: totalRequests)
             stats.begin(totalRequests: totalRequests)
         }
     }
