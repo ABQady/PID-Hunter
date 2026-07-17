@@ -5,7 +5,22 @@
 //  Created by Ahmed Al Qady on 17/07/2026.
 //
 
+
 import Foundation
+
+struct ELMFingerprint: Codable, Hashable, LosslessStringConvertible {
+    let id: String
+
+    init(id: String) {
+        self.id = id
+    }
+
+    init(_ description: String) {
+        self.id = description
+    }
+
+    var description: String { id }
+}
 
 struct ELMCommandResult: Codable, Hashable {
     let command: ELMCommand
@@ -15,9 +30,9 @@ struct ELMCommandResult: Codable, Hashable {
 }
 
 struct ELMProfile: Identifiable, Codable, Hashable {
-    var id: String { fingerprint }
+    var id: String { fingerprint.id }
 
-    let fingerprint: String
+    let fingerprint: ELMFingerprint
     let firmware: String?
     let deviceIdentifier: String?
     let deviceDescription: String?
@@ -66,7 +81,7 @@ struct ELMProfile: Identifiable, Codable, Hashable {
 
 extension ELMProfile {
     static let empty = ELMProfile(
-        fingerprint: UUID().uuidString,
+        fingerprint: ELMFingerprint(id: UUID().uuidString),
         firmware: nil,
         deviceIdentifier: nil,
         deviceDescription: nil,

@@ -22,7 +22,7 @@ struct ELMProfileBuilder {
         )
 
         return ELMProfile(
-            fingerprint: fingerprint(from: lookup),
+            fingerprint: ELMFingerprint(id: fingerprint(from: lookup)),
             firmware: lookup[.firmware]?.response,
             deviceIdentifier: lookup[.deviceIdentifier]?.response,
             deviceDescription: lookup[.deviceDescription]?.response,
