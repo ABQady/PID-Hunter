@@ -202,11 +202,31 @@ enum OBDMode: String, CaseIterable, Identifiable, Codable {
 
         let expectedPrefix = positiveResponsePrefix + identifier
 
-        guard cleanedResponse.hasPrefix(expectedPrefix) else {
-            return cleanedResponse
+        // Reject negative responses for this service before attempting payload extraction.
+        let negativePrefix = String(format: "7F%02X", requestService)
+        if cleanedResponse.contains(negativePrefix) {
+            return "—"
         }
 
-        let payloadHex = String(cleanedResponse.dropFirst(expectedPrefix.count))
+        guard let range = cleanedResponse.range(of: expectedPrefix) else {
+            // Unknown frame format or unrelated response.
+            return "—"
+        }
+
+        let payloadHex = String(cleanedResponse[range.upperBound...])
+
+        if self == .mode01,
+           identifier.count == 2,
+           let pid = UInt8(identifier, radix: 16),
+           let standardPID = StandardPIDDatabase.lookup(pid) {
+
+            let expectedCharacters = standardPID.bytes * 2
+
+            if payloadHex.count >= expectedCharacters {
+                return String(payloadHex.prefix(expectedCharacters))
+            }
+        }
+
         return payloadHex.isEmpty ? "—" : payloadHex
     }
     
