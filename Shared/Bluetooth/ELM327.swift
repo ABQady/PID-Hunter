@@ -240,8 +240,6 @@ final class ELM327: ObservableObject {
     func identifyECU() async {
         let identificationCommands: [(command: String, description: String)] = [
             ("ATI",   "ELM Version"),
-            ("AT@1",  "Device Description"),
-            ("AT@2",  "Device Identifier"),
             ("ATDP",  "Protocol"),
             ("ATDPN", "Protocol Number"),
             ("0902",  "VIN"),
@@ -275,16 +273,6 @@ final class ELM327: ObservableObject {
                 case "ATDP":
                     ECUInfo.shared.protocolName = result.response.raw
                         .replacingOccurrences(of: "ATDP", with: "")
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-
-                case "AT@1":
-                    ECUInfo.shared.adapterDescription = result.response.raw
-                        .replacingOccurrences(of: "AT@1", with: "")
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-
-                case "AT@2":
-                    ECUInfo.shared.ecuIdentifier = result.response.raw
-                        .replacingOccurrences(of: "AT@2", with: "")
                         .trimmingCharacters(in: .whitespacesAndNewlines)
 
                 case "0902":

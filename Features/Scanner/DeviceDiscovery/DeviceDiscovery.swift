@@ -95,9 +95,25 @@ final class DeviceDiscovery: ObservableObject {
         Logger.shared.verbose(.setup, "🔧 Initializing ELM for discovery session...")
         await elm.initializeELM()
 
-        for address in UInt8.min...UInt8.max {
+        Logger.shared.info("📡 Stage 1/3: Functional StartCommunication")
+        await probe(0xFE)
+        try? await Task.sleep(for: .milliseconds(100))
+
+        Logger.shared.info("📡 Stage 2/3: Physical StartCommunication")
+        for address in UInt8.min...UInt8.max where address != 0xFE {
             await probe(address)
             try? await Task.sleep(for: .milliseconds(20))
+        }
+
+        if discoverySession.successfulRecords.isEmpty {
+            Logger.shared.warning("⚠️ No ECU discovered via StartCommunication. Falling back to diagnostic probes.")
+
+            Logger.shared.info("📡 Stage 3/3: Fallback Diagnostic Probes (09 02 + 01 00)")
+
+            for address in UInt8.min...UInt8.max where address != 0xFE {
+                await diagnosticProbe(address)
+                try? await Task.sleep(for: .milliseconds(20))
+            }
         }
 
         finishDiscovery()
@@ -120,9 +136,31 @@ final class DeviceDiscovery: ObservableObject {
             let response = result.response
             let latency = result.latency
 
+            Logger.shared.verbose(
+                .communication,
+                "📥 \(response.raw)"
+            )
+
+            if let responder = response.respondingAddress {
+                Logger.shared.verbose(
+                    .discovery,
+                    String(format: "📍 Response address: %02X", responder)
+                )
+            } else {
+                Logger.shared.verbose(
+                    .discovery,
+                    "📍 Response address: <nil>"
+                )
+            }
+
             let decision = interpreter.interpret(
                 requestAddress: address,
                 response: response
+            )
+
+            Logger.shared.verbose(
+                .discovery,
+                "🧠 Discovery decision: \(decision)"
             )
 
             switch decision {
@@ -166,6 +204,14 @@ final class DeviceDiscovery: ObservableObject {
                  .invalidResponse,
                  .transportError:
 
+                Logger.shared.warning(
+                    String(
+                        format: "❌ Probe %02X rejected (Responder=%@)",
+                        address,
+                        response.respondingAddress.map { String(format: "%02X", $0) } ?? "nil"
+                    )
+                )
+
                 discoveryLog.append(
                     DiscoveryResult(
                         requestedAddress: address,
@@ -205,8 +251,78 @@ final class DeviceDiscovery: ObservableObject {
         }
     }
 
+    private func diagnosticProbe(_ address: UInt8) async {
+        let probes: [(String, String)] = [
+            ("Identification", buildIdentificationProbe(for: address)),
+            ("Diagnostic", buildDiagnosticProbe(for: address))
+        ]
+
+        for (name, command) in probes {
+            Logger.shared.info(String(format: "📡 [%@] Probing %02X", name, address))
+            Logger.shared.verbose(.communication, "📤 [\(name)] \(command)")
+
+            do {
+                let result = try await elm.request(command: command)
+
+                Logger.shared.verbose(.communication, "📥 [\(name)] \(result.response.raw)")
+
+                let decision = interpreter.interpret(
+                    requestAddress: address,
+                    response: result.response
+                )
+
+                Logger.shared.verbose(.discovery, "🧠 [\(name)] \(decision)")
+
+                if case .ecuFound = decision {
+                    Logger.shared.success(String(format: "✅ [%@] ECU found at %02X", name, address))
+                    await probe(address)
+                    break
+                } else {
+                    Logger.shared.warning(String(format: "❌ [%@] No ECU at %02X", name, address))
+                }
+            } catch {
+                Logger.shared.warning(String(format: "⚠️ [%@] Probe %02X failed: %@", name, address, error.localizedDescription))
+            }
+        }
+    }
+
+    private func buildIdentificationProbe(for address: UInt8) -> String {
+        let bytes: [UInt8] = [
+            0x80,
+            address,
+            0xF1,
+            0x09,
+            0x02
+        ]
+
+        let checksum = bytes.reduce(0) { $0 + Int($1) } & 0xFF
+
+        return (bytes + [UInt8(checksum)])
+            .map { String(format: "%02X", $0) }
+            .joined(separator: " ")
+    }
+
+    private func buildDiagnosticProbe(for address: UInt8) -> String {
+        let bytes: [UInt8] = [
+            0x80,
+            address,
+            0xF1,
+            0x01,
+            0x00
+        ]
+
+        let checksum = bytes.reduce(0) { $0 + Int($1) } & 0xFF
+
+        return (bytes + [UInt8(checksum)])
+            .map { String(format: "%02X", $0) }
+            .joined(separator: " ")
+    }
+
     private func discoveryCommand(for address: UInt8) -> String {
 
+        // ISO 14230 StartCommunication.
+        // Address 0xFE performs functional addressing (broadcast).
+        // Other addresses perform physical addressing.
         let bytes: [UInt8] = [
             0x81,
             address,
@@ -230,7 +346,7 @@ final class DeviceDiscovery: ObservableObject {
     private func handleFailure(_ address: UInt8) {
         Logger.shared.verbose(
             .discovery,
-            String(format: "❌ %02X Unsupported", address)
+            String(format: "❌ %02X Unsupported/Rejected", address)
         )
     }
 
