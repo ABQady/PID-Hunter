@@ -285,9 +285,9 @@ struct StoredPIDCard: View {
                     displayValue = text
                 case .bytes(let bytes):
                     displayValue = bytes.map { String(format: "%02X", $0) }.joined(separator: " ")
-                case .bitmap(let bitmap):
-                    displayValue = String(format: "0x%08X", bitmap)
-                case .boolean(let flag):
+                case .bitfield(let bitmap):
+                    displayValue = String(format: "0x%016llX", bitmap)
+                case .bool(let flag):
                     displayValue = flag ? "True" : "False"
                 }
 

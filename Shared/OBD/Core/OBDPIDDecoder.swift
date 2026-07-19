@@ -1,8 +1,5 @@
-<<<<<<< HEAD
-=======
 //
 
->>>>>>> Inference
 //  OBD+PID+Decoder.swift
 //  PID Hunter
 //
@@ -63,16 +60,40 @@ enum PIDValueKind: Hashable {
     case gear
 }
 
-// MARK: - Protocol-Oriented PID Decoding
-
-<<<<<<< HEAD
 enum PIDValue: Hashable {
     case number(Double)
     case text(String)
     case bytes([UInt8])
-    case bitmap(UInt32)
-    case boolean(Bool)
+    case bool(Bool)
+    case bitfield(UInt64)
+
+    var number: Double? {
+        guard case .number(let value) = self else { return nil }
+        return value
+    }
+
+    var text: String? {
+        guard case .text(let value) = self else { return nil }
+        return value
+    }
+
+    var bytes: [UInt8]? {
+        guard case .bytes(let value) = self else { return nil }
+        return value
+    }
+
+    var bool: Bool? {
+        guard case .bool(let value) = self else { return nil }
+        return value
+    }
+
+    var bitfield: UInt64? {
+        guard case .bitfield(let value) = self else { return nil }
+        return value
+    }
 }
+
+// MARK: - Protocol-Oriented PID Decoding
 
 /// A decoded value with its physical meaning.
 struct PIDDecodedValue: Hashable {
@@ -80,27 +101,13 @@ struct PIDDecodedValue: Hashable {
     let kind: PIDValueKind
     let label: String?
 
-    init(value: PIDValue, kind: PIDValueKind, label: String? = nil) {
-=======
-/// A decoded value with its physical meaning.
-struct PIDDecodedValue: Hashable {
-    let value: Double
-    let kind: PIDValueKind
-    let label: String?
-
-    init(value: Double, kind: PIDValueKind, label: String? = nil) {
->>>>>>> Inference
+    init(value: PIDValue,
+         kind: PIDValueKind,
+         label: String? = nil) {
         self.value = value
         self.kind = kind
         self.label = label
     }
-<<<<<<< HEAD
-
-    init(number: Double, kind: PIDValueKind, label: String? = nil) {
-        self.init(value: .number(number), kind: kind, label: label)
-    }
-=======
->>>>>>> Inference
 }
 
 /// Protocol describing the kind and label of a PID value.
@@ -122,11 +129,8 @@ protocol MultiValuePIDDecoder: ProtocolPIDDecoding {
 
 extension MultiValuePIDDecoder {
     var descriptor: PIDDecodedValue {
-<<<<<<< HEAD
-        PIDDecodedValue(number: 0, kind: Self.primaryKind)
-=======
-        PIDDecodedValue(value: 0, kind: Self.primaryKind)
->>>>>>> Inference
+        PIDDecodedValue(value: .number(0),
+                        kind: Self.primaryKind)
     }
 }
 
@@ -144,11 +148,7 @@ extension NamedPIDDecoder {
 
     func decode(_ bytes: [UInt8]) -> [PIDDecodedValue] {
         guard let value = decodeValue(bytes) else { return [] }
-<<<<<<< HEAD
-        return [PIDDecodedValue(number: value,
-=======
-        return [PIDDecodedValue(value: value,
->>>>>>> Inference
+        return [PIDDecodedValue(value: .number(value),
                                 kind: Self.descriptor.kind,
                                 label: Self.descriptor.label)]
     }
@@ -177,27 +177,15 @@ extension ProtocolPIDDecoding {
 
 // MARK: Basic Decoders
 
-<<<<<<< HEAD
-struct RawPIDDecoder: ProtocolPIDDecoding {
-    let descriptor = PIDDecodedValue(value: .bytes([]), kind: .raw)
-
-    func decode(_ bytes: [UInt8]) -> [PIDDecodedValue] {
-        [PIDDecodedValue(value: .bytes(bytes), kind: .raw)]
-=======
 struct RawPIDDecoder: NamedPIDDecoder {
-    static let descriptor = PIDDecodedValue(value: 0, kind: .raw)
+    static let descriptor = PIDDecodedValue(value: .number(0), kind: .raw)
     func decodeValue(_ bytes: [UInt8]) -> Double? {
         firstByte(bytes).map(Double.init)
->>>>>>> Inference
     }
 }
 
 struct PercentagePIDDecoder: NamedPIDDecoder {
-<<<<<<< HEAD
-    static let descriptor = PIDDecodedValue(number: 0, kind: .percentage)
-=======
-    static let descriptor = PIDDecodedValue(value: 0, kind: .percentage)
->>>>>>> Inference
+    static let descriptor = PIDDecodedValue(value: .number(0), kind: .percentage)
     func decodeValue(_ bytes: [UInt8]) -> Double? {
         guard let a = firstByte(bytes) else { return nil }
         return Double(a) * 100.0 / 255.0
@@ -205,11 +193,7 @@ struct PercentagePIDDecoder: NamedPIDDecoder {
 }
 
 struct TemperaturePIDDecoder: NamedPIDDecoder {
-<<<<<<< HEAD
-    static let descriptor = PIDDecodedValue(number: 0, kind: .temperature)
-=======
-    static let descriptor = PIDDecodedValue(value: 0, kind: .temperature)
->>>>>>> Inference
+    static let descriptor = PIDDecodedValue(value: .number(0), kind: .temperature)
     func decodeValue(_ bytes: [UInt8]) -> Double? {
         guard let a = firstByte(bytes) else { return nil }
         return Double(Int(a) - 40)
@@ -219,11 +203,7 @@ struct TemperaturePIDDecoder: NamedPIDDecoder {
 // MARK: Numeric Decoders
 
 struct RPMPIDDecoder: NamedPIDDecoder {
-<<<<<<< HEAD
-    static let descriptor = PIDDecodedValue(number: 0, kind: .rotationalSpeed)
-=======
-    static let descriptor = PIDDecodedValue(value: 0, kind: .rotationalSpeed)
->>>>>>> Inference
+    static let descriptor = PIDDecodedValue(value: .number(0), kind: .rotationalSpeed)
     func decodeValue(_ bytes: [UInt8]) -> Double? {
         guard let value = word(bytes) else { return nil }
         return Double(value) / 4.0
@@ -231,22 +211,14 @@ struct RPMPIDDecoder: NamedPIDDecoder {
 }
 
 struct SpeedPIDDecoder: NamedPIDDecoder {
-<<<<<<< HEAD
-    static let descriptor = PIDDecodedValue(number: 0, kind: .vehicleSpeed)
-=======
-    static let descriptor = PIDDecodedValue(value: 0, kind: .vehicleSpeed)
->>>>>>> Inference
+    static let descriptor = PIDDecodedValue(value: .number(0), kind: .vehicleSpeed)
     func decodeValue(_ bytes: [UInt8]) -> Double? {
         firstByte(bytes).map(Double.init)
     }
 }
 
 struct TimingAdvancePIDDecoder: NamedPIDDecoder {
-<<<<<<< HEAD
-    static let descriptor = PIDDecodedValue(number: 0, kind: .angle)
-=======
-    static let descriptor = PIDDecodedValue(value: 0, kind: .angle)
->>>>>>> Inference
+    static let descriptor = PIDDecodedValue(value: .number(0), kind: .angle)
     func decodeValue(_ bytes: [UInt8]) -> Double? {
         guard let a = firstByte(bytes) else { return nil }
         return Double(a) / 2.0 - 64.0
@@ -254,22 +226,14 @@ struct TimingAdvancePIDDecoder: NamedPIDDecoder {
 }
 
 struct PressurePIDDecoder: NamedPIDDecoder {
-<<<<<<< HEAD
-    static let descriptor = PIDDecodedValue(number: 0, kind: .pressure)
-=======
-    static let descriptor = PIDDecodedValue(value: 0, kind: .pressure)
->>>>>>> Inference
+    static let descriptor = PIDDecodedValue(value: .number(0), kind: .pressure)
     func decodeValue(_ bytes: [UInt8]) -> Double? {
         firstByte(bytes).map(Double.init)
     }
 }
 
 struct VoltagePIDDecoder: NamedPIDDecoder {
-<<<<<<< HEAD
-    static let descriptor = PIDDecodedValue(number: 0, kind: .voltage)
-=======
-    static let descriptor = PIDDecodedValue(value: 0, kind: .voltage)
->>>>>>> Inference
+    static let descriptor = PIDDecodedValue(value: .number(0), kind: .voltage)
     func decodeValue(_ bytes: [UInt8]) -> Double? {
         guard let value = word(bytes) else { return nil }
         return Double(value) / 1000.0
@@ -277,11 +241,7 @@ struct VoltagePIDDecoder: NamedPIDDecoder {
 }
 
 struct MAFPIDDecoder: NamedPIDDecoder {
-<<<<<<< HEAD
-    static let descriptor = PIDDecodedValue(number: 0, kind: .flowRate)
-=======
-    static let descriptor = PIDDecodedValue(value: 0, kind: .flowRate)
->>>>>>> Inference
+    static let descriptor = PIDDecodedValue(value: .number(0), kind: .flowRate)
     func decodeValue(_ bytes: [UInt8]) -> Double? {
         guard let value = word(bytes) else { return nil }
         return Double(value) / 100.0
@@ -291,11 +251,7 @@ struct MAFPIDDecoder: NamedPIDDecoder {
 // MARK: Fuel Decoders
 
 struct FuelTrimPIDDecoder: NamedPIDDecoder {
-<<<<<<< HEAD
-    static let descriptor = PIDDecodedValue(number: 0, kind: .fuelTrim)
-=======
-    static let descriptor = PIDDecodedValue(value: 0, kind: .fuelTrim)
->>>>>>> Inference
+    static let descriptor = PIDDecodedValue(value: .number(0), kind: .fuelTrim)
     func decodeValue(_ bytes: [UInt8]) -> Double? {
         guard let a = firstByte(bytes) else { return nil }
         return (Double(a) - 128.0) / 1.28
@@ -303,11 +259,7 @@ struct FuelTrimPIDDecoder: NamedPIDDecoder {
 }
 
 struct FuelPressurePIDDecoder: NamedPIDDecoder {
-<<<<<<< HEAD
-    static let descriptor = PIDDecodedValue(number: 0, kind: .airPressure)
-=======
-    static let descriptor = PIDDecodedValue(value: 0, kind: .airPressure)
->>>>>>> Inference
+    static let descriptor = PIDDecodedValue(value: .number(0), kind: .airPressure)
     func decodeValue(_ bytes: [UInt8]) -> Double? {
         guard let a = firstByte(bytes) else { return nil }
         return Double(a) * 3.0
@@ -315,11 +267,7 @@ struct FuelPressurePIDDecoder: NamedPIDDecoder {
 }
 
 struct FuelRailPressurePIDDecoder: NamedPIDDecoder {
-<<<<<<< HEAD
-    static let descriptor = PIDDecodedValue(number: 0, kind: .airPressure)
-=======
-    static let descriptor = PIDDecodedValue(value: 0, kind: .airPressure)
->>>>>>> Inference
+    static let descriptor = PIDDecodedValue(value: .number(0), kind: .airPressure)
     func decodeValue(_ bytes: [UInt8]) -> Double? {
         guard let value = word(bytes) else { return nil }
         return Double(value) * 0.079
@@ -327,11 +275,7 @@ struct FuelRailPressurePIDDecoder: NamedPIDDecoder {
 }
 
 struct FuelRailGaugePressurePIDDecoder: NamedPIDDecoder {
-<<<<<<< HEAD
-    static let descriptor = PIDDecodedValue(number: 0, kind: .airPressure)
-=======
-    static let descriptor = PIDDecodedValue(value: 0, kind: .airPressure)
->>>>>>> Inference
+    static let descriptor = PIDDecodedValue(value: .number(0), kind: .airPressure)
     func decodeValue(_ bytes: [UInt8]) -> Double? {
         guard let value = word(bytes) else { return nil }
         return Double(value) * 10.0
@@ -341,11 +285,7 @@ struct FuelRailGaugePressurePIDDecoder: NamedPIDDecoder {
 // MARK: - 16-bit Decoders
 
 struct Percentage16PIDDecoder: NamedPIDDecoder {
-<<<<<<< HEAD
-    static let descriptor = PIDDecodedValue(number: 0, kind: .percentage)
-=======
-    static let descriptor = PIDDecodedValue(value: 0, kind: .percentage)
->>>>>>> Inference
+    static let descriptor = PIDDecodedValue(value: .number(0), kind: .percentage)
     func decodeValue(_ bytes: [UInt8]) -> Double? {
         guard let value = word(bytes) else { return nil }
         return Double(value) * 100.0 / 65535.0
@@ -353,11 +293,7 @@ struct Percentage16PIDDecoder: NamedPIDDecoder {
 }
 
 struct Temperature16PIDDecoder: NamedPIDDecoder {
-<<<<<<< HEAD
-    static let descriptor = PIDDecodedValue(number: 0, kind: .temperature)
-=======
-    static let descriptor = PIDDecodedValue(value: 0, kind: .temperature)
->>>>>>> Inference
+    static let descriptor = PIDDecodedValue(value: .number(0), kind: .temperature)
     func decodeValue(_ bytes: [UInt8]) -> Double? {
         guard let value = word(bytes) else { return nil }
         return Double(value) / 64.0 - 273.0
@@ -367,11 +303,7 @@ struct Temperature16PIDDecoder: NamedPIDDecoder {
 // MARK: - Time/Distance Decoders
 
 struct SecondsPIDDecoder: NamedPIDDecoder {
-<<<<<<< HEAD
-    static let descriptor = PIDDecodedValue(number: 0, kind: .duration)
-=======
-    static let descriptor = PIDDecodedValue(value: 0, kind: .duration)
->>>>>>> Inference
+    static let descriptor = PIDDecodedValue(value: .number(0), kind: .duration)
     func decodeValue(_ bytes: [UInt8]) -> Double? {
         guard let value = word(bytes) else { return nil }
         return Double(value)
@@ -379,11 +311,7 @@ struct SecondsPIDDecoder: NamedPIDDecoder {
 }
 
 struct MinutesPIDDecoder: NamedPIDDecoder {
-<<<<<<< HEAD
-    static let descriptor = PIDDecodedValue(number: 0, kind: .duration)
-=======
-    static let descriptor = PIDDecodedValue(value: 0, kind: .duration)
->>>>>>> Inference
+    static let descriptor = PIDDecodedValue(value: .number(0), kind: .duration)
     func decodeValue(_ bytes: [UInt8]) -> Double? {
         guard let value = word(bytes) else { return nil }
         return Double(value)
@@ -391,11 +319,7 @@ struct MinutesPIDDecoder: NamedPIDDecoder {
 }
 
 struct DistancePIDDecoder: NamedPIDDecoder {
-<<<<<<< HEAD
-    static let descriptor = PIDDecodedValue(number: 0, kind: .distance)
-=======
-    static let descriptor = PIDDecodedValue(value: 0, kind: .distance)
->>>>>>> Inference
+    static let descriptor = PIDDecodedValue(value: .number(0), kind: .distance)
     func decodeValue(_ bytes: [UInt8]) -> Double? {
         guard let value = word(bytes) else { return nil }
         return Double(value)
@@ -405,11 +329,7 @@ struct DistancePIDDecoder: NamedPIDDecoder {
 // MARK: - Catalyst Temperature
 
 struct CatalystTemperaturePIDDecoder: NamedPIDDecoder {
-<<<<<<< HEAD
-    static let descriptor = PIDDecodedValue(number: 0, kind: .temperature)
-=======
-    static let descriptor = PIDDecodedValue(value: 0, kind: .temperature)
->>>>>>> Inference
+    static let descriptor = PIDDecodedValue(value: .number(0), kind: .temperature)
     func decodeValue(_ bytes: [UInt8]) -> Double? {
         guard let value = word(bytes) else { return nil }
         return Double(value) / 10.0 - 40.0
@@ -419,11 +339,7 @@ struct CatalystTemperaturePIDDecoder: NamedPIDDecoder {
 // MARK: - Placeholder Decoders (SAE formula pending)
 
 struct RatioPIDDecoder: NamedPIDDecoder {
-<<<<<<< HEAD
-    static let descriptor = PIDDecodedValue(number: 0, kind: .lambda)
-=======
-    static let descriptor = PIDDecodedValue(value: 0, kind: .lambda)
->>>>>>> Inference
+    static let descriptor = PIDDecodedValue(value: .number(0), kind: .lambda)
     func decodeValue(_ bytes: [UInt8]) -> Double? {
         guard let value = word(bytes) else { return nil }
         return Double(value) * 2.0 / 65535.0
@@ -440,13 +356,8 @@ struct OxygenSensorPIDDecoder: MultiValuePIDDecoder {
         let trim = (Double(bytes[1]) - 128.0) / 1.28
 
         return [
-<<<<<<< HEAD
-            PIDDecodedValue(number: voltage, kind: .voltage, label: "Voltage"),
-            PIDDecodedValue(number: trim, kind: .fuelTrim, label: "Short Fuel Trim")
-=======
-            PIDDecodedValue(value: voltage, kind: .voltage, label: "Voltage"),
-            PIDDecodedValue(value: trim, kind: .fuelTrim, label: "Short Fuel Trim")
->>>>>>> Inference
+            PIDDecodedValue(value: .number(voltage), kind: .voltage, label: "Voltage"),
+            PIDDecodedValue(value: .number(trim), kind: .fuelTrim, label: "Short Fuel Trim")
         ]
     }
 }
@@ -462,23 +373,14 @@ struct WidebandOxygenSensorPIDDecoder: MultiValuePIDDecoder {
         let secondary = Double(Int16(bitPattern: secondaryWord)) / 256.0
 
         return [
-<<<<<<< HEAD
-            PIDDecodedValue(number: lambda, kind: .lambda, label: "Lambda"),
-            PIDDecodedValue(number: secondary, kind: .current, label: "Pump Current")
-=======
-            PIDDecodedValue(value: lambda, kind: .lambda, label: "Lambda"),
-            PIDDecodedValue(value: secondary, kind: .current, label: "Pump Current")
->>>>>>> Inference
+            PIDDecodedValue(value: .number(lambda), kind: .lambda, label: "Lambda"),
+            PIDDecodedValue(value: .number(secondary), kind: .current, label: "Pump Current")
         ]
     }
 }
 
 struct EngineTorquePIDDecoder: NamedPIDDecoder {
-<<<<<<< HEAD
-    static let descriptor = PIDDecodedValue(number: 0, kind: .torque)
-=======
-    static let descriptor = PIDDecodedValue(value: 0, kind: .torque)
->>>>>>> Inference
+    static let descriptor = PIDDecodedValue(value: .number(0), kind: .torque)
     func decodeValue(_ bytes: [UInt8]) -> Double? {
         guard let a = firstByte(bytes) else { return nil }
         return Double(Int(a) - 125)
@@ -486,11 +388,7 @@ struct EngineTorquePIDDecoder: NamedPIDDecoder {
 }
 
 struct FrequencyPIDDecoder: NamedPIDDecoder {
-<<<<<<< HEAD
-    static let descriptor = PIDDecodedValue(number: 0, kind: .frequency)
-=======
-    static let descriptor = PIDDecodedValue(value: 0, kind: .frequency)
->>>>>>> Inference
+    static let descriptor = PIDDecodedValue(value: .number(0), kind: .frequency)
     func decodeValue(_ bytes: [UInt8]) -> Double? {
         guard let value = word(bytes) else { return nil }
         return Double(value)
@@ -498,11 +396,7 @@ struct FrequencyPIDDecoder: NamedPIDDecoder {
 }
 
 struct ConcentrationPIDDecoder: NamedPIDDecoder {
-<<<<<<< HEAD
-    static let descriptor = PIDDecodedValue(number: 0, kind: .concentration)
-=======
-    static let descriptor = PIDDecodedValue(value: 0, kind: .concentration)
->>>>>>> Inference
+    static let descriptor = PIDDecodedValue(value: .number(0), kind: .concentration)
     func decodeValue(_ bytes: [UInt8]) -> Double? {
         // TODO: Implement SAE formula for Concentration PID
         return nil
@@ -510,11 +404,7 @@ struct ConcentrationPIDDecoder: NamedPIDDecoder {
 }
 
 struct EvapPressurePIDDecoder: NamedPIDDecoder {
-<<<<<<< HEAD
-    static let descriptor = PIDDecodedValue(number: 0, kind: .evapPressure)
-=======
-    static let descriptor = PIDDecodedValue(value: 0, kind: .evapPressure)
->>>>>>> Inference
+    static let descriptor = PIDDecodedValue(value: .number(0), kind: .evapPressure)
     func decodeValue(_ bytes: [UInt8]) -> Double? {
         guard let value = signedWord(bytes) else { return nil }
         return Double(value) / 4.0
@@ -522,11 +412,7 @@ struct EvapPressurePIDDecoder: NamedPIDDecoder {
 }
 
 struct FuelRatePIDDecoder: NamedPIDDecoder {
-<<<<<<< HEAD
-    static let descriptor = PIDDecodedValue(number: 0, kind: .fuelRate)
-=======
-    static let descriptor = PIDDecodedValue(value: 0, kind: .fuelRate)
->>>>>>> Inference
+    static let descriptor = PIDDecodedValue(value: .number(0), kind: .fuelRate)
     func decodeValue(_ bytes: [UInt8]) -> Double? {
         guard let value = word(bytes) else { return nil }
         return Double(value) / 20.0
@@ -534,11 +420,7 @@ struct FuelRatePIDDecoder: NamedPIDDecoder {
 }
 
 struct InjectionTimingPIDDecoder: NamedPIDDecoder {
-<<<<<<< HEAD
-    static let descriptor = PIDDecodedValue(number: 0, kind: .angle)
-=======
-    static let descriptor = PIDDecodedValue(value: 0, kind: .angle)
->>>>>>> Inference
+    static let descriptor = PIDDecodedValue(value: .number(0), kind: .angle)
     func decodeValue(_ bytes: [UInt8]) -> Double? {
         guard let value = word(bytes) else { return nil }
         return Double(value) / 128.0 - 210.0
@@ -546,11 +428,7 @@ struct InjectionTimingPIDDecoder: NamedPIDDecoder {
 }
 
 struct CurrentPIDDecoder: NamedPIDDecoder {
-<<<<<<< HEAD
-    static let descriptor = PIDDecodedValue(number: 0, kind: .current)
-=======
-    static let descriptor = PIDDecodedValue(value: 0, kind: .current)
->>>>>>> Inference
+    static let descriptor = PIDDecodedValue(value: .number(0), kind: .current)
     func decodeValue(_ bytes: [UInt8]) -> Double? {
         // TODO: Implement SAE formula for Current PID
         return nil
@@ -562,11 +440,7 @@ struct CurrentPIDDecoder: NamedPIDDecoder {
 
 struct UnsupportedPIDDecoder: ProtocolPIDDecoding {
     static let shared = UnsupportedPIDDecoder()
-<<<<<<< HEAD
-    let descriptor = PIDDecodedValue(value: .bytes([]), kind: .raw)
-=======
-    let descriptor = PIDDecodedValue(value: 0, kind: .raw)
->>>>>>> Inference
+    let descriptor = PIDDecodedValue(value: .number(0), kind: .raw)
     func decode(_ bytes: [UInt8]) -> [PIDDecodedValue] {
         []
     }
